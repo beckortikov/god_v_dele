@@ -70,3 +70,27 @@ export async function PUT(req: Request) {
         return NextResponse.json({ error: error.message }, { status: 500 })
     }
 }
+
+// DELETE - Delete participant
+export async function DELETE(req: Request) {
+    try {
+        const body = await req.json()
+        const { id } = body
+
+        if (!id) {
+            return NextResponse.json({ error: 'Participant ID is required' }, { status: 400 })
+        }
+
+        const { error } = await supabaseAdmin
+            .from('participants')
+            .delete()
+            .eq('id', id)
+
+        if (error) throw error
+
+        return NextResponse.json({ success: true }, { status: 200 })
+    } catch (error: any) {
+        console.error('Error deleting participant:', error)
+        return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+}

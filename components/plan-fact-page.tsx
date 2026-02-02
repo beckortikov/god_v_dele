@@ -273,6 +273,7 @@ export function PlanFactPage() {
               <TabsTrigger value="participants">По участникам</TabsTrigger>
               <TabsTrigger value="comparison">Сравнение</TabsTrigger>
               <TabsTrigger value="deviation">Отклонения</TabsTrigger>
+              <TabsTrigger value="unpaid">Неоплаченные</TabsTrigger>
             </TabsList>
 
             {/* Participants Tab */}
@@ -435,6 +436,94 @@ export function PlanFactPage() {
                     <Line type="monotone" dataKey="balanceDev" stroke="#f59e0b" strokeWidth={2} name="Отклонение баланса" />
                   </LineChart>
                 </ResponsiveContainer>
+              </Card>
+            </TabsContent>
+
+            {/* Unpaid Tab */}
+            <TabsContent value="unpaid" className="space-y-3">
+              <Card className="p-4 bg-card border-border">
+                <h3 className="text-sm font-semibold text-foreground mb-3">Участники с неоплаченными или частичными платежами</h3>
+                <Table>
+                  <TableHeader>
+                    <TableRow className="border-b border-border">
+                      <TableHead className="text-foreground">Участник</TableHead>
+                      <TableHead className="text-foreground">Программа</TableHead>
+                      <TableHead className="text-foreground">Месяц</TableHead>
+                      <TableHead className="text-foreground text-right">План</TableHead>
+                      <TableHead className="text-foreground text-right">Факт</TableHead>
+                      <TableHead className="text-foreground text-right">Долг</TableHead>
+                      <TableHead className="text-foreground">Статус</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {(() => {
+                      const unpaidPayments = payments
+                        .filter(p => {
+                          const plan = p.amount || p.participant?.tariff || p.participant?.program?.price_per_month || 0
+                          const fact = p.fact_amount || 0
+                          return fact < plan // Not fully paid
+                        })
+                        .sort((a, b) => {
+                          // Sort by year and month descending
+                          if (a.year !== b.year) return b.year - a.year
+                          return b.month_number - a.month_number
+                        })
+
+                      if (unpaidPayments.length === 0) {
+                        return (
+                          <TableRow>
+                            <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
+                              Все участники оплатили полностью! 🎉
+                            </TableCell>
+                          </TableRow>
+                        )
+                      }
+
+                      return unpaidPayments.map((payment) => {
+                        const plan = payment.amount || payment.participant?.tariff || payment.participant?.program?.price_per_month || 0
+                        const fact = payment.fact_amount || 0
+                        const debt = plan - fact
+                        const monthName = monthNames[payment.month_number - 1]
+
+                        let statusText = 'Не оплачено'
+                        let statusVariant: 'destructive' | 'secondary' = 'destructive'
+
+                        if (fact > 0 && fact < plan) {
+                          statusText = 'Частично'
+                          statusVariant = 'secondary'
+                        }
+
+                        return (
+                          <TableRow key={payment.id} className="border-b border-border hover:bg-muted/20">
+                            <TableCell className="text-foreground font-medium">
+                              {payment.participant?.name || 'Неизвестно'}
+                            </TableCell>
+                            <TableCell className="text-foreground text-sm">
+                              {payment.participant?.program?.title || 'Не указана'}
+                            </TableCell>
+                            <TableCell className="text-foreground">
+                              {monthName} {payment.year}
+                            </TableCell>
+                            <TableCell className="text-foreground text-right">
+                              ${plan.toLocaleString()}
+                            </TableCell>
+                            <TableCell className="text-foreground text-right">
+                              ${fact.toLocaleString()}
+                            </TableCell>
+                            <TableCell className="text-destructive text-right font-semibold">
+                              ${debt.toLocaleString()}
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant={statusVariant} className="text-[10px] px-2 py-0 h-5">
+                                {statusText}
+                              </Badge>
+                            </TableCell>
+                          </TableRow>
+                        )
+                      })
+                    })()}
+                  </TableBody>
+                </Table>
               </Card>
             </TabsContent>
           </Tabs>

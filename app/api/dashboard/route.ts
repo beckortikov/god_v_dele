@@ -58,17 +58,57 @@ export async function GET(request: Request) {
             ? (currentBalance / burnRate).toFixed(1)
             : '0'
 
-        // Get overdue payments
-        const { data: overduePayments, error: overdueError } = await supabaseAdmin
+        // Get all payments to check for overdue (not relying on status field)
+        const { data: overduePaymentsData, error: overdueError } = await supabaseAdmin
             .from('monthly_payments')
             .select(`
-        *,
-        participant:participants(name)
-      `)
-            .eq('status', 'overdue')
-            .limit(10)
+                *,
+                participant:participants(name, program_id)
+            `)
+            .eq('year', currentYear)
+            .order('month_number', { ascending: false })
+            .limit(100) // Get current year payments
 
         if (overdueError) throw overdueError
+
+        // Get recent payments (last 10 paid payments, sorted by updated_at DESC)
+        const { data: recentPaymentsData, error: recentError } = await supabaseAdmin
+            .from('monthly_payments')
+            .select(`
+                *,
+                participant:participants(name, program:programs(name))
+            `)
+            .not('fact_amount', 'is', null)
+            .gt('fact_amount', 0)
+            .order('updated_at', { ascending: false })
+            .limit(10)
+
+        if (recentError) throw recentError
+
+        // Filter and process overdue payments
+        const today = new Date()
+        const currentYearMonth = currentYear * 100 + currentMonth
+
+        const filteredOverduePayments = overduePaymentsData
+            ?.filter(p => {
+                // Filter by program if specified
+                if (programId && programId !== 'all' && p.participant?.program_id !== programId) {
+                    return false
+                }
+
+                // Check if payment is actually overdue
+                const paymentYearMonth = p.year * 100 + p.month_number
+                const isOverdue = paymentYearMonth < currentYearMonth
+                const isNotFullyPaid = (p.fact_amount || 0) < (p.plan_amount || 0)
+
+                return isOverdue && isNotFullyPaid
+            })
+            .slice(0, 10) // Limit to 10 after filtering
+
+        // Filter recent payments by program if specified
+        const recentPayments = programId && programId !== 'all'
+            ? recentPaymentsData?.filter(p => p.participant?.program?.program_id === programId)
+            : recentPaymentsData
 
         // Aggregate monthly data for charts (last 6 months)
         const monthlyData = []
@@ -112,10 +152,18 @@ export async function GET(request: Request) {
                     monthlyExpenses,
                     cashRunway: Number(cashRunway)
                 },
-                overduePayments: overduePayments?.map(p => ({
+                overduePayments: filteredOverduePayments?.map(p => ({
                     name: p.participant?.name || 'Unknown',
-                    amount: p.plan_amount - (p.fact_amount || 0),
-                    days: Math.floor((new Date().getTime() - new Date(p.due_date || new Date()).getTime()) / (1000 * 60 * 60 * 24))
+                    amount: (p.plan_amount || 0) - (p.fact_amount || 0),
+                    days: Math.floor((new Date().getTime() - new Date(p.year, p.month_number - 1, 1).getTime()) / (1000 * 60 * 60 * 24))
+                })) || [],
+                recentPayments: recentPayments?.map(p => ({
+                    name: p.participant?.name || 'Unknown',
+                    program: p.participant?.program?.name || 'Не указана',
+                    amount: p.fact_amount || 0,
+                    month: p.month_number,
+                    year: p.year,
+                    date: p.updated_at
                 })) || [],
                 chartData: monthlyData
             }

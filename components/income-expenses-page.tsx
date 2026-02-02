@@ -237,14 +237,16 @@ export function IncomeExpensesPage() {
   }
 
   // Filter data by program
-  const filteredIncomeData = filterProgram === 'all'
+  const filteredIncomeData = (filterProgram === 'all'
     ? incomeData
     : incomeData.filter(item => {
       const participant = participants.find(p => p.name === item.participant)
       return participant?.program_id === filterProgram
     })
+  ).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()) // Sort by date descending
 
-  const filteredExpenseData = expenseData // Expenses don't have direct program link, keep all for now
+  const filteredExpenseData = expenseData
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()) // Sort by date descending
 
   const totalIncome = filteredIncomeData.reduce((sum, item) => sum + Number(item.amount), 0)
   const totalExpenses = filteredExpenseData.reduce((sum, item) => sum + Number(item.amount), 0)

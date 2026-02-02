@@ -18,6 +18,14 @@ interface DashboardData {
     amount: number
     days: number
   }>
+  recentPayments: Array<{
+    name: string
+    program: string
+    amount: number
+    month: number
+    year: number
+    date: string
+  }>
   chartData: Array<{
     month: string
     income: number
@@ -227,25 +235,49 @@ export function Dashboard() {
           </ResponsiveContainer>
         </Card>
 
-        {/* Overdue Payments */}
-        <Card className="p-6 bg-card border-border">
-          <h3 className="text-lg font-semibold text-foreground mb-4">Просроченные платежи</h3>
-          {data.overduePayments.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Нет просроченных платежей</p>
-          ) : (
-            <div className="space-y-3">
-              {data.overduePayments.slice(0, 3).map((payment, idx) => (
-                <div key={idx} className="flex justify-between items-center p-3 bg-muted/30 rounded-lg">
-                  <div>
-                    <p className="text-sm font-medium text-foreground">{payment.name}</p>
-                    <p className="text-xs text-muted-foreground">Задержка: {payment.days} дней</p>
+        {/* Overdue and Recent Payments */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <Card className="p-6 bg-card border-border">
+            <h3 className="text-lg font-semibold text-foreground mb-4">Просроченные платежи</h3>
+            {data.overduePayments.length === 0 ? (
+              <p className="text-sm text-muted-foreground">Нет просроченных платежей</p>
+            ) : (
+              <div className="space-y-3">
+                {data.overduePayments.slice(0, 5).map((payment, idx) => (
+                  <div key={idx} className="flex justify-between items-center p-3 bg-muted/30 rounded-lg">
+                    <div>
+                      <p className="text-sm font-medium text-foreground">{payment.name}</p>
+                      <p className="text-xs text-muted-foreground">Задержка: {payment.days} дней</p>
+                    </div>
+                    <p className="text-sm font-semibold text-destructive">${payment.amount.toLocaleString()}</p>
                   </div>
-                  <p className="text-sm font-semibold text-destructive">${payment.amount.toLocaleString()}</p>
-                </div>
-              ))}
-            </div>
-          )}
-        </Card>
+                ))}
+              </div>
+            )}
+          </Card>
+
+          <Card className="p-6 bg-card border-border">
+            <h3 className="text-lg font-semibold text-foreground mb-4">Последние поступления</h3>
+            {data.recentPayments.length === 0 ? (
+              <p className="text-sm text-muted-foreground">Нет поступлений</p>
+            ) : (
+              <div className="space-y-3">
+                {data.recentPayments.slice(0, 5).map((payment, idx) => (
+                  <div key={idx} className="flex justify-between items-center p-3 bg-muted/30 rounded-lg">
+                    <div>
+                      <p className="text-sm font-medium text-foreground">{payment.name}</p>
+                      <p className="text-xs text-muted-foreground">{payment.program}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm font-semibold text-green-600">${payment.amount.toLocaleString()}</p>
+                      <p className="text-xs text-muted-foreground">{new Date(payment.date).toLocaleDateString('ru-RU')}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
+        </div>
       </div>
     </div>
   )

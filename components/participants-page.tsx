@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Plus, Edit2, Archive, ChevronDown, Search, X, AlertCircle } from 'lucide-react'
+import { Plus, Edit2, Archive, ChevronDown, Search, X, AlertCircle, Trash2 } from 'lucide-react'
 
 interface Program {
   id: string
@@ -234,6 +234,32 @@ export function ParticipantsPage() {
       alert('Ошибка при архивировании: ' + err.message)
     }
   }
+
+  const handleDelete = async (participantId: string) => {
+    if (!confirm('⚠️ ВНИМАНИЕ! Вы уверены, что хотите УДАЛИТЬ этого участника?\n\nЭто действие нельзя отменить. Все данные участника и его платежи будут удалены навсегда.')) return
+
+    try {
+      const response = await fetch('/api/participants', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: participantId })
+      })
+
+      const result = await response.json()
+      if (result.error) throw new Error(result.error)
+
+      // Remove from local state
+      setParticipants(participants.filter(p => p.id !== participantId))
+
+      // Close expanded view if this participant was expanded
+      if (expandedId === participantId) {
+        setExpandedId(null)
+      }
+    } catch (err: any) {
+      alert('Ошибка при удалении: ' + err.message)
+    }
+  }
+
 
   // ... (Update the Dialog trigger and content to handle both modes) ...
   // In the JSX where the Dialog is defined:
@@ -503,7 +529,7 @@ export function ParticipantsPage() {
 
 
       {/* Participants List */}
-      <div className="space-y-3">
+      <div className="space-y-2">
         {filteredParticipants.length === 0 ? (
           <Card className="bg-card border-border p-8 text-center">
             <p className="text-muted-foreground">Участники не найдены</p>
@@ -515,10 +541,10 @@ export function ParticipantsPage() {
             return (
               <Card key={participant.id} className="bg-card border-border overflow-hidden">
                 <div
-                  className="p-4 cursor-pointer hover:bg-muted/20 transition-colors flex justify-between items-center"
+                  className="p-2 cursor-pointer hover:bg-muted/20 transition-colors flex justify-between items-center"
                   onClick={() => setExpandedId(isExpanded ? null : participant.id)}
                 >
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2">
                     <ChevronDown
                       className={`w-4 h-4 text-muted-foreground transition-transform flex-shrink-0 ${isExpanded ? 'rotate-180' : ''}`}
                     />
@@ -563,11 +589,11 @@ export function ParticipantsPage() {
                         })()}
 
                       </div>
-                      <p className="text-sm text-muted-foreground">{participant.program?.name || 'Программа не указана'}</p>
+                      <p className="text-xs text-muted-foreground">{participant.program?.name || 'Программа не указана'}</p>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-8">
+                  <div className="flex items-center gap-4">
                     <div className="text-right">
                       <p className="text-xs text-muted-foreground mb-1">Платежи</p>
                       <p className="font-semibold text-foreground">
@@ -600,7 +626,7 @@ export function ParticipantsPage() {
                 </div>
 
                 {isExpanded && (
-                  <div className="border-t border-border p-6 bg-muted/10">
+                  <div className="border-t border-border p-4 bg-muted/10">
                     <div className="mb-6">
                       <h4 className="text-sm font-semibold text-foreground mb-3">Информация об участнике</h4>
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -722,6 +748,18 @@ export function ParticipantsPage() {
                           В архив
                         </Button>
                       )}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleDelete(participant.id)
+                        }}
+                        className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                      >
+                        <Trash2 className="w-4 h-4 mr-2" />
+                        Удалить
+                      </Button>
                     </div>
                   </div>
                 )}
