@@ -2,8 +2,7 @@
 
 import { Bell, Settings, User, LogOut } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-
-type PageType = 'dashboard' | 'participants' | 'income' | 'plan-fact' | 'offline' | 'balance'
+import { PageType } from '@/components/sidebar'
 
 interface TopNavProps {
   currentPage: PageType
@@ -13,6 +12,7 @@ interface TopNavProps {
 const pageNames: Record<PageType, string> = {
   dashboard: 'Главный дашборд',
   participants: 'Управление участниками',
+  programs: 'Управление программами',
   income: 'Доходы и расходы',
   'plan-fact': 'План–Факт анализ',
   offline: 'Оффлайн мероприятия',
