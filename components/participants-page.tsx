@@ -95,7 +95,7 @@ export function ParticipantsPage() {
   const [isOpen, setIsOpen] = useState(false)
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
-  const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'completed' | 'archived'>('all')
+  const [filterStatus, setFilterStatus] = useState<'all' | 'overdue' | 'partial' | 'paid'>('all')
   const [filterProgram, setFilterProgram] = useState<string>('all')
   const [formData, setFormData] = useState({
     name: '',
@@ -303,7 +303,23 @@ export function ParticipantsPage() {
 
   const filteredParticipants = participants.filter(p => {
     const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase())
-    const matchesStatus = filterStatus === 'all' || p.status === filterStatus
+
+    // Filter by payment status
+    let matchesStatus = true
+    if (filterStatus !== 'all') {
+      if (filterStatus === 'overdue') {
+        matchesStatus = checkOverdue(p, payments)
+      } else if (filterStatus === 'partial') {
+        matchesStatus = checkPartial(p, payments)
+      } else if (filterStatus === 'paid') {
+        const now = new Date()
+        const currentMonth = now.getMonth() + 1
+        const currentYear = now.getFullYear()
+        const payment = payments.find(pay => pay.participant_id === p.id && pay.month_number === currentMonth && pay.year === currentYear)
+        matchesStatus = payment?.status === 'paid'
+      }
+    }
+
     const matchesProgram = filterProgram === 'all' || p.program_id === filterProgram
     return matchesSearch && matchesStatus && matchesProgram
   })
@@ -481,16 +497,16 @@ export function ParticipantsPage() {
           </div>
 
           <div className="w-full sm:w-48">
-            <label className="text-xs sm:text-sm font-medium text-foreground block mb-2">Статус</label>
+            <label className="text-xs sm:text-sm font-medium text-foreground block mb-2">Статус платежей</label>
             <select
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value as any)}
               className="w-full px-3 py-2 bg-background border border-border rounded-md text-foreground text-sm touch-manipulation"
             >
-              <option value="all">Все статусы</option>
-              <option value="active">Активные</option>
-              <option value="completed">Завершено</option>
-              <option value="archived">Архив</option>
+              <option value="all">Все</option>
+              <option value="overdue">Просрочено</option>
+              <option value="partial">Частично оплачено</option>
+              <option value="paid">Оплачено</option>
             </select>
           </div>
 
