@@ -181,11 +181,13 @@ export function ParticipantsPage() {
   }
 
   const handleUpdateParticipant = async () => {
+    if (!editingId) return
+
     try {
       const payload = {
         id: editingId,
         ...formData,
-        tariff: formData.tariff ? Number(formData.tariff) : null
+        tariff: formData.tariff ? Number(formData.tariff) : undefined
       }
 
       const response = await fetch('/api/participants', {
@@ -197,14 +199,39 @@ export function ParticipantsPage() {
       const result = await response.json()
       if (result.error) throw new Error(result.error)
 
-      // Update local state
-      setParticipants(participants.map(p => p.id === editingId ? { ...p, ...payload, tariff: payload.tariff } : p))
+      // Update local state with server response
+      if (result.data && result.data[0]) {
+        setParticipants(participants.map(p => p.id === editingId ? result.data[0] : p))
+      }
+
       setIsOpen(false)
       setIsEditMode(false)
       setEditingId(null)
       setFormData({ name: '', email: '', phone: '', program_id: '', tariff: '', start_date: '' })
     } catch (err: any) {
       alert('Ошибка при обновлении: ' + err.message)
+    }
+  }
+
+  const handleArchive = async (participantId: string) => {
+    if (!confirm('Вы уверены, что хотите архивировать этого участника?')) return
+
+    try {
+      const response = await fetch('/api/participants', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: participantId, status: 'archived' })
+      })
+
+      const result = await response.json()
+      if (result.error) throw new Error(result.error)
+
+      // Update local state
+      if (result.data && result.data[0]) {
+        setParticipants(participants.map(p => p.id === participantId ? result.data[0] : p))
+      }
+    } catch (err: any) {
+      alert('Ошибка при архивировании: ' + err.message)
     }
   }
 
