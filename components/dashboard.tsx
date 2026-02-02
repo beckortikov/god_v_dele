@@ -136,18 +136,18 @@ export function Dashboard() {
   ]
 
   return (
-    <div className="p-6 space-y-6 bg-background">
+    <div className="p-3 sm:p-6 space-y-4 sm:space-y-6 bg-background">
       {/* Header with Program Filter */}
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 sm:gap-0">
         <div>
-          <h2 className="text-2xl font-bold text-foreground">Дашборд</h2>
-          <p className="text-sm text-muted-foreground mt-1">Обзор финансовых показателей</p>
+          <h2 className="text-xl sm:text-2xl font-bold text-foreground">Дашборд</h2>
+          <p className="text-xs sm:text-sm text-muted-foreground mt-1">Обзор финансовых показателей</p>
         </div>
-        <div className="w-64">
+        <div className="w-full sm:w-64">
           <select
             value={filterProgram}
             onChange={(e) => setFilterProgram(e.target.value)}
-            className="w-full px-3 py-2 bg-background border border-border rounded-md text-foreground text-sm"
+            className="w-full px-3 py-2 bg-background border border-border rounded-md text-foreground text-sm touch-manipulation"
           >
             <option value="all">Все программы</option>
             {programs.map(prog => (
@@ -158,7 +158,7 @@ export function Dashboard() {
       </div>
 
       {/* Metrics Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         {metrics.map((metric) => {
           const Icon = metric.icon
           return (

@@ -326,12 +326,12 @@ export function ParticipantsPage() {
   }
 
   return (
-    <div className="p-6 space-y-6 bg-background">
+    <div className="p-3 sm:p-6 space-y-4 sm:space-y-6 bg-background">
       {/* Header */}
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
         <div>
-          <h2 className="text-2xl font-bold text-foreground">Участники</h2>
-          <p className="text-sm text-muted-foreground mt-1">Управление участниками программ обучения</p>
+          <h2 className="text-xl sm:text-2xl font-bold text-foreground">Участники</h2>
+          <p className="text-xs sm:text-sm text-muted-foreground mt-1">Управление участниками программ обучения</p>
         </div>
         <Dialog open={isOpen} onOpenChange={(open) => {
           setIsOpen(open)
@@ -342,9 +342,10 @@ export function ParticipantsPage() {
           }
         }}>
           <DialogTrigger asChild>
-            <Button className="gap-2">
+            <Button className="gap-2 w-full sm:w-auto touch-manipulation">
               <Plus className="w-4 h-4" />
-              Добавить участника
+              <span className="hidden sm:inline">Добавить участника</span>
+              <span className="sm:hidden">Добавить</span>
             </Button>
           </DialogTrigger>
           <DialogContent>
@@ -425,30 +426,30 @@ export function ParticipantsPage() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card className="p-4 bg-card border-border">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        <Card className="p-3 sm:p-4 bg-card border-border">
           <p className="text-xs text-muted-foreground mb-1">Активных участников</p>
-          <p className="text-2xl font-bold text-foreground mb-1">{activeCount}</p>
+          <p className="text-lg sm:text-2xl font-bold text-foreground mb-1">{activeCount}</p>
           <p className="text-[10px] text-muted-foreground">на программах</p>
         </Card>
 
-        <Card className="p-4 bg-card border-border">
+        <Card className="p-3 sm:p-4 bg-card border-border">
           <p className="text-xs text-muted-foreground mb-1">Ежемесячный доход</p>
-          <p className="text-2xl font-bold text-foreground mb-1">${totalMonthlyPlanned.toLocaleString()}</p>
+          <p className="text-lg sm:text-2xl font-bold text-foreground mb-1">${totalMonthlyPlanned.toLocaleString()}</p>
           <p className="text-[10px] text-muted-foreground">плановая сумма</p>
         </Card>
 
-        <Card className="p-4 bg-card border-border">
+        <Card className="p-3 sm:p-4 bg-card border-border">
           <p className="text-xs text-muted-foreground mb-1">Просроченные платежи</p>
-          <p className="text-2xl font-bold text-red-600 mb-1">
+          <p className="text-lg sm:text-2xl font-bold text-red-600 mb-1">
             {participants.filter(p => checkOverdue(p, payments)).length}
           </p>
           <p className="text-[10px] text-muted-foreground">участников</p>
         </Card>
 
-        <Card className="p-4 bg-card border-border">
+        <Card className="p-3 sm:p-4 bg-card border-border">
           <p className="text-xs text-muted-foreground mb-1">Неполные платежи</p>
-          <p className="text-2xl font-bold text-orange-600 mb-1">
+          <p className="text-lg sm:text-2xl font-bold text-orange-600 mb-1">
             {participants.filter(p => checkPartial(p, payments)).length}
           </p>
           <p className="text-[10px] text-muted-foreground">участников</p>
@@ -456,17 +457,17 @@ export function ParticipantsPage() {
       </div>
 
       {/* Filters */}
-      <div className="bg-card border border-border rounded-lg p-4 space-y-4">
-        <div className="flex gap-4 flex-wrap items-end">
-          <div className="flex-1 min-w-64">
-            <label className="text-sm font-medium text-foreground block mb-2">Поиск по имени</label>
+      <div className="bg-card border border-border rounded-lg p-3 sm:p-4 space-y-3 sm:space-y-4">
+        <div className="flex gap-3 sm:gap-4 flex-wrap items-end">
+          <div className="flex-1 min-w-full sm:min-w-64">
+            <label className="text-xs sm:text-sm font-medium text-foreground block mb-2">Поиск по имени</label>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
                 placeholder="Начните вводить имя..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10"
+                className="pl-10 touch-manipulation"
               />
               {searchQuery && (
                 <button
@@ -479,12 +480,12 @@ export function ParticipantsPage() {
             </div>
           </div>
 
-          <div className="w-48">
-            <label className="text-sm font-medium text-foreground block mb-2">Статус</label>
+          <div className="w-full sm:w-48">
+            <label className="text-xs sm:text-sm font-medium text-foreground block mb-2">Статус</label>
             <select
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value as any)}
-              className="w-full px-3 py-2 bg-background border border-border rounded-md text-foreground text-sm"
+              className="w-full px-3 py-2 bg-background border border-border rounded-md text-foreground text-sm touch-manipulation"
             >
               <option value="all">Все статусы</option>
               <option value="active">Активные</option>
@@ -493,12 +494,12 @@ export function ParticipantsPage() {
             </select>
           </div>
 
-          <div className="w-48">
-            <label className="text-sm font-medium text-foreground block mb-2">Программа</label>
+          <div className="w-full sm:w-48">
+            <label className="text-xs sm:text-sm font-medium text-foreground block mb-2">Программа</label>
             <select
               value={filterProgram}
               onChange={(e) => setFilterProgram(e.target.value)}
-              className="w-full px-3 py-2 bg-background border border-border rounded-md text-foreground text-sm"
+              className="w-full px-3 py-2 bg-background border border-border rounded-md text-foreground text-sm touch-manipulation"
             >
               <option value="all">Все программы</option>
               {programs.map(prog => (
@@ -516,6 +517,7 @@ export function ParticipantsPage() {
                 setFilterStatus('all')
                 setFilterProgram('all')
               }}
+              className="w-full sm:w-auto touch-manipulation"
             >
               Сбросить фильтры
             </Button>
@@ -541,86 +543,169 @@ export function ParticipantsPage() {
             return (
               <Card key={participant.id} className="bg-card border-border overflow-hidden">
                 <div
-                  className="p-2 cursor-pointer hover:bg-muted/20 transition-colors flex justify-between items-center"
+                  className="p-3 sm:p-4 cursor-pointer hover:bg-muted/20 transition-colors"
                   onClick={() => setExpandedId(isExpanded ? null : participant.id)}
                 >
-                  <div className="flex items-center gap-2">
-                    <ChevronDown
-                      className={`w-4 h-4 text-muted-foreground transition-transform flex-shrink-0 ${isExpanded ? 'rotate-180' : ''}`}
-                    />
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <p className="font-semibold text-foreground">{participant.name}</p>
-                        {(() => {
-                          const badges = []
+                  {/* Mobile Layout */}
+                  <div className="flex flex-wrap gap-2 items-start sm:hidden">
+                    <div className="flex items-start gap-2 flex-1 min-w-0">
+                      <ChevronDown
+                        className={`w-4 h-4 text-muted-foreground transition-transform flex-shrink-0 mt-0.5 ${isExpanded ? 'rotate-180' : ''}`}
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <p className="font-semibold text-foreground text-sm">{participant.name}</p>
+                          {(() => {
+                            const badges = []
 
-                          if (checkOverdue(participant, payments)) {
-                            badges.push(
-                              <Badge key="overdue" variant="destructive" className="text-[10px] h-5 px-2">
-                                Просрочено
-                              </Badge>
-                            )
-                          }
+                            if (checkOverdue(participant, payments)) {
+                              badges.push(
+                                <Badge key="overdue" variant="destructive" className="text-[10px] h-5 px-2">
+                                  Просрочено
+                                </Badge>
+                              )
+                            }
 
-                          if (checkPartial(participant, payments)) {
-                            badges.push(
-                              <Badge key="partial" variant="secondary" className="text-[10px] h-5 px-2 bg-orange-100 text-orange-700 hover:bg-orange-200 border-orange-200">
-                                Частично
-                              </Badge>
-                            )
-                          }
+                            if (checkPartial(participant, payments)) {
+                              badges.push(
+                                <Badge key="partial" variant="secondary" className="text-[10px] h-5 px-2 bg-orange-100 text-orange-700 hover:bg-orange-200 border-orange-200">
+                                  Частично
+                                </Badge>
+                              )
+                            }
 
-                          const now = new Date()
-                          const currentMonth = now.getMonth() + 1
-                          const currentYear = now.getFullYear()
-                          const payment = payments.find(p => p.participant_id === participant.id && p.month_number === currentMonth && p.year === currentYear)
+                            const now = new Date()
+                            const currentMonth = now.getMonth() + 1
+                            const currentYear = now.getFullYear()
+                            const payment = payments.find(p => p.participant_id === participant.id && p.month_number === currentMonth && p.year === currentYear)
 
-                          if (payment && payment.status === 'paid') {
-                            badges.push(
-                              <Badge key="paid" className="text-[10px] h-5 px-2 bg-teal-600 hover:bg-teal-700">
-                                Оплачено
-                              </Badge>
-                            )
-                          }
+                            if (payment && payment.status === 'paid') {
+                              badges.push(
+                                <Badge key="paid" className="text-[10px] h-5 px-2 bg-teal-600 hover:bg-teal-700">
+                                  Оплачено
+                                </Badge>
+                              )
+                            }
 
-                          if (badges.length === 0) return null
+                            if (badges.length === 0) return null
 
-                          return <div className="flex gap-1">{badges}</div>
-                        })()}
-
+                            return <div className="flex gap-1 flex-wrap">{badges}</div>
+                          })()}
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-0.5 truncate">{participant.program?.name || 'Программа не указана'}</p>
                       </div>
-                      <p className="text-xs text-muted-foreground">{participant.program?.name || 'Программа не указана'}</p>
+                    </div>
+
+                    <div className="flex gap-2 w-full justify-between pl-6">
+                      <div className="text-left">
+                        <p className="text-[10px] text-muted-foreground mb-0.5">Платежи</p>
+                        <p className="font-semibold text-foreground text-xs">
+                          {(() => {
+                            const pPayments = payments.filter(p => p.participant_id === participant.id)
+                            const paidCount = pPayments.filter(p => p.status === 'paid' || (p.fact_amount || 0) >= (p.amount || 0)).length
+                            return `${paidCount}/${pPayments.length}`
+                          })()}
+                        </p>
+                      </div>
+                      <div className="text-left">
+                        <p className="text-[10px] text-muted-foreground mb-0.5">Собрано</p>
+                        <p className="font-semibold text-foreground text-xs">
+                          {(() => {
+                            const pPayments = payments.filter(p => p.participant_id === participant.id)
+                            const totalPaid = pPayments.reduce((acc, curr) => acc + (curr.fact_amount || 0), 0)
+                            return `$${totalPaid.toLocaleString()}`
+                          })()}
+                        </p>
+                      </div>
+                      <div className="text-left">
+                        <p className="text-[10px] text-muted-foreground mb-0.5">Статус</p>
+                        <Badge variant={participant.status === 'active' ? 'default' : 'secondary'} className="text-[10px] h-5 px-2 whitespace-nowrap">
+                          {statusLabels[participant.status]}
+                        </Badge>
+                      </div>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-4">
-                    <div className="text-right">
-                      <p className="text-xs text-muted-foreground mb-1">Платежи</p>
-                      <p className="font-semibold text-foreground">
-                        {(() => {
-                          const pPayments = payments.filter(p => p.participant_id === participant.id)
-                          const paidCount = pPayments.filter(p => p.status === 'paid' || (p.fact_amount || 0) >= (p.amount || 0)).length
-                          return `${paidCount}/${pPayments.length}`
-                        })()}
-                      </p>
+                  {/* Desktop Layout */}
+                  <div className="hidden sm:flex justify-between items-center">
+                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                      <ChevronDown
+                        className={`w-4 h-4 text-muted-foreground transition-transform flex-shrink-0 ${isExpanded ? 'rotate-180' : ''}`}
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="font-semibold text-foreground">{participant.name}</p>
+                          {(() => {
+                            const badges = []
+
+                            if (checkOverdue(participant, payments)) {
+                              badges.push(
+                                <Badge key="overdue" variant="destructive" className="text-[10px] h-5 px-2">
+                                  Просрочено
+                                </Badge>
+                              )
+                            }
+
+                            if (checkPartial(participant, payments)) {
+                              badges.push(
+                                <Badge key="partial" variant="secondary" className="text-[10px] h-5 px-2 bg-orange-100 text-orange-700 hover:bg-orange-200 border-orange-200">
+                                  Частично
+                                </Badge>
+                              )
+                            }
+
+                            const now = new Date()
+                            const currentMonth = now.getMonth() + 1
+                            const currentYear = now.getFullYear()
+                            const payment = payments.find(p => p.participant_id === participant.id && p.month_number === currentMonth && p.year === currentYear)
+
+                            if (payment && payment.status === 'paid') {
+                              badges.push(
+                                <Badge key="paid" className="text-[10px] h-5 px-2 bg-teal-600 hover:bg-teal-700">
+                                  Оплачено
+                                </Badge>
+                              )
+                            }
+
+                            if (badges.length === 0) return null
+
+                            return <div className="flex gap-1 flex-wrap">{badges}</div>
+                          })()}
+
+                        </div>
+                        <p className="text-xs text-muted-foreground truncate">{participant.program?.name || 'Программа не указана'}</p>
+                      </div>
                     </div>
 
-                    <div className="text-right">
-                      <p className="text-xs text-muted-foreground mb-1">Собрано</p>
-                      <p className="font-semibold text-foreground">
-                        {(() => {
-                          const pPayments = payments.filter(p => p.participant_id === participant.id)
-                          const totalPaid = pPayments.reduce((acc, curr) => acc + (curr.fact_amount || 0), 0)
-                          return `$${totalPaid.toLocaleString()}`
-                        })()}
-                      </p>
-                    </div>
+                    <div className="flex items-center gap-3 md:gap-4 flex-shrink-0">
+                      <div className="text-right">
+                        <p className="text-xs text-muted-foreground mb-1">Платежи</p>
+                        <p className="font-semibold text-foreground text-sm">
+                          {(() => {
+                            const pPayments = payments.filter(p => p.participant_id === participant.id)
+                            const paidCount = pPayments.filter(p => p.status === 'paid' || (p.fact_amount || 0) >= (p.amount || 0)).length
+                            return `${paidCount}/${pPayments.length}`
+                          })()}
+                        </p>
+                      </div>
 
-                    <div className="text-right min-w-[100px]">
-                      <p className="text-xs text-muted-foreground mb-1">Статус</p>
-                      <Badge variant={participant.status === 'active' ? 'default' : 'secondary'} className="text-[10px] h-6 px-3">
-                        {statusLabels[participant.status]}
-                      </Badge>
+                      <div className="text-right">
+                        <p className="text-xs text-muted-foreground mb-1">Собрано</p>
+                        <p className="font-semibold text-foreground text-sm">
+                          {(() => {
+                            const pPayments = payments.filter(p => p.participant_id === participant.id)
+                            const totalPaid = pPayments.reduce((acc, curr) => acc + (curr.fact_amount || 0), 0)
+                            return `$${totalPaid.toLocaleString()}`
+                          })()}
+                        </p>
+                      </div>
+
+                      <div className="text-right">
+                        <p className="text-xs text-muted-foreground mb-1">Статус</p>
+                        <Badge variant={participant.status === 'active' ? 'default' : 'secondary'} className="text-[10px] h-6 px-3 whitespace-nowrap">
+                          {statusLabels[participant.status]}
+                        </Badge>
+                      </div>
                     </div>
                   </div>
                 </div>

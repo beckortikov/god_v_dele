@@ -141,19 +141,19 @@ export function OfflineEventsPage() {
   const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6']
 
   return (
-    <div className="p-6 space-y-6 bg-background">
+    <div className="p-3 sm:p-6 space-y-4 sm:space-y-6 bg-background">
       {/* Header */}
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col gap-3">
         <div>
-          <h2 className="text-2xl font-bold text-foreground">Оффлайн мероприятия</h2>
-          <p className="text-sm text-muted-foreground mt-1">Управление мероприятиями и их бюджетами</p>
+          <h2 className="text-xl sm:text-2xl font-bold text-foreground">Оффлайн мероприятия</h2>
+          <p className="text-xs sm:text-sm text-muted-foreground mt-1">Управление мероприятиями и их бюджетами</p>
         </div>
-        <div className="flex gap-3 items-center">
-          <div className="w-64">
+        <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
+          <div className="w-full sm:w-64">
             <select
               value={filterProgram}
               onChange={(e) => setFilterProgram(e.target.value)}
-              className="w-full px-3 py-2 bg-background border border-border rounded-md text-foreground text-sm"
+              className="w-full px-3 py-2 bg-background border border-border rounded-md text-foreground text-sm touch-manipulation"
             >
               <option value="all">Все программы</option>
               {programs.map(prog => (
@@ -163,9 +163,10 @@ export function OfflineEventsPage() {
           </div>
           <Dialog open={isOpen} onOpenChange={setIsOpen}>
             <DialogTrigger asChild>
-              <Button className="gap-2">
+              <Button className="gap-2 w-full sm:w-auto touch-manipulation">
                 <Plus className="w-4 h-4" />
-                Добавить мероприятие
+                <span className="hidden sm:inline">Добавить мероприятие</span>
+                <span className="sm:hidden">Добавить</span>
               </Button>
             </DialogTrigger>
             <DialogContent>
@@ -240,46 +241,46 @@ export function OfflineEventsPage() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card className="p-4 bg-card border-border">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        <Card className="p-3 sm:p-4 bg-card border-border">
           <p className="text-xs text-muted-foreground">Общий бюджет</p>
-          <p className="text-2xl font-bold text-foreground mt-2">${totalBudget.toLocaleString()}</p>
+          <p className="text-lg sm:text-2xl font-bold text-foreground mt-1 sm:mt-2">${totalBudget.toLocaleString()}</p>
         </Card>
-        <Card className="p-4 bg-card border-border">
+        <Card className="p-3 sm:p-4 bg-card border-border">
           <p className="text-xs text-muted-foreground">Потрачено</p>
-          <p className="text-2xl font-bold text-foreground mt-2">${totalSpent.toLocaleString()}</p>
+          <p className="text-lg sm:text-2xl font-bold text-foreground mt-1 sm:mt-2">${totalSpent.toLocaleString()}</p>
         </Card>
-        <Card className="p-4 bg-card border-border">
+        <Card className="p-3 sm:p-4 bg-card border-border">
           <p className="text-xs text-muted-foreground">Доход</p>
-          <p className="text-2xl font-bold text-foreground mt-2">${totalRevenue.toLocaleString()}</p>
+          <p className="text-lg sm:text-2xl font-bold text-foreground mt-1 sm:mt-2">${totalRevenue.toLocaleString()}</p>
         </Card>
-        <Card className="p-4 bg-card border-border">
+        <Card className="p-3 sm:p-4 bg-card border-border">
           <p className="text-xs text-muted-foreground">ROI</p>
-          <p className="text-2xl font-bold text-green-600 mt-2">{totalROI}%</p>
+          <p className="text-lg sm:text-2xl font-bold text-green-600 mt-1 sm:mt-2">{totalROI}%</p>
         </Card>
       </div>
 
       {/* Charts */}
       {filteredEvents.length > 0 && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <Card className="p-6 bg-card border-border">
-            <h3 className="text-lg font-semibold text-foreground mb-4">Бюджет vs Расходы</h3>
-            <ResponsiveContainer width="100%" height={300}>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+          <Card className="p-4 sm:p-6 bg-card border-border">
+            <h3 className="text-base sm:text-lg font-semibold text-foreground mb-3 sm:mb-4">Бюджет vs Расходы</h3>
+            <ResponsiveContainer width="100%" height={250}>
               <BarChart data={chartData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                <XAxis dataKey="name" stroke="#9ca3af" />
-                <YAxis stroke="#9ca3af" />
+                <XAxis dataKey="name" stroke="#9ca3af" fontSize={12} />
+                <YAxis stroke="#9ca3af" fontSize={12} />
                 <Tooltip contentStyle={{ backgroundColor: '#fff', border: '1px solid #e5e7eb' }} />
-                <Legend />
+                <Legend wrapperStyle={{ fontSize: '12px' }} />
                 <Bar dataKey="budget" fill="#3b82f6" name="Бюджет" />
                 <Bar dataKey="spent" fill="#ef4444" name="Потрачено" />
               </BarChart>
             </ResponsiveContainer>
           </Card>
 
-          <Card className="p-6 bg-card border-border">
-            <h3 className="text-lg font-semibold text-foreground mb-4">Распределение бюджета</h3>
-            <ResponsiveContainer width="100%" height={300}>
+          <Card className="p-4 sm:p-6 bg-card border-border">
+            <h3 className="text-base sm:text-lg font-semibold text-foreground mb-3 sm:mb-4">Распределение бюджета</h3>
+            <ResponsiveContainer width="100%" height={250}>
               <PieChart>
                 <Pie
                   data={chartData}
@@ -287,7 +288,7 @@ export function OfflineEventsPage() {
                   cy="50%"
                   labelLine={false}
                   label={(entry) => entry.name}
-                  outerRadius={80}
+                  outerRadius={70}
                   fill="#8884d8"
                   dataKey="budget"
                 >
@@ -304,52 +305,54 @@ export function OfflineEventsPage() {
 
       {/* Events Table */}
       <Card className="bg-card border-border">
-        <div className="p-6">
-          <h3 className="text-lg font-semibold text-foreground mb-4">Список мероприятий</h3>
+        <div className="p-4 sm:p-6">
+          <h3 className="text-base sm:text-lg font-semibold text-foreground mb-3 sm:mb-4">Список мероприятий</h3>
           {filteredEvents.length === 0 ? (
             <p className="text-center text-muted-foreground py-8">Нет мероприятий</p>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Название</TableHead>
-                  <TableHead>Дата</TableHead>
-                  <TableHead>Место</TableHead>
-                  <TableHead>Бюджет</TableHead>
-                  <TableHead>Потрачено</TableHead>
-                  <TableHead>Участников</TableHead>
-                  <TableHead>Статус</TableHead>
-                  <TableHead>Действия</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredEvents.map((event) => (
-                  <TableRow key={event.id}>
-                    <TableCell className="font-medium">{event.name}</TableCell>
-                    <TableCell>{new Date(event.event_date).toLocaleDateString('ru-RU')}</TableCell>
-                    <TableCell>{event.location || '-'}</TableCell>
-                    <TableCell>${Number(event.budget || 0).toLocaleString()}</TableCell>
-                    <TableCell>${Number(event.actual_cost || 0).toLocaleString()}</TableCell>
-                    <TableCell>{event.participants_count || 0}</TableCell>
-                    <TableCell>
-                      <Badge variant={statusVariants[event.status]}>
-                        {statusLabels[event.status]}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex gap-2">
-                        <Button variant="ghost" size="sm">
-                          <Edit2 className="w-4 h-4" />
-                        </Button>
-                        <Button variant="ghost" size="sm">
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
+            <div className="overflow-x-auto -mx-4 sm:mx-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="text-xs sm:text-sm">Название</TableHead>
+                    <TableHead className="text-xs sm:text-sm hidden sm:table-cell">Дата</TableHead>
+                    <TableHead className="text-xs sm:text-sm hidden md:table-cell">Место</TableHead>
+                    <TableHead className="text-xs sm:text-sm">Бюджет</TableHead>
+                    <TableHead className="text-xs sm:text-sm hidden lg:table-cell">Потрачено</TableHead>
+                    <TableHead className="text-xs sm:text-sm hidden md:table-cell">Участников</TableHead>
+                    <TableHead className="text-xs sm:text-sm">Статус</TableHead>
+                    <TableHead className="text-xs sm:text-sm">Действия</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {filteredEvents.map((event) => (
+                    <TableRow key={event.id}>
+                      <TableCell className="font-medium text-xs sm:text-sm">{event.name}</TableCell>
+                      <TableCell className="text-xs sm:text-sm hidden sm:table-cell">{new Date(event.event_date).toLocaleDateString('ru-RU')}</TableCell>
+                      <TableCell className="text-xs sm:text-sm hidden md:table-cell">{event.location || '-'}</TableCell>
+                      <TableCell className="text-xs sm:text-sm">${Number(event.budget || 0).toLocaleString()}</TableCell>
+                      <TableCell className="text-xs sm:text-sm hidden lg:table-cell">${Number(event.actual_cost || 0).toLocaleString()}</TableCell>
+                      <TableCell className="text-xs sm:text-sm hidden md:table-cell">{event.participants_count || 0}</TableCell>
+                      <TableCell>
+                        <Badge variant={statusVariants[event.status]} className="text-[10px] sm:text-xs">
+                          {statusLabels[event.status]}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex gap-1 sm:gap-2">
+                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0 touch-manipulation">
+                            <Edit2 className="w-3 h-3 sm:w-4 sm:h-4" />
+                          </Button>
+                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0 touch-manipulation">
+                            <Trash2 className="w-3 h-3 sm:w-4 sm:h-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           )}
         </div>
       </Card>

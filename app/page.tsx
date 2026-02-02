@@ -16,6 +16,7 @@ export default function Home() {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [currentPage, setCurrentPage] = useState<PageType>('dashboard')
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false)
 
   useEffect(() => {
     // Check if user is already authenticated
@@ -27,6 +28,14 @@ export default function Home() {
   const handleLogout = () => {
     localStorage.removeItem('isAuthenticated')
     setIsAuthenticated(false)
+  }
+
+  const toggleSidebar = () => {
+    setIsSidebarOpen(!isSidebarOpen)
+  }
+
+  const closeSidebar = () => {
+    setIsSidebarOpen(false)
   }
 
   if (isLoading) {
@@ -46,9 +55,18 @@ export default function Home() {
 
   return (
     <div className="flex h-screen bg-background text-foreground">
-      <Sidebar currentPage={currentPage} onPageChange={setCurrentPage} />
+      <Sidebar
+        currentPage={currentPage}
+        onPageChange={setCurrentPage}
+        isOpen={isSidebarOpen}
+        onClose={closeSidebar}
+      />
       <div className="flex-1 flex flex-col overflow-hidden">
-        <TopNav currentPage={currentPage} onLogout={handleLogout} />
+        <TopNav
+          currentPage={currentPage}
+          onLogout={handleLogout}
+          onMenuClick={toggleSidebar}
+        />
         <main className="flex-1 overflow-auto">
           {currentPage === 'dashboard' && <Dashboard />}
           {currentPage === 'participants' && <ParticipantsPage />}
