@@ -21,6 +21,7 @@ interface MonthlyPayment {
     name: string
     tariff?: number
     program: {
+      id: string
       title: string
       price_per_month: number
     }
