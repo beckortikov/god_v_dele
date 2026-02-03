@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Plus, Edit2, Archive, ChevronDown, Search, X, AlertCircle, Trash2 } from 'lucide-react'
+import { Plus, Edit2, Archive, ChevronDown, Search, X, AlertCircle, Trash2, MessageSquare } from 'lucide-react'
 
 interface Program {
   id: string
@@ -38,6 +38,7 @@ interface MonthlyPayment {
   status: string
   participant_id: string
   payment_month?: string
+  notes?: string
 }
 
 // Helper to check if participant has overdue payments (past months unpaid)
@@ -761,6 +762,7 @@ export function ParticipantsPage() {
                               <TableHead className="text-xs">Факт</TableHead>
                               <TableHead className="text-xs">Отклонение</TableHead>
                               <TableHead className="text-xs">Статус</TableHead>
+                              <TableHead className="text-xs w-10"></TableHead>
                             </TableRow>
                           </TableHeader>
                           <TableBody>
@@ -773,7 +775,7 @@ export function ParticipantsPage() {
                                 })
 
                               if (pPayments.length === 0) {
-                                return <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-4">Нет платежей</TableCell></TableRow>
+                                return <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-4">Нет платежей</TableCell></TableRow>
                               }
 
                               return pPayments.map(payment => {
@@ -814,6 +816,28 @@ export function ParticipantsPage() {
                                           </Badge>
                                         )
                                       })()}
+                                    </TableCell>
+                                    <TableCell>
+                                      {payment.notes && (
+                                        <Dialog>
+                                          <DialogTrigger asChild>
+                                            <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
+                                              <MessageSquare className="h-3.5 w-3.5 text-blue-600" />
+                                            </Button>
+                                          </DialogTrigger>
+                                          <DialogContent className="max-w-md">
+                                            <DialogHeader>
+                                              <DialogTitle>Комментарий к платежу</DialogTitle>
+                                              <DialogDescription>
+                                                {participant.name} • {payment.payment_month || `${payment.month_number}.${payment.year}`}
+                                              </DialogDescription>
+                                            </DialogHeader>
+                                            <div className="bg-blue-50 dark:bg-blue-950/20 p-4 rounded-lg border border-blue-200 dark:border-blue-800">
+                                              <p className="text-sm text-foreground whitespace-pre-wrap">{payment.notes}</p>
+                                            </div>
+                                          </DialogContent>
+                                        </Dialog>
+                                      )}
                                     </TableCell>
                                   </TableRow>
                                 )

@@ -5,13 +5,14 @@ import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
-import { Plus, Edit2, Trash2, ArrowUpRight, ArrowDownRight, Filter, AlertCircle } from 'lucide-react'
+import { Plus, Edit2, Trash2, ArrowUpRight, ArrowDownRight, Filter, AlertCircle, MessageSquare } from 'lucide-react'
 
 interface IncomeItem {
   id: string
@@ -22,6 +23,7 @@ interface IncomeItem {
   method: string
   currency?: string
   original_amount?: number
+  notes?: string
 }
 
 interface ExpenseItem {
@@ -41,7 +43,9 @@ interface Participant {
   name: string
   program_id: string
   tariff?: number
+  status?: string
   program?: {
+    name: string
     price_per_month: number
   }
 }
@@ -58,6 +62,7 @@ export function IncomeExpensesPage() {
   const [isIncomeOpen, setIsIncomeOpen] = useState(false)
   const [isExpenseOpen, setIsExpenseOpen] = useState(false)
   const [submitLoading, setSubmitLoading] = useState(false)
+  const [incomeDialogProgramFilter, setIncomeDialogProgramFilter] = useState<string>('all')
 
   // Form states
   const [expenseForm, setExpenseForm] = useState({
@@ -76,7 +81,8 @@ export function IncomeExpensesPage() {
     participant_id: '',
     amount: '',
     month: String(new Date().getMonth() + 1),
-    year: String(new Date().getFullYear())
+    year: String(new Date().getFullYear()),
+    notes: ''
   })
 
   useEffect(() => {
@@ -106,7 +112,8 @@ export function IncomeExpensesPage() {
         status: p.status === 'paid' ? 'получен' : p.status === 'overdue' ? 'просрочен' : 'ожидается',
         method: 'Перевод',
         currency: p.currency,
-        original_amount: p.original_amount
+        original_amount: p.original_amount,
+        notes: p.notes
       })).filter((i: any) => i.amount > 0)
 
       // Transform expense data
@@ -220,14 +227,15 @@ export function IncomeExpensesPage() {
           payment_month: monthName,
           year: Number(incomeForm.year),
           status: 'paid',
-          paid_date: new Date().toISOString()
+          paid_date: new Date().toISOString(),
+          notes: incomeForm.notes || null
         })
       })
       const result = await res.json()
       if (result.error) throw new Error(result.error)
 
       setIsIncomeOpen(false)
-      setIncomeForm({ participant_id: '', amount: '', month: String(new Date().getMonth() + 1), year: String(new Date().getFullYear()) })
+      setIncomeForm({ participant_id: '', amount: '', month: String(new Date().getMonth() + 1), year: String(new Date().getFullYear()), notes: '' })
       fetchData()
     } catch (err: any) {
       alert('Error adding income: ' + err.message)
@@ -363,6 +371,7 @@ export function IncomeExpensesPage() {
                       <TableHead>Участник</TableHead>
                       <TableHead>Сумма</TableHead>
                       <TableHead>Статус</TableHead>
+                      <TableHead className="w-10"></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -383,9 +392,31 @@ export function IncomeExpensesPage() {
                             {item.status}
                           </Badge>
                         </TableCell>
+                        <TableCell>
+                          {item.notes && (
+                            <Dialog>
+                              <DialogTrigger asChild>
+                                <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                                  <MessageSquare className="h-4 w-4 text-blue-600" />
+                                </Button>
+                              </DialogTrigger>
+                              <DialogContent className="max-w-md">
+                                <DialogHeader>
+                                  <DialogTitle>Комментарий к платежу</DialogTitle>
+                                  <DialogDescription>
+                                    {item.participant} • {new Date(item.date).toLocaleDateString('ru-RU')}
+                                  </DialogDescription>
+                                </DialogHeader>
+                                <div className="bg-blue-50 dark:bg-blue-950/20 p-4 rounded-lg border border-blue-200 dark:border-blue-800">
+                                  <p className="text-sm text-foreground whitespace-pre-wrap">{item.notes}</p>
+                                </div>
+                              </DialogContent>
+                            </Dialog>
+                          )}
+                        </TableCell>
                       </TableRow>
                     ))}
-                    {incomeData.length === 0 && <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground">Нет данных</TableCell></TableRow>}
+                    {incomeData.length === 0 && <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground">Нет данных</TableCell></TableRow>}
                   </TableBody>
                 </Table>
               </div>
@@ -551,18 +582,39 @@ export function IncomeExpensesPage() {
       <Dialog open={isIncomeOpen} onOpenChange={setIsIncomeOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Зарегистрировать платеж</DialogTitle>
-            <DialogDescription>Добавить поступление от участника</DialogDescription>
+            <DialogTitle>Зарегистрировать платёж</DialogTitle>
+            <DialogDescription>Добавьте новое поступление от участника</DialogDescription>
           </DialogHeader>
           <form onSubmit={handleAddIncome} className="space-y-4">
             <div className="space-y-2">
-              <Label>Участник</Label>
-              <Select value={incomeForm.participant_id} onValueChange={(v) => setIncomeForm({ ...incomeForm, participant_id: v })}>
-                <SelectTrigger><SelectValue placeholder="Выберите участника" /></SelectTrigger>
+              <Label>Фильтр по программе</Label>
+              <Select value={incomeDialogProgramFilter} onValueChange={setIncomeDialogProgramFilter}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Все программы" />
+                </SelectTrigger>
                 <SelectContent>
-                  {participants.map(p => (
-                    <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                  <SelectItem value="all">Все программы</SelectItem>
+                  {programs.map(prog => (
+                    <SelectItem key={prog.id} value={prog.id}>{prog.name}</SelectItem>
                   ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Участник</Label>
+              <Select value={incomeForm.participant_id} onValueChange={(v) => setIncomeForm({ ...incomeForm, participant_id: v })} required>
+                <SelectTrigger>
+                  <SelectValue placeholder="Выберите участника" />
+                </SelectTrigger>
+                <SelectContent>
+                  {participants
+                    .filter(p => p.status === 'active')
+                    .filter(p => incomeDialogProgramFilter === 'all' || p.program_id === incomeDialogProgramFilter)
+                    .map(p => (
+                      <SelectItem key={p.id} value={p.id}>
+                        {p.name} ({p.program?.name || 'Без программы'})
+                      </SelectItem>
+                    ))}
                 </SelectContent>
               </Select>
             </div>
@@ -619,6 +671,23 @@ export function IncomeExpensesPage() {
                 <Label>Год</Label>
                 <Input type="number" value={incomeForm.year} onChange={e => setIncomeForm({ ...incomeForm, year: e.target.value })} required />
               </div>
+            </div>
+            <div className="space-y-2">
+              <div className="flex justify-between items-center">
+                <Label htmlFor="income-notes">Комментарий (необязательно)</Label>
+                <span className="text-xs text-muted-foreground">{incomeForm.notes.length}/500</span>
+              </div>
+              <Textarea
+                id="income-notes"
+                placeholder="Добавьте комментарий к платежу, например: способ оплаты, номер транзакции..."
+                value={incomeForm.notes}
+                onChange={e => {
+                  if (e.target.value.length <= 500) {
+                    setIncomeForm({ ...incomeForm, notes: e.target.value })
+                  }
+                }}
+                className="min-h-[80px] resize-none"
+              />
             </div>
             <DialogFooter>
               <Button type="submit" disabled={submitLoading}>{submitLoading ? 'Сохранение...' : 'Зарегистрировать'}</Button>

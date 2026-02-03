@@ -3,11 +3,13 @@
 import { useEffect, useState } from 'react'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
-import { AlertCircle } from 'lucide-react'
+import { AlertCircle, MessageSquare } from 'lucide-react'
 
 interface MonthlyPayment {
   id: string
@@ -16,6 +18,7 @@ interface MonthlyPayment {
   amount: number // Plan amount for this payment
   fact_amount: number // Fact amount paid
   status: string
+  notes?: string
   participant: {
     id: string
     name: string
@@ -304,11 +307,12 @@ export function PlanFactPage() {
                         <TableHead className="text-xs text-foreground text-right">Факт</TableHead>
                         <TableHead className="text-xs text-foreground text-right">Откл.</TableHead>
                         <TableHead className="text-xs text-foreground">Статус</TableHead>
+                        <TableHead className="text-xs w-10"></TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {currentMonthPayments.length === 0 ? (
-                        <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground">Нет платежей</TableCell></TableRow>
+                        <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground">Нет платежей</TableCell></TableRow>
                       ) : (
                         currentMonthPayments.map((payment) => {
                           const planAmount = payment.amount || payment.participant?.tariff || payment.participant?.program?.price_per_month || 0
@@ -334,6 +338,28 @@ export function PlanFactPage() {
                                 <Badge variant={statusVariants[payment.status] || 'secondary'} className="text-xs">
                                   {payment.status === 'paid' ? 'Опл.' : payment.status === 'partial' ? 'Част.' : payment.status === 'overdue' ? 'Проср.' : 'Ожид.'}
                                 </Badge>
+                              </TableCell>
+                              <TableCell className="py-1">
+                                {payment.notes && (
+                                  <Dialog>
+                                    <DialogTrigger asChild>
+                                      <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
+                                        <MessageSquare className="h-3 w-3 text-blue-600" />
+                                      </Button>
+                                    </DialogTrigger>
+                                    <DialogContent className="max-w-md">
+                                      <DialogHeader>
+                                        <DialogTitle>Комментарий к платежу</DialogTitle>
+                                        <DialogDescription>
+                                          {payment.participant?.name} • {selectedMonth}
+                                        </DialogDescription>
+                                      </DialogHeader>
+                                      <div className="bg-blue-50 dark:bg-blue-950/20 p-4 rounded-lg border border-blue-200 dark:border-blue-800">
+                                        <p className="text-sm text-foreground whitespace-pre-wrap">{payment.notes}</p>
+                                      </div>
+                                    </DialogContent>
+                                  </Dialog>
+                                )}
                               </TableCell>
                             </TableRow>
                           )
