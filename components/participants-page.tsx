@@ -458,7 +458,7 @@ export function ParticipantsPage() {
         <Card className="p-3 sm:p-4 bg-card border-border">
           <p className="text-xs text-muted-foreground mb-1">Просроченные платежи</p>
           <p className="text-lg sm:text-2xl font-bold text-red-600 mb-1">
-            {participants.filter(p => checkOverdue(p, payments)).length}
+            {filteredParticipants.filter(p => checkOverdue(p, payments)).length}
           </p>
           <p className="text-[10px] text-muted-foreground">участников</p>
         </Card>
@@ -466,7 +466,7 @@ export function ParticipantsPage() {
         <Card className="p-3 sm:p-4 bg-card border-border">
           <p className="text-xs text-muted-foreground mb-1">Неполные платежи</p>
           <p className="text-lg sm:text-2xl font-bold text-orange-600 mb-1">
-            {participants.filter(p => checkPartial(p, payments)).length}
+            {filteredParticipants.filter(p => checkPartial(p, payments)).length}
           </p>
           <p className="text-[10px] text-muted-foreground">участников</p>
         </Card>
