@@ -18,6 +18,7 @@ const pageNames: Record<PageType, string> = {
   'plan-fact': 'План–Факт анализ',
   offline: 'Оффлайн мероприятия',
   balance: 'Прогноз баланса',
+  'opiu-reports': 'Ежемесячные отчеты ОПиУ',
 }
 
 export function TopNav({ currentPage, onLogout, onMenuClick }: TopNavProps) {
