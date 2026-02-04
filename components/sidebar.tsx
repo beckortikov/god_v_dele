@@ -28,11 +28,11 @@ export function Sidebar({ currentPage, onPageChange, isOpen = true, onClose }: S
     { id: 'dashboard' as PageType, icon: BarChart3, label: 'Дашборд', badge: undefined },
     { id: 'participants' as PageType, icon: Users, label: 'Участники' },
     { id: 'programs' as PageType, icon: BookOpen, label: 'Программы' },
-    { id: 'opiu-reports' as PageType, icon: FileText, label: 'Ежемесячные отчеты', section: 'opiu' },
     { id: 'income' as PageType, icon: TrendingUp, label: 'Доходы / Расходы', section: 'finance' },
     { id: 'plan-fact' as PageType, icon: Target, label: 'План–Факт', section: 'finance' },
     { id: 'offline' as PageType, icon: Calendar, label: 'Оффлайн события', section: 'finance' },
     { id: 'balance' as PageType, icon: PieChart, label: 'Прогноз баланса', section: 'finance' },
+    { id: 'opiu-reports' as PageType, icon: FileText, label: 'Ежемесячные отчеты', section: 'opiu' },
   ]
 
   const handlePageChange = (page: PageType) => {
