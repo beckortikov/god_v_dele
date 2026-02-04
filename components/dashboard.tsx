@@ -3,8 +3,9 @@
 import { useEffect, useState } from 'react'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
-import { TrendingUp, TrendingDown, AlertCircle, Zap } from 'lucide-react'
+import { TrendingUp, TrendingDown, AlertCircle, Zap, X } from 'lucide-react'
 
 interface DashboardData {
   metrics: {
@@ -43,6 +44,8 @@ export function Dashboard() {
   const [filterProgram, setFilterProgram] = useState<string>('all')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [showOverdueModal, setShowOverdueModal] = useState(false)
+  const [showRecentModal, setShowRecentModal] = useState(false)
 
   useEffect(() => {
     // Fetch programs first
@@ -237,48 +240,137 @@ export function Dashboard() {
 
         {/* Overdue and Recent Payments */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <Card className="p-6 bg-card border-border">
+          <Card className="p-6 bg-card border-border flex flex-col">
             <h3 className="text-lg font-semibold text-foreground mb-4">Просроченные платежи</h3>
             {data.overduePayments.length === 0 ? (
               <p className="text-sm text-muted-foreground">Нет просроченных платежей</p>
             ) : (
-              <div className="space-y-3">
-                {data.overduePayments.slice(0, 5).map((payment, idx) => (
-                  <div key={idx} className="flex justify-between items-center p-3 bg-muted/30 rounded-lg">
-                    <div>
-                      <p className="text-sm font-medium text-foreground">{payment.name}</p>
-                      <p className="text-xs text-muted-foreground">Задержка: {payment.days} дней</p>
+              <>
+                <div className="space-y-3 flex-1">
+                  {data.overduePayments.slice(0, 5).map((payment, idx) => (
+                    <div key={idx} className="flex justify-between items-center p-3 bg-muted/30 rounded-lg">
+                      <div>
+                        <p className="text-sm font-medium text-foreground">{payment.name}</p>
+                        <p className="text-xs text-muted-foreground">Задержка: {payment.days} дней</p>
+                      </div>
+                      <p className="text-sm font-semibold text-destructive">${payment.amount.toLocaleString()}</p>
                     </div>
-                    <p className="text-sm font-semibold text-destructive">${payment.amount.toLocaleString()}</p>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+                {data.overduePayments.length > 5 && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowOverdueModal(true)}
+                    className="w-full mt-4"
+                  >
+                    Показать все ({data.overduePayments.length})
+                  </Button>
+                )}
+              </>
             )}
           </Card>
 
-          <Card className="p-6 bg-card border-border">
+          <Card className="p-6 bg-card border-border flex flex-col">
             <h3 className="text-lg font-semibold text-foreground mb-4">Последние поступления</h3>
             {data.recentPayments.length === 0 ? (
               <p className="text-sm text-muted-foreground">Нет поступлений</p>
             ) : (
-              <div className="space-y-3">
-                {data.recentPayments.slice(0, 5).map((payment, idx) => (
-                  <div key={idx} className="flex justify-between items-center p-3 bg-muted/30 rounded-lg">
-                    <div>
-                      <p className="text-sm font-medium text-foreground">{payment.name}</p>
-                      <p className="text-xs text-muted-foreground">{payment.program}</p>
+              <>
+                <div className="space-y-3 flex-1">
+                  {data.recentPayments.slice(0, 5).map((payment, idx) => (
+                    <div key={idx} className="flex justify-between items-center p-3 bg-muted/30 rounded-lg">
+                      <div>
+                        <p className="text-sm font-medium text-foreground">{payment.name}</p>
+                        <p className="text-xs text-muted-foreground">{payment.program}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm font-semibold text-green-600">${payment.amount.toLocaleString()}</p>
+                        <p className="text-xs text-muted-foreground">{new Date(payment.date).toLocaleDateString('ru-RU')}</p>
+                      </div>
                     </div>
-                    <div className="text-right">
-                      <p className="text-sm font-semibold text-green-600">${payment.amount.toLocaleString()}</p>
-                      <p className="text-xs text-muted-foreground">{new Date(payment.date).toLocaleDateString('ru-RU')}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+                {data.recentPayments.length > 5 && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowRecentModal(true)}
+                    className="w-full mt-4"
+                  >
+                    Показать все ({data.recentPayments.length})
+                  </Button>
+                )}
+              </>
             )}
           </Card>
         </div>
       </div>
+
+      {/* Overdue Payments Modal */}
+      {showOverdueModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <Card className="w-full max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
+            <div className="p-6 border-b border-border flex justify-between items-center">
+              <h2 className="text-xl font-bold text-foreground">Все просроченные платежи</h2>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowOverdueModal(false)}
+              >
+                <X className="w-4 h-4" />
+              </Button>
+            </div>
+            <div className="p-6 overflow-y-auto flex-1">
+              <div className="space-y-3">
+                {data.overduePayments.map((payment, idx) => (
+                  <div key={idx} className="flex justify-between items-center p-4 bg-muted/30 rounded-lg border border-border">
+                    <div>
+                      <p className="font-medium text-foreground">{payment.name}</p>
+                      <p className="text-sm text-muted-foreground">Задержка: {payment.days} дней</p>
+                    </div>
+                    <p className="text-lg font-semibold text-destructive">${payment.amount.toLocaleString()}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* Recent Payments Modal */}
+      {showRecentModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <Card className="w-full max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
+            <div className="p-6 border-b border-border flex justify-between items-center">
+              <h2 className="text-xl font-bold text-foreground">Все последние поступления</h2>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowRecentModal(false)}
+              >
+                <X className="w-4 h-4" />
+              </Button>
+            </div>
+            <div className="p-6 overflow-y-auto flex-1">
+              <div className="space-y-3">
+                {data.recentPayments.map((payment, idx) => (
+                  <div key={idx} className="flex justify-between items-center p-4 bg-muted/30 rounded-lg border border-border">
+                    <div>
+                      <p className="font-medium text-foreground">{payment.name}</p>
+                      <p className="text-sm text-muted-foreground">{payment.program}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-lg font-semibold text-green-600">${payment.amount.toLocaleString()}</p>
+                      <p className="text-sm text-muted-foreground">{new Date(payment.date).toLocaleDateString('ru-RU')}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </Card>
+        </div>
+      )}
     </div>
   )
 }
