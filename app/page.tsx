@@ -10,6 +10,7 @@ import { PlanFactPage } from '@/components/plan-fact-page'
 import { OfflineEventsPage } from '@/components/offline-events-page'
 import { BalanceForecastPage } from '@/components/balance-forecast-page'
 import { ProgramsPage } from '@/components/programs-page'
+import OPiUReportsPage from '@/components/opiu-reports-page'
 import { LoginPage } from '@/components/login'
 
 export default function Home() {
@@ -71,6 +72,7 @@ export default function Home() {
           {currentPage === 'dashboard' && <Dashboard />}
           {currentPage === 'participants' && <ParticipantsPage />}
           {currentPage === 'programs' && <ProgramsPage />}
+          {currentPage === 'opiu-reports' && <OPiUReportsPage />}
           {currentPage === 'income' && <IncomeExpensesPage />}
           {currentPage === 'plan-fact' && <PlanFactPage />}
           {currentPage === 'offline' && <OfflineEventsPage />}

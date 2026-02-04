@@ -10,10 +10,11 @@ import {
   LogOut,
   BookOpen,
   X,
+  FileText,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
-export type PageType = 'dashboard' | 'participants' | 'income' | 'plan-fact' | 'offline' | 'balance' | 'programs'
+export type PageType = 'dashboard' | 'participants' | 'income' | 'plan-fact' | 'offline' | 'balance' | 'programs' | 'opiu-reports'
 
 interface SidebarProps {
   currentPage: PageType
@@ -27,10 +28,11 @@ export function Sidebar({ currentPage, onPageChange, isOpen = true, onClose }: S
     { id: 'dashboard' as PageType, icon: BarChart3, label: 'Дашборд', badge: undefined },
     { id: 'participants' as PageType, icon: Users, label: 'Участники' },
     { id: 'programs' as PageType, icon: BookOpen, label: 'Программы' },
-    { id: 'income' as PageType, icon: TrendingUp, label: 'Доходы / Расходы' },
-    { id: 'plan-fact' as PageType, icon: Target, label: 'План–Факт' },
-    { id: 'offline' as PageType, icon: Calendar, label: 'Оффлайн события' },
-    { id: 'balance' as PageType, icon: PieChart, label: 'Прогноз баланса' },
+    { id: 'opiu-reports' as PageType, icon: FileText, label: 'Ежемесячные отчеты', section: 'opiu' },
+    { id: 'income' as PageType, icon: TrendingUp, label: 'Доходы / Расходы', section: 'finance' },
+    { id: 'plan-fact' as PageType, icon: Target, label: 'План–Факт', section: 'finance' },
+    { id: 'offline' as PageType, icon: Calendar, label: 'Оффлайн события', section: 'finance' },
+    { id: 'balance' as PageType, icon: PieChart, label: 'Прогноз баланса', section: 'finance' },
   ]
 
   const handlePageChange = (page: PageType) => {
@@ -79,21 +81,32 @@ export function Sidebar({ currentPage, onPageChange, isOpen = true, onClose }: S
 
         {/* Navigation */}
         <nav className="flex-1 p-3 sm:p-4 space-y-1 sm:space-y-2 overflow-y-auto">
-          {menuItems.map((item) => {
+          {menuItems.map((item, index) => {
             const Icon = item.icon
             const isActive = currentPage === item.id
+            const prevItem = menuItems[index - 1]
+            const showSectionHeader = item.section && item.section !== prevItem?.section
+
             return (
-              <button
-                key={item.id}
-                onClick={() => handlePageChange(item.id)}
-                className={`w-full flex items-center gap-3 px-3 sm:px-4 py-3 rounded-lg transition-colors touch-manipulation ${isActive
+              <div key={item.id}>
+                {showSectionHeader && (
+                  <div className="px-3 py-2 mt-4 first:mt-0">
+                    <p className="text-xs font-semibold text-sidebar-foreground/60 uppercase tracking-wider">
+                      {item.section === 'opiu' ? 'ОПиУ' : 'Финансы'}
+                    </p>
+                  </div>
+                )}
+                <button
+                  onClick={() => handlePageChange(item.id)}
+                  className={`w-full flex items-center gap-3 px-3 sm:px-4 py-3 rounded-lg transition-colors touch-manipulation ${isActive
                     ? 'bg-sidebar-primary text-sidebar-primary-foreground'
                     : 'text-sidebar-foreground hover:bg-sidebar-accent/50'
-                  }`}
-              >
-                <Icon className="w-5 h-5 flex-shrink-0" />
-                <span className="text-sm font-medium">{item.label}</span>
-              </button>
+                    }`}
+                >
+                  <Icon className="w-5 h-5 flex-shrink-0" />
+                  <span className="text-sm font-medium">{item.label}</span>
+                </button>
+              </div>
             )
           })}
         </nav>
