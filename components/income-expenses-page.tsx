@@ -65,13 +65,23 @@ export function IncomeExpensesPage() {
   const [incomeDialogProgramFilter, setIncomeDialogProgramFilter] = useState<string>('all')
 
   // Form states
-  const [expenseForm, setExpenseForm] = useState({
+  const [expenseForm, setExpenseForm] = useState<{
+    id?: string;
+    name: string;
+    amount: string;
+    category: string;
+    date: string;
+    description: string;
+    employee_id?: string;
+  }>({
     name: '',
     amount: '',
     category: '',
     date: new Date().toISOString().split('T')[0],
     description: ''
   })
+
+  const [employees, setEmployees] = useState<any[]>([])
 
   // Currency states
   const [currency, setCurrency] = useState<'USD' | 'TJS'>('USD')
@@ -91,11 +101,12 @@ export function IncomeExpensesPage() {
 
   const fetchData = async () => {
     try {
-      const [paymentsRes, expensesRes, participantsRes, programsRes] = await Promise.all([
+      const [paymentsRes, expensesRes, participantsRes, programsRes, employeesRes] = await Promise.all([
         fetch('/api/monthly-payments').then(res => res.json()),
         fetch('/api/expenses').then(res => res.json()),
         fetch('/api/participants').then(res => res.json()),
-        fetch('/api/programs').then(res => res.json())
+        fetch('/api/programs').then(res => res.json()),
+        fetch('/api/hr/employees').then(res => res.json())
       ])
 
       if (paymentsRes.error) throw new Error(paymentsRes.error)
@@ -133,10 +144,36 @@ export function IncomeExpensesPage() {
       setExpenseData(expenses)
       setParticipants(participantsRes.data || [])
       setPrograms(programsRes.data || [])
+      setEmployees(employeesRes || [])
       setLoading(false)
     } catch (err: any) {
       setError(err.message)
       setLoading(false)
+    }
+  }
+
+  const handleStartEditExpense = (item: ExpenseItem) => {
+    setExpenseForm({
+      id: item.id,
+      name: item.name,
+      amount: String(item.amount),
+      category: item.category,
+      date: item.date,
+      description: item.description || '',
+      employee_id: undefined
+    })
+    setIsExpenseOpen(true)
+  }
+
+  const handleDeleteExpense = async (id: string) => {
+    if (!confirm('Удалить этот расход?')) return;
+    try {
+      const res = await fetch(`/api/expenses?id=${id}`, { method: 'DELETE' });
+      const result = await res.json();
+      if (result.error) throw new Error(result.error);
+      fetchData();
+    } catch (err: any) {
+      alert('Failed to delete: ' + err.message);
     }
   }
 
@@ -159,21 +196,31 @@ export function IncomeExpensesPage() {
     }
 
     try {
-      const res = await fetch('/api/expenses', {
-        method: 'POST',
+      const isEdit = !!expenseForm.id;
+      const url = isEdit ? '/api/expenses' : '/api/expenses';
+      const method = isEdit ? 'PUT' : 'POST';
+
+      const body: any = {
+        name: expenseForm.name,
+        amount: finalAmountUSD, // Converted
+        original_amount: originalAmount,
+        currency: currency,
+        exchange_rate: rate,
+        category: expenseForm.category || 'Прочее',
+        expense_date: expenseForm.date,
+        description: expenseForm.description,
+        status: 'approved',
+        employee_id: expenseForm.employee_id
+      };
+
+      if (isEdit) body.id = expenseForm.id;
+
+      const res = await fetch(url, {
+        method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: expenseForm.name,
-          amount: finalAmountUSD, // Converted
-          original_amount: originalAmount,
-          currency: currency,
-          exchange_rate: rate,
-          category: expenseForm.category || 'Прочее',
-          expense_date: expenseForm.date,
-          description: expenseForm.description,
-          status: 'approved'
-        })
+        body: JSON.stringify(body)
       })
+
       const result = await res.json()
       if (result.error) throw new Error(result.error)
 
@@ -181,7 +228,7 @@ export function IncomeExpensesPage() {
       setExpenseForm({ name: '', amount: '', category: '', date: new Date().toISOString().split('T')[0], description: '' })
       fetchData() // Refresh data
     } catch (err: any) {
-      alert('Error adding expense: ' + err.message)
+      alert('Error saving expense: ' + err.message)
     } finally {
       setSubmitLoading(false)
     }
@@ -371,7 +418,7 @@ export function IncomeExpensesPage() {
                       <TableHead>Участник</TableHead>
                       <TableHead>Сумма</TableHead>
                       <TableHead>Статус</TableHead>
-                      <TableHead className="w-10"></TableHead>
+                      <TableHead className="w-[100px]"></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -392,27 +439,38 @@ export function IncomeExpensesPage() {
                             {item.status}
                           </Badge>
                         </TableCell>
-                        <TableCell>
-                          {item.notes && (
-                            <Dialog>
-                              <DialogTrigger asChild>
-                                <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                                  <MessageSquare className="h-4 w-4 text-blue-600" />
-                                </Button>
-                              </DialogTrigger>
-                              <DialogContent className="max-w-md">
-                                <DialogHeader>
-                                  <DialogTitle>Комментарий к платежу</DialogTitle>
-                                  <DialogDescription>
-                                    {item.participant} • {new Date(item.date).toLocaleDateString('ru-RU')}
-                                  </DialogDescription>
-                                </DialogHeader>
-                                <div className="bg-blue-50 dark:bg-blue-950/20 p-4 rounded-lg border border-blue-200 dark:border-blue-800">
-                                  <p className="text-sm text-foreground whitespace-pre-wrap">{item.notes}</p>
-                                </div>
-                              </DialogContent>
-                            </Dialog>
-                          )}
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-2 items-center">
+                            {item.notes && (
+                              <Dialog>
+                                <DialogTrigger asChild>
+                                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                                    <MessageSquare className="h-4 w-4 text-gray-400" />
+                                  </Button>
+                                </DialogTrigger>
+                                <DialogContent className="max-w-md">
+                                  <DialogHeader>
+                                    <DialogTitle>Комментарий к платежу</DialogTitle>
+                                    <DialogDescription>
+                                      {item.participant} • {new Date(item.date).toLocaleDateString('ru-RU')}
+                                    </DialogDescription>
+                                  </DialogHeader>
+                                  <div className="bg-blue-50 dark:bg-blue-950/20 p-4 rounded-lg border border-blue-200 dark:border-blue-800">
+                                    <p className="text-sm text-foreground whitespace-pre-wrap">{item.notes}</p>
+                                  </div>
+                                </DialogContent>
+                              </Dialog>
+                            )}
+                            <Button size="sm" variant="ghost" className="h-8 w-8 p-0"
+                              onClick={async () => {
+                                if (!confirm('Удалить этот платеж?')) return;
+                                await fetch(`/api/monthly-payments?id=${item.id}`, { method: 'DELETE' });
+                                fetchData();
+                              }}
+                            >
+                              <Trash2 className="h-4 w-4 text-red-500" />
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -438,6 +496,7 @@ export function IncomeExpensesPage() {
                       <TableHead>Категория</TableHead>
                       <TableHead>Сумма</TableHead>
                       <TableHead>Тип</TableHead>
+                      <TableHead className="w-[100px]"></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -456,16 +515,27 @@ export function IncomeExpensesPage() {
                         <TableCell>
                           <Badge variant="outline">{item.type}</Badge>
                         </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-2">
+                            <Button size="sm" variant="outline" onClick={() => handleStartEditExpense(item)}>
+                              <Edit2 className="h-4 w-4 mr-1 text-blue-500" />
+                            </Button>
+                            <Button size="sm" variant="outline" onClick={() => handleDeleteExpense(item.id)}>
+                              <Trash2 className="h-4 w-4 mr-1 text-red-500" />
+                            </Button>
+                          </div>
+                        </TableCell>
+
                       </TableRow>
                     ))}
-                    {expenseData.length === 0 && <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground">Нет данных</TableCell></TableRow>}
+                    {expenseData.length === 0 && <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground">Нет данных</TableCell></TableRow>}
 
                   </TableBody>
                 </Table>
               </div>
             </Card>
           </div>
-        </TabsContent>
+        </TabsContent >
 
         <TabsContent value="analysis" className="space-y-6 mt-6">
           {/* Analytics Charts */}
@@ -495,8 +565,9 @@ export function IncomeExpensesPage() {
             </Card>
           </div>
         </TabsContent>
-      </Tabs>
+      </Tabs >
 
+      {/* Add Expense Dialog */}
       {/* Add Expense Dialog */}
       <Dialog open={isExpenseOpen} onOpenChange={setIsExpenseOpen}>
         <DialogContent>
@@ -505,6 +576,30 @@ export function IncomeExpensesPage() {
             <DialogDescription>Заполните информацию о новом расходе</DialogDescription>
           </DialogHeader>
           <form onSubmit={handleAddExpense} className="space-y-4">
+            {/* Employee Selection Logic */}
+            {(expenseForm.category === 'Зарплаты' || expenseForm.category === 'Personnel') && (
+              <div className="space-y-2">
+                <Label>Сотрудник</Label>
+                <Select onValueChange={(v) => {
+                  const emp = employees.find(e => e.id === v);
+                  if (emp) {
+                    setExpenseForm(prev => ({
+                      ...prev,
+                      name: `Зарплата: ${emp.first_name} ${emp.last_name}`,
+                      employee_id: emp.id
+                    }));
+                  }
+                }}>
+                  <SelectTrigger><SelectValue placeholder="Выберите сотрудника" /></SelectTrigger>
+                  <SelectContent>
+                    {employees.filter(e => e.status === 'active').map(e => (
+                      <SelectItem key={e.id} value={e.id}>{e.first_name} {e.last_name} ({e.position})</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
             <div className="space-y-2">
               <Label>Название</Label>
               <Input value={expenseForm.name} onChange={e => setExpenseForm({ ...expenseForm, name: e.target.value })} placeholder="Например: Аренда офиса" required />
@@ -578,6 +673,7 @@ export function IncomeExpensesPage() {
         </DialogContent>
       </Dialog>
 
+      {/* Add Income Dialog */}
       {/* Add Income Dialog */}
       <Dialog open={isIncomeOpen} onOpenChange={setIsIncomeOpen}>
         <DialogContent>
@@ -695,6 +791,6 @@ export function IncomeExpensesPage() {
           </form>
         </DialogContent>
       </Dialog>
-    </div>
+    </div >
   )
 }

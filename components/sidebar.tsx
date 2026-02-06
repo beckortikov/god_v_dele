@@ -14,26 +14,62 @@ import {
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
-export type PageType = 'dashboard' | 'participants' | 'income' | 'plan-fact' | 'offline' | 'balance' | 'programs' | 'opiu-reports'
+export type PageType =
+  | 'dashboard' | 'participants' | 'income' | 'plan-fact' | 'offline' | 'balance' | 'programs' | 'opiu-reports'
+  | 'hr-dashboard' | 'employees' | 'schedule' | 'payroll' | 'vacations'
+  | 'users'
 
 interface SidebarProps {
   currentPage: PageType
   onPageChange: (page: PageType) => void
   isOpen?: boolean
   onClose?: () => void
+  mode: 'finance' | 'hr'
+  userRole?: 'admin' | 'finance'
 }
 
-export function Sidebar({ currentPage, onPageChange, isOpen = true, onClose }: SidebarProps) {
-  const menuItems = [
-    { id: 'dashboard' as PageType, icon: BarChart3, label: 'Дашборд', badge: undefined },
-    { id: 'participants' as PageType, icon: Users, label: 'Участники' },
-    { id: 'programs' as PageType, icon: BookOpen, label: 'Программы' },
-    { id: 'income' as PageType, icon: TrendingUp, label: 'Доходы / Расходы', section: 'finance' },
-    { id: 'plan-fact' as PageType, icon: Target, label: 'План–Факт', section: 'finance' },
-    { id: 'offline' as PageType, icon: Calendar, label: 'Оффлайн события', section: 'finance' },
-    { id: 'balance' as PageType, icon: PieChart, label: 'Прогноз баланса', section: 'finance' },
-    { id: 'opiu-reports' as PageType, icon: FileText, label: 'Ежемесячные отчеты', section: 'opiu' },
+export function Sidebar({ currentPage, onPageChange, isOpen = true, onClose, mode, userRole = 'admin' }: SidebarProps) {
+  const financeMenuItems: { id: PageType; icon: any; label: string; section?: string; badge?: any }[] = [
+    { id: 'dashboard', icon: BarChart3, label: 'Дашборд', badge: undefined },
+    { id: 'participants', icon: Users, label: 'Участники' },
+    { id: 'programs', icon: BookOpen, label: 'Программы' },
+    { id: 'income', icon: TrendingUp, label: 'Доходы / Расходы', section: 'finance' },
+    { id: 'plan-fact', icon: Target, label: 'План–Факт', section: 'finance' },
+    { id: 'offline', icon: Calendar, label: 'Оффлайн события', section: 'finance' },
+    { id: 'balance', icon: PieChart, label: 'Прогноз баланса', section: 'finance' },
+    { id: 'opiu-reports', icon: FileText, label: 'Ежемесячные отчеты', section: 'opiu' },
   ]
+
+  const hrMenuItems: { id: PageType; icon: any; label: string; section?: string; badge?: any }[] = [
+    { id: 'hr-dashboard', icon: BarChart3, label: 'HR Дашборд' },
+    { id: 'employees', icon: Users, label: 'Сотрудники' },
+    { id: 'schedule', icon: Calendar, label: 'График работы' },
+    { id: 'payroll', icon: TrendingUp, label: 'Зарплата' },
+    { id: 'vacations', icon: FileText, label: 'Отгулы / Отпуска' },
+  ]
+
+  const adminMenuItems: { id: PageType; icon: any; label: string; section?: string; badge?: any }[] = [
+    { id: 'users', icon: Users, label: 'Пользователи', section: 'admin' }
+  ]
+
+  let menuItems = mode === 'finance' ? financeMenuItems : hrMenuItems
+
+  if (userRole === 'admin' && mode === 'finance') { // Or show in both? Usually users management is global. Let's put in 'finance' or maybe a new mode?
+    // User request: "в admin нужно еще один раздел добавить управление пользователями"
+    // Let's add it to the bottom of whatever list IF admin.
+    menuItems = [...menuItems, ...adminMenuItems]
+  } else if (userRole === 'admin' && mode === 'hr') {
+    // Maybe dont duplicate in HR? Or maybe do?
+    // Let's stick to adding it to the end of the list regardless of mode for now, OR valid point: separation of concerns.
+    // "Admin" is likely a mode above others.
+    // For simplicity, let's append it to result array.
+    menuItems = [...menuItems, ...adminMenuItems]
+  }
+
+  // Simplified logic
+  // const menuItems = mode === 'finance' ? financeMenuItems : hrMenuItems
+  // if (userRole === 'admin') menuItems.push(...adminMenuItems) -- can't push to const/readonly. 
+
 
   const handlePageChange = (page: PageType) => {
     onPageChange(page)
@@ -92,7 +128,7 @@ export function Sidebar({ currentPage, onPageChange, isOpen = true, onClose }: S
                 {showSectionHeader && (
                   <div className="px-3 py-2 mt-4 first:mt-0">
                     <p className="text-xs font-semibold text-sidebar-foreground/60 uppercase tracking-wider">
-                      {item.section === 'opiu' ? 'ОПиУ' : 'Финансы'}
+                      {item.section === 'opiu' ? 'ОПиУ' : item.section === 'admin' ? 'Пользователи' : 'Финансы'}
                     </p>
                   </div>
                 )}

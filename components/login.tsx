@@ -20,18 +20,29 @@ export function LoginPage({ onLoginSuccess }: { onLoginSuccess: () => void }) {
     setError('')
     setIsLoading(true)
 
-    // Simulate API call delay
-    await new Promise(resolve => setTimeout(resolve, 500))
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ login, password })
+      })
 
-    if (login === 'admin' && password === 'Admin123') {
-      localStorage.setItem('isAuthenticated', 'true')
-      onLoginSuccess()
-    } else {
-      setError('Неправильные учетные данные. Используйте login: admin, password: Admin123')
-      setPassword('')
+      const data = await res.json()
+
+      if (res.ok && data.success) {
+        localStorage.setItem('isAuthenticated', 'true')
+        localStorage.setItem('userRole', data.user.role)
+        localStorage.setItem('userName', data.user.full_name)
+        onLoginSuccess()
+      } else {
+        setError(data.error || 'Ошибка входа')
+        setPassword('')
+      }
+    } catch (err) {
+      setError('Ошибка подключения к серверу')
+    } finally {
+      setIsLoading(false)
     }
-
-    setIsLoading(false)
   }
 
   return (
@@ -94,12 +105,7 @@ export function LoginPage({ onLoginSuccess }: { onLoginSuccess: () => void }) {
               </Button>
             </form>
 
-            {/* Demo Credentials */}
-            <div className="mt-8 p-4 bg-muted/30 rounded-lg border border-border/50">
-              <p className="text-xs text-muted-foreground font-medium mb-2">Демо учетные данные:</p>
-              <p className="text-xs text-foreground">Логин: <span className="font-mono">admin</span></p>
-              <p className="text-xs text-foreground">Пароль: <span className="font-mono">Admin123</span></p>
-            </div>
+
           </div>
         </Card>
       </div>
