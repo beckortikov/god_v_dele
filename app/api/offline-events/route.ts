@@ -23,9 +23,18 @@ export async function POST(req: Request) {
     try {
         const body = await req.json()
 
+        // Filter only valid fields for new schema
+        const eventData = {
+            name: body.name,
+            description: body.description,
+            event_date: body.event_date,
+            location: body.location,
+            status: body.status || 'planned'
+        }
+
         const { data, error } = await supabaseAdmin
             .from('offline_events')
-            .insert([body])
+            .insert([eventData])
             .select()
 
         if (error) throw error
