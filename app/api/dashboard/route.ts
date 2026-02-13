@@ -33,6 +33,7 @@ export async function GET(request: Request) {
             .from('expenses')
             .select('*')
             .gte('expense_date', `${currentYear}-01-01`)
+            .is('event_id', null)
 
         if (expensesError) throw expensesError
 

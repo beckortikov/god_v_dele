@@ -6,12 +6,23 @@ export async function GET() {
     try {
         const { data, error } = await supabaseAdmin
             .from('offline_events')
-            .select('*')
+            .select(`
+                *,
+                attendees_count:event_attendees(count)
+            `)
             .order('event_date', { ascending: false })
 
         if (error) throw error
 
-        return NextResponse.json({ data }, { status: 200 })
+        // Transform data to include the count in the main object if needed, 
+        // or just use the returned structure.
+        // Supabase returns count as [{ count: N }] array for one-to-many.
+        const formattedData = data.map((event: any) => ({
+            ...event,
+            attendees_attended: event.attendees_count?.[0]?.count || 0
+        }))
+
+        return NextResponse.json({ data: formattedData }, { status: 200 })
     } catch (error: any) {
         console.error('Error fetching offline events:', error)
         return NextResponse.json({ error: error.message }, { status: 500 })
