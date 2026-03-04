@@ -38,6 +38,7 @@ interface ExpenseItem {
   original_amount?: number
 }
 
+
 interface Participant {
   id: string
   name: string
@@ -53,6 +54,7 @@ interface Participant {
 export function IncomeExpensesPage() {
   const [incomeData, setIncomeData] = useState<IncomeItem[]>([])
   const [expenseData, setExpenseData] = useState<ExpenseItem[]>([])
+
   const [participants, setParticipants] = useState<Participant[]>([])
   const [programs, setPrograms] = useState<{ id: string; name: string }[]>([])
   const [filterProgram, setFilterProgram] = useState<string>('all')
@@ -103,7 +105,7 @@ export function IncomeExpensesPage() {
     try {
       const [paymentsRes, expensesRes, participantsRes, programsRes, employeesRes] = await Promise.all([
         fetch('/api/monthly-payments').then(res => res.json()),
-        fetch('/api/expenses').then(res => res.json()),
+        fetch('/api/expenses?exclude_events=true').then(res => res.json()),
         fetch('/api/participants').then(res => res.json()),
         fetch('/api/programs').then(res => res.json()),
         fetch('/api/hr/employees').then(res => res.json())
@@ -127,7 +129,7 @@ export function IncomeExpensesPage() {
         notes: p.notes
       })).filter((i: any) => i.amount > 0)
 
-      // Transform expense data
+      // Transform general expense data (no event_id)
       const expenses = expensesRes.data.map((e: any) => ({
         id: e.id,
         date: e.expense_date,
@@ -535,6 +537,7 @@ export function IncomeExpensesPage() {
               </div>
             </Card>
           </div>
+
         </TabsContent >
 
         <TabsContent value="analysis" className="space-y-6 mt-6">

@@ -7,16 +7,33 @@ export async function GET(req: Request) {
         const { searchParams } = new URL(req.url)
         const category = searchParams.get('category')
         const eventId = searchParams.get('event_id')
+        const excludeEvents = searchParams.get('exclude_events')
+        const onlyEvents = searchParams.get('only_events')
+
+        // When fetching event-linked expenses, join with offline_events for event name
+        const selectQuery = onlyEvents === 'true'
+            ? '*, offline_events(id, name, event_date, status)'
+            : '*'
 
         let query = supabaseAdmin
             .from('expenses')
-            .select('*')
+            .select(selectQuery)
 
         if (category) {
             query = query.eq('category', category)
         }
         if (eventId) {
             query = query.eq('event_id', eventId)
+        }
+
+        // Filter: only general expenses (no event_id)
+        if (excludeEvents === 'true') {
+            query = query.is('event_id', null)
+        }
+
+        // Filter: only event-linked expenses (has event_id)
+        if (onlyEvents === 'true') {
+            query = query.not('event_id', 'is', null)
         }
 
         const { data, error } = await query.order('expense_date', { ascending: false })
