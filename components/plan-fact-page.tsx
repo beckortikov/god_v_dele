@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -23,12 +23,13 @@ interface MonthlyPayment {
     id: string
     name: string
     tariff?: number
-    program: {
-      id: string
-      title: string
-      price_per_month: number
-    }
   }
+  program?: {
+    id: string
+    name: string
+    price_per_month: number
+  }
+  program_id: string
 }
 
 interface Expense {
@@ -55,16 +56,17 @@ interface AggregatedData {
   factBalance: number
 }
 
+const monthNames = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь']
+
 export function PlanFactPage() {
-  const [data, setData] = useState<AggregatedData[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [payments, setPayments] = useState<MonthlyPayment[]>([])
+  const [expenses, setExpenses] = useState<Expense[]>([])
+  const [forecasts, setForecasts] = useState<Forecast[]>([])
   const [programs, setPrograms] = useState<{ id: string; name: string }[]>([])
   const [filterProgram, setFilterProgram] = useState<string>('all')
   const [selectedMonth, setSelectedMonth] = useState<string>('all')
-
-  const monthNames = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь']
 
   useEffect(() => {
     const fetchData = async () => {
@@ -82,65 +84,12 @@ export function PlanFactPage() {
         if (programsRes.error) throw new Error("Error fetching programs: " + programsRes.error)
 
         setPayments(paymentsRes.data || [])
+        setExpenses(expensesRes.data || [])
+        setForecasts(forecastsRes.data || [])
         setPrograms(programsRes.data || [])
 
-        // Process data to aggregate by month
-        const rawPayments: MonthlyPayment[] = paymentsRes.data || []
-        const rawExpenses: Expense[] = expensesRes.data || []
-        const rawForecasts: Forecast[] = forecastsRes.data || []
-
-        // Filter payments by program if selected
-        const filteredPayments = filterProgram === 'all'
-          ? rawPayments
-          : rawPayments.filter(p => p.participant?.program?.id === filterProgram)
-
-        // Determine array of relevant months (e.g. current year or available data range)
-        // For simplicity, let's look at months 1-12 of the current year, or just months present in data.
-        const relevantMonths = Array.from({ length: 12 }, (_, i) => i + 1)
-
-        const aggregated = relevantMonths.map(monthNum => {
-          const forecast = rawForecasts.find(f => f.month_number === monthNum)
-
-          // Calculate Plan Income: Sum of all scheduled payments for this month
-          // OR use forecast.planned_income if available. Ideally forecast is "Goal", payments sum is "Scheduled".
-          // Let's use Forecast if available, otherwise sum of distinct payments scheduled.
-          const scheduledIncome = filteredPayments
-            .filter(p => p.month_number === monthNum)
-            .reduce((sum, p) => sum + (p.amount || p.participant?.tariff || p.participant?.program?.price_per_month || 0), 0)
-
-          const planIncome = forecast?.planned_income || scheduledIncome
-
-          // Fact Income: Sum of fact_amount
-          const factIncome = filteredPayments
-            .filter(p => p.month_number === monthNum)
-            .reduce((sum, p) => sum + (p.fact_amount || 0), 0)
-
-          // Plan Expense: Forecast
-          const planExpense = forecast?.planned_expenses || 0
-
-          // Fact Expense: Sum of expenses in this month
-          const factExpense = rawExpenses
-            .filter(e => new Date(e.expense_date).getMonth() + 1 === monthNum)
-            .reduce((sum, e) => sum + e.amount, 0)
-
-          return {
-            month: monthNames[monthNum - 1],
-            monthNum,
-            planIncome,
-            factIncome,
-            planExpense,
-            factExpense,
-            planBalance: planIncome - planExpense,
-            factBalance: factIncome - factExpense
-          }
-        }).filter(d => d.planIncome > 0 || d.factIncome > 0 || d.factExpense > 0) // Filter out empty months
-
-        setData(aggregated)
-        if (aggregated.length > 0) {
-          setSelectedMonth(aggregated[aggregated.length - 1].month)
-        } else {
-          setSelectedMonth(monthNames[new Date().getMonth()])
-        }
+        // If no month is selected yet, choose current month by default
+        setSelectedMonth(monthNames[new Date().getMonth()])
 
         setLoading(false)
       } catch (err: any) {
@@ -151,6 +100,76 @@ export function PlanFactPage() {
 
     fetchData()
   }, [])
+
+  const filteredPayments = useMemo(() => {
+    return filterProgram === 'all'
+      ? payments
+      : payments.filter(p => (p.program_id === filterProgram || p.program?.id === filterProgram))
+  }, [payments, filterProgram])
+
+  const data = useMemo(() => {
+    const relevantMonths = Array.from({ length: 12 }, (_, i) => i + 1)
+
+    return relevantMonths.map(monthNum => {
+      const forecast = forecasts.find(f => f.month_number === monthNum)
+
+      const scheduledIncome = filteredPayments
+        .filter(p => p.month_number === monthNum)
+        .reduce((sum, p) => sum + (p.amount || p.participant?.tariff || p.program?.price_per_month || 0), 0)
+
+      // Only use forecast income if NO program filter is applied, otherwise calculate from filtered payments
+      const planIncome = (filterProgram === 'all' && forecast?.planned_income)
+        ? forecast.planned_income
+        : scheduledIncome
+
+      const factIncome = filteredPayments
+        .filter(p => p.month_number === monthNum)
+        .reduce((sum, p) => sum + (p.fact_amount || 0), 0)
+
+      const planExpense = forecast?.planned_expenses || 0
+
+      const factExpense = expenses
+        .filter(e => new Date(e.expense_date).getMonth() + 1 === monthNum)
+        .reduce((sum, e) => sum + e.amount, 0)
+
+      return {
+        month: monthNames[monthNum - 1],
+        monthNum,
+        planIncome,
+        factIncome,
+        planExpense,
+        factExpense,
+        planBalance: planIncome - planExpense,
+        factBalance: factIncome - factExpense
+      }
+    }).filter(d => d.planIncome > 0 || d.factIncome > 0 || d.factExpense > 0)
+  }, [filteredPayments, expenses, forecasts, filterProgram])
+
+  // Derived state for the selected month
+  const selectedMonthNum = monthNames.indexOf(selectedMonth) + 1
+  const currentMonthData = data.find(d => d.month === selectedMonth)
+  const currentMonthPayments = filteredPayments.filter(p => p.month_number === selectedMonthNum)
+
+  // Chart data
+  const chartDataForComparison = data.map(item => ({
+    month: item.month.slice(0, 3),
+    income: item.planIncome,
+    expense: item.planExpense
+  }))
+
+  const chartDataActual = data.map(item => ({
+    month: item.month.slice(0, 3),
+    income: item.factIncome,
+    expense: item.factExpense
+  }))
+
+  const deviationAnalysis = data.map(item => ({
+    month: item.month,
+    incomeDev: item.factIncome - item.planIncome,
+    expenseDev: item.factExpense - item.planExpense,
+    balanceDev: item.factBalance - item.planBalance,
+    rate: item.planIncome > 0 ? Math.round((item.factIncome / item.planIncome) * 100) + '%' : '0%'
+  }))
 
   if (loading) {
     return (
@@ -178,32 +197,6 @@ export function PlanFactPage() {
       </div>
     )
   }
-
-  // Derived state for the selected month
-  const selectedMonthNum = monthNames.indexOf(selectedMonth) + 1
-  const currentMonthData = data.find(d => d.month === selectedMonth)
-  const currentMonthPayments = payments.filter(p => p.month_number === selectedMonthNum)
-
-  // Chart data
-  const chartDataForComparison = data.map(item => ({
-    month: item.month.slice(0, 3),
-    income: item.planIncome,
-    expense: item.planExpense
-  }))
-
-  const chartDataActual = data.map(item => ({
-    month: item.month.slice(0, 3),
-    income: item.factIncome,
-    expense: item.factExpense
-  }))
-
-  const deviationAnalysis = data.map(item => ({
-    month: item.month,
-    incomeDev: item.factIncome - item.planIncome,
-    expenseDev: item.factExpense - item.planExpense,
-    balanceDev: item.factBalance - item.planBalance,
-    rate: item.planIncome > 0 ? Math.round((item.factIncome / item.planIncome) * 100) + '%' : '0%'
-  }))
 
 
   return (
@@ -315,7 +308,7 @@ export function PlanFactPage() {
                         <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground">Нет платежей</TableCell></TableRow>
                       ) : (
                         currentMonthPayments.map((payment) => {
-                          const planAmount = payment.amount || payment.participant?.tariff || payment.participant?.program?.price_per_month || 0
+                          const planAmount = payment.amount || payment.participant?.tariff || payment.program?.price_per_month || 0
                           const deviation = (payment.fact_amount || 0) - planAmount
 
                           const statusVariants: Record<string, 'default' | 'secondary' | 'destructive'> = {
@@ -328,7 +321,7 @@ export function PlanFactPage() {
                           return (
                             <TableRow key={payment.id} className="border-b border-border hover:bg-muted/20 h-7">
                               <TableCell className="text-xs text-foreground font-medium py-1">{payment.participant?.name || 'Unknown'}</TableCell>
-                              <TableCell className="text-xs text-muted-foreground py-1">{payment.participant?.program?.title}</TableCell>
+                              <TableCell className="text-xs text-muted-foreground py-1">{payment.program?.name}</TableCell>
                               <TableCell className="text-xs text-foreground text-right py-1">${planAmount}</TableCell>
                               <TableCell className="text-xs text-foreground text-right py-1">${payment.fact_amount || 0}</TableCell>
                               <TableCell className={`text-xs text-right py-1 ${deviation < 0 ? 'text-destructive' : 'text-foreground'}`}>
@@ -483,9 +476,9 @@ export function PlanFactPage() {
                   </TableHeader>
                   <TableBody>
                     {(() => {
-                      const unpaidPayments = payments
+                      const unpaidPayments = filteredPayments
                         .filter(p => {
-                          const plan = p.amount || p.participant?.tariff || p.participant?.program?.price_per_month || 0
+                          const plan = p.amount || p.participant?.tariff || p.program?.price_per_month || 0
                           const fact = p.fact_amount || 0
                           return fact < plan // Not fully paid
                         })
@@ -506,7 +499,7 @@ export function PlanFactPage() {
                       }
 
                       return unpaidPayments.map((payment) => {
-                        const plan = payment.amount || payment.participant?.tariff || payment.participant?.program?.price_per_month || 0
+                        const plan = payment.amount || payment.participant?.tariff || payment.program?.price_per_month || 0
                         const fact = payment.fact_amount || 0
                         const debt = plan - fact
                         const monthName = monthNames[payment.month_number - 1]
@@ -525,7 +518,7 @@ export function PlanFactPage() {
                               {payment.participant?.name || 'Неизвестно'}
                             </TableCell>
                             <TableCell className="text-foreground text-sm">
-                              {payment.participant?.program?.title || 'Не указана'}
+                              {payment.program?.name || 'Не указана'}
                             </TableCell>
                             <TableCell className="text-foreground">
                               {monthName} {payment.year}
