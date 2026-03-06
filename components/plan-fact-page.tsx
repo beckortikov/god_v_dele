@@ -36,6 +36,7 @@ interface Expense {
   id: string
   amount: number
   expense_date: string
+  event_id?: string | null
 }
 
 interface Forecast {
@@ -73,7 +74,7 @@ export function PlanFactPage() {
       try {
         const [paymentsRes, expensesRes, forecastsRes, programsRes] = await Promise.all([
           fetch('/api/monthly-payments').then(res => res.json()),
-          fetch('/api/expenses').then(res => res.json()),
+          fetch('/api/expenses?exclude_events=true').then(res => res.json()),
           fetch('/api/forecasts').then(res => res.json()),
           fetch('/api/programs').then(res => res.json())
         ])
@@ -129,7 +130,7 @@ export function PlanFactPage() {
       const planExpense = forecast?.planned_expenses || 0
 
       const factExpense = expenses
-        .filter(e => new Date(e.expense_date).getMonth() + 1 === monthNum)
+        .filter(e => !e.event_id && new Date(e.expense_date).getMonth() + 1 === monthNum)
         .reduce((sum, e) => sum + e.amount, 0)
 
       return {
