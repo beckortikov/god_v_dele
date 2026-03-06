@@ -33,6 +33,7 @@ export function LoginPage({ onLoginSuccess }: { onLoginSuccess: () => void }) {
         localStorage.setItem('isAuthenticated', 'true')
         localStorage.setItem('userRole', data.user.role)
         localStorage.setItem('userName', data.user.full_name)
+        localStorage.setItem('user', JSON.stringify(data.user))
         onLoginSuccess()
       } else {
         setError(data.error || 'Ошибка входа')

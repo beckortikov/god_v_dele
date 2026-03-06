@@ -21,13 +21,30 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
         }
 
+        let position = null;
+        let employeeName = null;
+        if (user.employee_id) {
+            const { data: employeeData } = await supabaseAdmin
+                .from('employees')
+                .select('position, first_name, last_name')
+                .eq('id', user.employee_id)
+                .single();
+            if (employeeData) {
+                position = employeeData.position;
+                employeeName = `${employeeData.first_name} ${employeeData.last_name}`;
+            }
+        }
+
         return NextResponse.json({
             success: true,
             user: {
                 id: user.id,
                 username: user.username,
                 role: user.role,
-                full_name: user.full_name
+                full_name: user.full_name,
+                employee_id: user.employee_id,
+                employee_name: employeeName,
+                position: position,
             }
         });
     } catch (error: any) {

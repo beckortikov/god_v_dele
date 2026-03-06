@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS app_users (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     username TEXT UNIQUE NOT NULL,
     password TEXT NOT NULL, -- Plain text as requested
-    role TEXT NOT NULL CHECK (role IN ('admin', 'finance', 'participant', 'employee')),
+    role TEXT NOT NULL CHECK (role IN ('admin', 'finance', 'participant', 'employee', 'manager')),
     full_name TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
@@ -58,9 +58,9 @@ CREATE TABLE IF NOT EXISTS participants (
   updated_at TIMESTAMP DEFAULT NOW()
 );
 
-CREATE INDEX idx_participants_program_id ON participants(program_id);
-CREATE INDEX idx_participants_status ON participants(status);
-CREATE INDEX idx_participants_start_date ON participants(start_date);
+CREATE INDEX IF NOT EXISTS idx_participants_program_id ON participants(program_id);
+CREATE INDEX IF NOT EXISTS idx_participants_status ON participants(status);
+CREATE INDEX IF NOT EXISTS idx_participants_start_date ON participants(start_date);
 
 -- ============================================
 -- 4. Monthly Payments Table (Ежемесячные платежи)
@@ -91,9 +91,9 @@ CREATE TABLE IF NOT EXISTS monthly_payments (
   UNIQUE(participant_id, month_number, year)
 );
 
-CREATE INDEX idx_monthly_payments_participant_id ON monthly_payments(participant_id);
-CREATE INDEX idx_monthly_payments_month_year ON monthly_payments(month_number, year);
-CREATE INDEX idx_monthly_payments_status ON monthly_payments(status);
+CREATE INDEX IF NOT EXISTS idx_monthly_payments_participant_id ON monthly_payments(participant_id);
+CREATE INDEX IF NOT EXISTS idx_monthly_payments_month_year ON monthly_payments(month_number, year);
+CREATE INDEX IF NOT EXISTS idx_monthly_payments_status ON monthly_payments(status);
 
 -- ============================================
 -- 5. Monthly Forecasts Table (Прогнозы на месяц)
@@ -113,7 +113,7 @@ CREATE TABLE IF NOT EXISTS monthly_forecasts (
   UNIQUE(month_number, year)
 );
 
-CREATE INDEX idx_monthly_forecasts_month_year ON monthly_forecasts(month_number, year);
+CREATE INDEX IF NOT EXISTS idx_monthly_forecasts_month_year ON monthly_forecasts(month_number, year);
 
 -- ============================================
 -- 6. HR System: Employees (Сотрудники)
@@ -143,7 +143,7 @@ CREATE TABLE IF NOT EXISTS employees (
   updated_at TIMESTAMP DEFAULT NOW()
 );
 
-CREATE INDEX idx_employees_status ON employees(status);
+CREATE INDEX IF NOT EXISTS idx_employees_status ON employees(status);
 
 -- ============================================
 -- 7. HR System: Schedules (График работы)
@@ -166,7 +166,7 @@ CREATE TABLE IF NOT EXISTS employee_schedules (
   UNIQUE(employee_id, work_date)
 );
 
-CREATE INDEX idx_schedules_employee_date ON employee_schedules(employee_id, work_date);
+CREATE INDEX IF NOT EXISTS idx_schedules_employee_date ON employee_schedules(employee_id, work_date);
 
 -- ============================================
 -- 8. HR System: Payroll (Зарплата)
@@ -192,7 +192,7 @@ CREATE TABLE IF NOT EXISTS payroll (
   updated_at TIMESTAMP DEFAULT NOW()
 );
 
-CREATE INDEX idx_payroll_employee_period ON payroll(employee_id, month_number, year);
+CREATE INDEX IF NOT EXISTS idx_payroll_employee_period ON payroll(employee_id, month_number, year);
 
 -- ============================================
 -- 9. Offline Events Module (Мероприятия)
@@ -220,8 +220,8 @@ CREATE TABLE IF NOT EXISTS offline_events (
   updated_at TIMESTAMP DEFAULT NOW()
 );
 
-CREATE INDEX idx_offline_events_event_date ON offline_events(event_date);
-CREATE INDEX idx_offline_events_status ON offline_events(status);
+CREATE INDEX IF NOT EXISTS idx_offline_events_event_date ON offline_events(event_date);
+CREATE INDEX IF NOT EXISTS idx_offline_events_status ON offline_events(status);
 
 -- 9.2 Event Attendees (Income Source)
 CREATE TABLE IF NOT EXISTS event_attendees (
@@ -254,10 +254,10 @@ CREATE TABLE IF NOT EXISTS event_attendees (
   updated_at TIMESTAMP DEFAULT NOW()
 );
 
-CREATE INDEX idx_event_attendees_event_id ON event_attendees(event_id);
-CREATE INDEX idx_event_attendees_participant_id ON event_attendees(participant_id);
-CREATE INDEX idx_event_attendees_type ON event_attendees(attendee_type);
-CREATE INDEX idx_event_attendees_status ON event_attendees(attendance_status);
+CREATE INDEX IF NOT EXISTS idx_event_attendees_event_id ON event_attendees(event_id);
+CREATE INDEX IF NOT EXISTS idx_event_attendees_participant_id ON event_attendees(participant_id);
+CREATE INDEX IF NOT EXISTS idx_event_attendees_type ON event_attendees(attendee_type);
+CREATE INDEX IF NOT EXISTS idx_event_attendees_status ON event_attendees(attendance_status);
 
 -- 9.3 Expenses (Cost Source)
 CREATE TABLE IF NOT EXISTS expenses (
@@ -276,9 +276,9 @@ CREATE TABLE IF NOT EXISTS expenses (
   updated_at TIMESTAMP DEFAULT NOW()
 );
 
-CREATE INDEX idx_expenses_category ON expenses(category);
-CREATE INDEX idx_expenses_expense_date ON expenses(expense_date);
-CREATE INDEX idx_expenses_event_id ON expenses(event_id);
+CREATE INDEX IF NOT EXISTS idx_expenses_category ON expenses(category);
+CREATE INDEX IF NOT EXISTS idx_expenses_expense_date ON expenses(expense_date);
+CREATE INDEX IF NOT EXISTS idx_expenses_event_id ON expenses(event_id);
 
 -- ============================================
 -- 10. Triggers & Functions (Financial Automation)
@@ -337,13 +337,72 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- Trigger for Event Attendees
+DROP TRIGGER IF EXISTS trigger_update_event_financials ON event_attendees;
 CREATE TRIGGER trigger_update_event_financials
 AFTER INSERT OR UPDATE OR DELETE ON event_attendees
 FOR EACH ROW
 EXECUTE FUNCTION update_event_financials();
 
 -- Trigger for Expenses
+DROP TRIGGER IF EXISTS trigger_update_event_financials_expenses ON expenses;
 CREATE TRIGGER trigger_update_event_financials_expenses
 AFTER INSERT OR UPDATE OR DELETE ON expenses
 FOR EACH ROW
 EXECUTE FUNCTION update_event_financials();
+
+-- ============================================
+-- 11. Employee Cabinets & HR Systems
+-- ============================================
+
+-- Link app_users to employees
+ALTER TABLE app_users ADD COLUMN IF NOT EXISTS employee_id UUID REFERENCES employees(id) ON DELETE SET NULL;
+
+-- 11.1 Time Logs (Тайм-трекер)
+CREATE TABLE IF NOT EXISTS time_logs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  employee_id UUID NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+  work_date DATE NOT NULL DEFAULT CURRENT_DATE,
+  start_time TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  end_time TIMESTAMPTZ,
+  duration_minutes INTEGER, -- Calculated upon end_time
+  status TEXT DEFAULT 'active' CHECK (status IN ('active', 'completed')),
+  notes TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_time_logs_employee_date ON time_logs(employee_id, work_date);
+
+-- 11.2 Leave Requests (Отгулы и отпуска)
+CREATE TABLE IF NOT EXISTS leave_requests (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  employee_id UUID NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+  start_date DATE NOT NULL,
+  end_date DATE NOT NULL,
+  reason TEXT NOT NULL,
+  type TEXT DEFAULT 'time_off' CHECK (type IN ('time_off', 'vacation', 'sick_leave')),
+  status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+  approved_by UUID REFERENCES app_users(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_leave_requests_employee ON leave_requests(employee_id);
+CREATE INDEX IF NOT EXISTS idx_leave_requests_status ON leave_requests(status);
+
+-- 11.3 Tasks (Задачи сотрудников)
+CREATE TABLE IF NOT EXISTS tasks (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  assignee_id UUID NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+  creator_id UUID REFERENCES app_users(id) ON DELETE SET NULL,
+  title TEXT NOT NULL,
+  description TEXT,
+  target_participant_id UUID REFERENCES participants(id) ON DELETE SET NULL,
+  due_date DATE,
+  status TEXT DEFAULT 'todo' CHECK (status IN ('todo', 'in_progress', 'completed', 'cancelled')),
+  task_type TEXT DEFAULT 'call' CHECK (task_type IN ('call', 'meeting', 'payment_reminder', 'other')),
+  result_comment TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_tasks_assignee ON tasks(assignee_id);
+CREATE INDEX IF NOT EXISTS idx_tasks_target ON tasks(target_participant_id);
+CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);

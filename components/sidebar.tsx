@@ -11,21 +11,23 @@ import {
   BookOpen,
   X,
   FileText,
+  User,
+  Clock,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
 export type PageType =
   | 'dashboard' | 'participants' | 'income' | 'plan-fact' | 'offline' | 'balance' | 'programs' | 'opiu-reports'
-  | 'hr-dashboard' | 'employees' | 'schedule' | 'payroll' | 'vacations'
-  | 'users'
+  | 'hr-dashboard' | 'employees' | 'schedule' | 'payroll' | 'vacations' | 'timesheet'
+  | 'users' | 'employee-dashboard' | 'manager-dashboard'
 
 interface SidebarProps {
   currentPage: PageType
   onPageChange: (page: PageType) => void
   isOpen?: boolean
   onClose?: () => void
-  mode: 'finance' | 'hr'
-  userRole?: 'admin' | 'finance'
+  mode: 'finance' | 'hr' | 'employee'
+  userRole?: 'admin' | 'finance' | 'employee' | 'manager'
 }
 
 export function Sidebar({ currentPage, onPageChange, isOpen = true, onClose, mode, userRole = 'admin' }: SidebarProps) {
@@ -44,6 +46,7 @@ export function Sidebar({ currentPage, onPageChange, isOpen = true, onClose, mod
     { id: 'hr-dashboard', icon: BarChart3, label: 'HR Дашборд' },
     { id: 'employees', icon: Users, label: 'Сотрудники' },
     { id: 'schedule', icon: Calendar, label: 'График работы' },
+    { id: 'timesheet', icon: Clock, label: 'Табель времени' },
     { id: 'payroll', icon: TrendingUp, label: 'Зарплата' },
     { id: 'vacations', icon: FileText, label: 'Отгулы / Отпуска' },
   ]
@@ -52,17 +55,17 @@ export function Sidebar({ currentPage, onPageChange, isOpen = true, onClose, mod
     { id: 'users', icon: Users, label: 'Пользователи', section: 'admin' }
   ]
 
-  let menuItems = mode === 'finance' ? financeMenuItems : hrMenuItems
+  const employeeMenuItems: { id: PageType; icon: any; label: string; section?: string; badge?: any }[] = [
+    { id: 'employee-dashboard', icon: User, label: 'Мой кабинет' }
+  ]
 
-  if (userRole === 'admin' && mode === 'finance') { // Or show in both? Usually users management is global. Let's put in 'finance' or maybe a new mode?
-    // User request: "в admin нужно еще один раздел добавить управление пользователями"
-    // Let's add it to the bottom of whatever list IF admin.
-    menuItems = [...menuItems, ...adminMenuItems]
-  } else if (userRole === 'admin' && mode === 'hr') {
-    // Maybe dont duplicate in HR? Or maybe do?
-    // Let's stick to adding it to the end of the list regardless of mode for now, OR valid point: separation of concerns.
-    // "Admin" is likely a mode above others.
-    // For simplicity, let's append it to result array.
+  if (userRole === 'manager') {
+    employeeMenuItems.push({ id: 'manager-dashboard', icon: Users, label: 'Задачи сотрудников' })
+  }
+
+  let menuItems = mode === 'finance' ? financeMenuItems : mode === 'hr' ? hrMenuItems : employeeMenuItems
+
+  if (userRole === 'admin' && (mode === 'finance' || mode === 'hr')) {
     menuItems = [...menuItems, ...adminMenuItems]
   }
 

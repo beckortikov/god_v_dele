@@ -14,8 +14,14 @@ import { Plus, Trash2, Edit2, Shield, User } from 'lucide-react'
 type AppUser = {
     id: string
     username: string
-    role: 'admin' | 'finance' | 'participant' | 'employee'
+    role: 'admin' | 'finance' | 'participant' | 'employee' | 'manager'
     full_name: string
+    employee_id?: string
+    employee?: {
+        first_name: string
+        last_name: string
+        position: string
+    }
     created_at: string
 }
 
@@ -24,31 +30,34 @@ export function UsersPage() {
     const [isLoading, setIsLoading] = useState(true)
     const [isDialogOpen, setIsDialogOpen] = useState(false)
     const [editingUser, setEditingUser] = useState<AppUser | null>(null)
+    const [employees, setEmployees] = useState<any[]>([])
 
     // Form state
     const [formData, setFormData] = useState({
         username: '',
         password: '',
         role: 'finance',
-        full_name: ''
+        full_name: '',
+        employee_id: 'none'
     })
 
-    const fetchUsers = async () => {
+    const fetchUsersAndEmployees = async () => {
         try {
-            const res = await fetch('/api/admin/users')
-            if (res.ok) {
-                const data = await res.json()
-                setUsers(data)
-            }
+            const [usersRes, empRes] = await Promise.all([
+                fetch('/api/admin/users'),
+                fetch('/api/hr/employees')
+            ])
+            if (usersRes.ok) setUsers(await usersRes.json())
+            if (empRes.ok) setEmployees(await empRes.json())
         } catch (error) {
-            console.error('Failed to fetch users:', error)
+            console.error('Failed to fetch data:', error)
         } finally {
             setIsLoading(false)
         }
     }
 
     useEffect(() => {
-        fetchUsers()
+        fetchUsersAndEmployees()
     }, [])
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -57,15 +66,20 @@ export function UsersPage() {
             const url = editingUser ? `/api/admin/users/${editingUser.id}` : '/api/admin/users'
             const method = editingUser ? 'PUT' : 'POST'
 
+            const submitData = { ...formData };
+            if (submitData.employee_id === 'none') {
+                submitData.employee_id = ''; // Send empty string for null
+            }
+
             const res = await fetch(url, {
                 method,
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(formData)
+                body: JSON.stringify(submitData)
             })
 
             if (res.ok) {
                 setIsDialogOpen(false)
-                fetchUsers()
+                fetchUsersAndEmployees()
                 resetForm()
             } else {
                 alert('Ошибка при сохранении')
@@ -81,7 +95,7 @@ export function UsersPage() {
         try {
             const res = await fetch(`/api/admin/users/${id}`, { method: 'DELETE' })
             if (res.ok) {
-                fetchUsers()
+                fetchUsersAndEmployees()
             } else {
                 alert('Ошибка удаления')
             }
@@ -96,14 +110,15 @@ export function UsersPage() {
             username: user.username,
             password: '', // Password not shown for security, user can enter new one to change
             role: user.role,
-            full_name: user.full_name || ''
+            full_name: user.full_name || '',
+            employee_id: user.employee_id || 'none'
         })
         setIsDialogOpen(true)
     }
 
     const resetForm = () => {
         setEditingUser(null)
-        setFormData({ username: '', password: '', role: 'finance', full_name: '' })
+        setFormData({ username: '', password: '', role: 'finance', full_name: '', employee_id: 'none' })
     }
 
     return (
@@ -151,6 +166,11 @@ export function UsersPage() {
                                                 {user.role === 'admin' ? <Shield className="w-3 h-3 mr-1" /> : null}
                                                 {user.role}
                                             </Badge>
+                                            {user.employee && (
+                                                <Badge variant="outline" className="ml-2">
+                                                    HR: {user.employee.first_name} {user.employee.last_name}
+                                                </Badge>
+                                            )}
                                         </TableCell>
                                         <TableCell className="text-right">
                                             <div className="flex justify-end gap-2">
@@ -214,12 +234,36 @@ export function UsersPage() {
                                 </SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="admin">Admin</SelectItem>
-                                    <SelectItem value="finance">Finance (Финансист)</SelectItem>
-                                    <SelectItem value="employee">Employee (Сотрудник)</SelectItem>
-                                    <SelectItem value="participant">Participant (Участник)</SelectItem>
+                                    <SelectItem value="manager">Руководитель (Manager)</SelectItem>
+                                    <SelectItem value="finance">Финансист (Finance)</SelectItem>
+                                    <SelectItem value="employee">Сотрудник (Employee)</SelectItem>
+                                    <SelectItem value="participant">Участник (Participant)</SelectItem>
                                 </SelectContent>
                             </Select>
                         </div>
+
+                        {(formData.role === 'employee' || formData.role === 'finance' || formData.role === 'manager') && (
+                            <div className="space-y-2">
+                                <Label>Привязка к сотруднику (Необязательно)</Label>
+                                <Select
+                                    value={formData.employee_id}
+                                    onValueChange={val => setFormData({ ...formData, employee_id: val })}
+                                >
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Без привязки" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="none">Без привязки</SelectItem>
+                                        {employees.map(emp => (
+                                            <SelectItem key={emp.id} value={emp.id}>
+                                                {emp.first_name} {emp.last_name} ({emp.position})
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        )}
+
                         <DialogFooter>
                             <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>Отмена</Button>
                             <Button type="submit">{editingUser ? 'Обновить' : 'Создать'}</Button>

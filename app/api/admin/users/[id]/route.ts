@@ -7,9 +7,14 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
         const body = await request.json();
         const { id } = await params;
 
+        const updateData: any = { ...body };
+        if (updateData.employee_id === '') {
+            updateData.employee_id = null;
+        }
+
         const { data, error } = await supabaseAdmin
             .from('app_users')
-            .update(body)
+            .update(updateData)
             .eq('id', id)
             .select()
             .single();

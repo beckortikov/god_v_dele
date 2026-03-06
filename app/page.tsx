@@ -16,29 +16,34 @@ import { LoginPage } from '@/components/login'
 import { HRDashboard } from '@/components/hr/hr-dashboard'
 import { EmployeesPage } from '@/components/hr/employees-page'
 import { SchedulePage } from '@/components/hr/schedule-page'
+import { TimesheetPage } from '@/components/hr/timesheet-page'
 import { PayrollPage } from '@/components/hr/payroll-page'
 import { VacationsPage } from '@/components/hr/vacations-page'
 import { UsersPage } from '@/components/admin/users-page'
+import { EmployeeDashboard } from '@/components/employee/employee-dashboard'
+import { ManagerDashboard } from '@/components/employee/manager-dashboard'
 
 export default function Home() {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [currentPage, setCurrentPage] = useState<PageType>('dashboard')
-  const [mode, setMode] = useState<'finance' | 'hr'>('finance')
+  const [mode, setMode] = useState<'finance' | 'hr' | 'employee'>('finance')
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
-  const [userRole, setUserRole] = useState<'admin' | 'finance'>('admin')
+  const [userRole, setUserRole] = useState<'admin' | 'finance' | 'employee' | 'manager'>('admin')
 
   useEffect(() => {
     // Check if user is already authenticated
     const auth = localStorage.getItem('isAuthenticated')
-    const role = localStorage.getItem('userRole') as 'admin' | 'finance' || 'admin'
+    const role = localStorage.getItem('userRole') as 'admin' | 'finance' | 'employee' | 'manager' || 'admin'
     setIsAuthenticated(auth === 'true')
     setUserRole(role)
     setIsLoading(false)
 
-    // If finance user, ensure they start on finance dashboard
     if (role === 'finance') {
       setMode('finance')
+    } else if (role === 'employee' || role === 'manager') {
+      setMode('employee')
+      setCurrentPage('employee-dashboard')
     }
   }, [])
 
@@ -57,9 +62,11 @@ export default function Home() {
     setIsSidebarOpen(false)
   }
 
-  const handleModeChange = (newMode: 'finance' | 'hr') => {
+  const handleModeChange = (newMode: 'finance' | 'hr' | 'employee') => {
     setMode(newMode)
-    setCurrentPage(newMode === 'finance' ? 'dashboard' : 'hr-dashboard')
+    if (newMode === 'finance') setCurrentPage('dashboard')
+    else if (newMode === 'hr') setCurrentPage('hr-dashboard')
+    else setCurrentPage('employee-dashboard')
   }
 
   if (isLoading) {
@@ -76,9 +83,15 @@ export default function Home() {
   if (!isAuthenticated) {
     return <LoginPage onLoginSuccess={() => {
       setIsAuthenticated(true)
-      const role = localStorage.getItem('userRole') as 'admin' | 'finance' || 'admin'
+      const role = localStorage.getItem('userRole') as 'admin' | 'finance' | 'employee' | 'manager' || 'admin'
       setUserRole(role)
-      if (role === 'finance') setMode('finance')
+      if (role === 'finance') {
+        setMode('finance')
+        setCurrentPage('dashboard')
+      } else if (role === 'employee' || role === 'manager') {
+        setMode('employee')
+        setCurrentPage('employee-dashboard')
+      }
     }} />
   }
 
@@ -115,9 +128,14 @@ export default function Home() {
           {currentPage === 'hr-dashboard' && <HRDashboard />}
           {currentPage === 'employees' && <EmployeesPage />}
           {currentPage === 'schedule' && <SchedulePage />}
+          {currentPage === 'timesheet' && <TimesheetPage />}
           {currentPage === 'payroll' && <PayrollPage />}
           {currentPage === 'vacations' && <VacationsPage />}
           {currentPage === 'users' && <UsersPage />}
+
+          {/* Employee Pages */}
+          {currentPage === 'employee-dashboard' && <EmployeeDashboard />}
+          {currentPage === 'manager-dashboard' && <ManagerDashboard />}
         </main>
       </div>
     </div>

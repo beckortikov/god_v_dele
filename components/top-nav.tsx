@@ -8,9 +8,9 @@ interface TopNavProps {
   currentPage: PageType
   onLogout?: () => void
   onMenuClick?: () => void
-  mode: 'finance' | 'hr'
-  onModeChange: (mode: 'finance' | 'hr') => void
-  userRole?: 'admin' | 'finance'
+  mode: 'finance' | 'hr' | 'employee'
+  onModeChange: (mode: 'finance' | 'hr' | 'employee') => void
+  userRole?: 'admin' | 'finance' | 'employee' | 'manager'
 }
 
 const pageNames: Record<PageType, string> = {
@@ -26,9 +26,12 @@ const pageNames: Record<PageType, string> = {
   'hr-dashboard': 'HR Дашборд',
   employees: 'Сотрудники',
   schedule: 'График работы',
+  timesheet: 'Табель учета времени',
   payroll: 'Зарплата',
   vacations: 'Отгулы и отпуска',
   users: 'Управление пользователями',
+  'employee-dashboard': 'Мой кабинет',
+  'manager-dashboard': 'Задачи сотрудников',
 }
 
 export function TopNav({ currentPage, onLogout, onMenuClick, mode, onModeChange, userRole = 'admin' }: TopNavProps) {
