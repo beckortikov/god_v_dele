@@ -36,6 +36,8 @@ interface ExpenseItem {
   name: string
   currency?: string
   original_amount?: number
+  program_id?: string
+  program_name?: string
 }
 
 
@@ -75,12 +77,14 @@ export function IncomeExpensesPage() {
     date: string;
     description: string;
     employee_id?: string;
+    program_id?: string;
   }>({
     name: '',
     amount: '',
     category: '',
     date: new Date().toISOString().split('T')[0],
-    description: ''
+    description: '',
+    program_id: ''
   })
 
   const [employees, setEmployees] = useState<any[]>([])
@@ -139,7 +143,11 @@ export function IncomeExpensesPage() {
         description: e.description,
         name: e.name,
         currency: e.currency,
-        original_amount: e.original_amount
+        original_amount: e.original_amount,
+        program_id: e.program_id,
+        program_name: e.program_id
+          ? (programsRes.data || []).find((p: any) => p.id === e.program_id)?.name || '—'
+          : '—'
       }))
 
       setIncomeData(income)
@@ -162,7 +170,8 @@ export function IncomeExpensesPage() {
       category: item.category,
       date: item.date,
       description: item.description || '',
-      employee_id: undefined
+      employee_id: undefined,
+      program_id: item.program_id || ''
     })
     setIsExpenseOpen(true)
   }
@@ -212,7 +221,8 @@ export function IncomeExpensesPage() {
         expense_date: expenseForm.date,
         description: expenseForm.description,
         status: 'approved',
-        employee_id: expenseForm.employee_id
+        employee_id: expenseForm.employee_id,
+        program_id: expenseForm.program_id || null
       };
 
       if (isEdit) body.id = expenseForm.id;
@@ -227,7 +237,7 @@ export function IncomeExpensesPage() {
       if (result.error) throw new Error(result.error)
 
       setIsExpenseOpen(false)
-      setExpenseForm({ name: '', amount: '', category: '', date: new Date().toISOString().split('T')[0], description: '' })
+      setExpenseForm({ name: '', amount: '', category: '', date: new Date().toISOString().split('T')[0], description: '', program_id: '' })
       fetchData() // Refresh data
     } catch (err: any) {
       alert('Error saving expense: ' + err.message)
@@ -495,9 +505,9 @@ export function IncomeExpensesPage() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Дата</TableHead>
-                      <TableHead>Категория</TableHead>
+                      <TableHead>Название</TableHead>
+                      <TableHead>Программа</TableHead>
                       <TableHead>Сумма</TableHead>
-                      <TableHead>Тип</TableHead>
                       <TableHead className="w-[100px]"></TableHead>
                     </TableRow>
                   </TableHeader>
@@ -506,6 +516,11 @@ export function IncomeExpensesPage() {
                       <TableRow key={item.id}>
                         <TableCell>{new Date(item.date).toLocaleDateString('ru-RU')}</TableCell>
                         <TableCell>{item.name}</TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className="text-xs">
+                            {item.program_name || '—'}
+                          </Badge>
+                        </TableCell>
                         <TableCell className="text-red-600 font-medium">
                           -${Number(item.amount).toLocaleString()}
                           {item.currency === 'TJS' && item.original_amount && (
@@ -513,9 +528,6 @@ export function IncomeExpensesPage() {
                               ({Number(item.original_amount).toLocaleString()} TJS)
                             </span>
                           )}
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline">{item.type}</Badge>
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-2">
@@ -575,10 +587,24 @@ export function IncomeExpensesPage() {
       <Dialog open={isExpenseOpen} onOpenChange={setIsExpenseOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Добавить расход</DialogTitle>
-            <DialogDescription>Заполните информацию о новом расходе</DialogDescription>
+            <DialogTitle>{expenseForm.id ? 'Редактировать расход' : 'Добавить расход'}</DialogTitle>
+            <DialogDescription>Заполните информацию о расходе</DialogDescription>
           </DialogHeader>
           <form onSubmit={handleAddExpense} className="space-y-4">
+            {/* Program Selection */}
+            <div className="space-y-2">
+              <Label>Программа (необязательно)</Label>
+              <Select value={expenseForm.program_id || 'none'} onValueChange={(v) => setExpenseForm({ ...expenseForm, program_id: v === 'none' ? '' : v })}>
+                <SelectTrigger><SelectValue placeholder="Выберите программу" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">— Без программы —</SelectItem>
+                  {programs.map(prog => (
+                    <SelectItem key={prog.id} value={prog.id}>{prog.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
             {/* Employee Selection Logic */}
             {(expenseForm.category === 'Зарплаты' || expenseForm.category === 'Personnel') && (
               <div className="space-y-2">
@@ -670,7 +696,7 @@ export function IncomeExpensesPage() {
               <Input type="date" value={expenseForm.date} onChange={e => setExpenseForm({ ...expenseForm, date: e.target.value })} required />
             </div>
             <DialogFooter>
-              <Button type="submit" disabled={submitLoading}>{submitLoading ? 'Сохранение...' : 'Добавить'}</Button>
+              <Button type="submit" disabled={submitLoading}>{submitLoading ? 'Сохранение...' : expenseForm.id ? 'Сохранить' : 'Добавить'}</Button>
             </DialogFooter>
           </form>
         </DialogContent>
