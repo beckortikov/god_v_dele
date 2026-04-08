@@ -12,6 +12,10 @@ export async function GET(request: Request) {
                     first_name,
                     last_name,
                     position
+                ),
+                participant:participants (
+                    id,
+                    name
                 )
             `)
             .order('created_at', { ascending: false });
@@ -31,7 +35,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
     try {
         const body = await request.json();
-        const { username, password, role, full_name, employee_id } = body;
+        const { username, password, role, full_name, employee_id, participant_id } = body;
 
         // Basic validation
         if (!username || !password || !role) {
@@ -40,6 +44,7 @@ export async function POST(request: Request) {
 
         const insertData: any = { username, password, role, full_name };
         if (employee_id) insertData.employee_id = employee_id;
+        if (participant_id) insertData.participant_id = participant_id;
 
         const { data, error } = await supabaseAdmin
             .from('app_users')

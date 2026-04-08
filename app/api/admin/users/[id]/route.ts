@@ -11,6 +11,9 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
         if (updateData.employee_id === '') {
             updateData.employee_id = null;
         }
+        if (updateData.participant_id === '') {
+            updateData.participant_id = null;
+        }
 
         const { data, error } = await supabaseAdmin
             .from('app_users')

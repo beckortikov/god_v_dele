@@ -10,7 +10,7 @@ interface TopNavProps {
   onMenuClick?: () => void
   mode: 'finance' | 'hr' | 'employee'
   onModeChange: (mode: 'finance' | 'hr' | 'employee') => void
-  userRole?: 'admin' | 'finance' | 'employee' | 'manager'
+  userRole?: 'admin' | 'finance' | 'employee' | 'manager' | 'participant'
 }
 
 const pageNames: Record<PageType, string> = {
@@ -22,6 +22,7 @@ const pageNames: Record<PageType, string> = {
   offline: 'Оффлайн мероприятия',
   balance: 'Прогноз баланса',
   'opiu-reports': 'Ежемесячные отчеты ОПиУ',
+  'life-wheel': 'Колесо баланса',
   // HR pages
   'hr-dashboard': 'HR Дашборд',
   employees: 'Сотрудники',

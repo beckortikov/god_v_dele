@@ -12,6 +12,7 @@ import { BalanceForecastPage } from '@/components/balance-forecast-page'
 import { ProgramsPage } from '@/components/programs-page'
 import OPiUReportsPage from '@/components/opiu-reports-page'
 import { LoginPage } from '@/components/login'
+import { LifeWheelPage } from '@/components/life-wheel-page'
 
 import { HRDashboard } from '@/components/hr/hr-dashboard'
 import { EmployeesPage } from '@/components/hr/employees-page'
@@ -29,14 +30,16 @@ export default function Home() {
   const [currentPage, setCurrentPage] = useState<PageType>('dashboard')
   const [mode, setMode] = useState<'finance' | 'hr' | 'employee'>('finance')
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
-  const [userRole, setUserRole] = useState<'admin' | 'finance' | 'employee' | 'manager'>('admin')
+  const [userRole, setUserRole] = useState<'admin' | 'finance' | 'employee' | 'manager' | 'participant'>('admin')
+  const [userParticipantId, setUserParticipantId] = useState<string | null>(null)
+  const [userFullName, setUserFullName] = useState<string | null>(null)
 
   useEffect(() => {
     // Check if user is already authenticated
     const auth = localStorage.getItem('isAuthenticated')
-    const role = localStorage.getItem('userRole') as 'admin' | 'finance' | 'employee' | 'manager' || 'admin'
+    const role = localStorage.getItem('userRole') as 'admin' | 'finance' | 'employee' | 'manager' | 'participant' || 'admin'
     setIsAuthenticated(auth === 'true')
-    setUserRole(role)
+    setUserRole(role as any)
     setIsLoading(false)
 
     if (role === 'finance') {
@@ -44,7 +47,21 @@ export default function Home() {
     } else if (role === 'employee' || role === 'manager') {
       setMode('employee')
       setCurrentPage('employee-dashboard')
+    } else if (role === 'participant') {
+      // Participant only uses the life wheel
+      setMode('employee')
+      setCurrentPage('life-wheel')
     }
+
+    // Load user info for participant self-view
+    try {
+      const storedUser = localStorage.getItem('user')
+      if (storedUser) {
+        const userData = JSON.parse(storedUser)
+        setUserParticipantId(userData.participant_id || null)
+        setUserFullName(userData.full_name || userData.employee_name || null)
+      }
+    } catch (e) { /* ignore */ }
   }, [])
 
   const handleLogout = () => {
@@ -83,14 +100,27 @@ export default function Home() {
   if (!isAuthenticated) {
     return <LoginPage onLoginSuccess={() => {
       setIsAuthenticated(true)
-      const role = localStorage.getItem('userRole') as 'admin' | 'finance' | 'employee' | 'manager' || 'admin'
-      setUserRole(role)
+      const role = localStorage.getItem('userRole') as 'admin' | 'finance' | 'employee' | 'manager' | 'participant' || 'admin'
+      setUserRole(role as any)
+
+      try {
+        const storedUser = localStorage.getItem('user')
+        if (storedUser) {
+          const userData = JSON.parse(storedUser)
+          setUserParticipantId(userData.participant_id || null)
+          setUserFullName(userData.full_name || userData.employee_name || null)
+        }
+      } catch (e) { /* ignore */ }
+
       if (role === 'finance') {
         setMode('finance')
         setCurrentPage('dashboard')
       } else if (role === 'employee' || role === 'manager') {
         setMode('employee')
         setCurrentPage('employee-dashboard')
+      } else if (role === 'participant') {
+        setMode('employee')
+        setCurrentPage('life-wheel')
       }
     }} />
   }
@@ -123,6 +153,12 @@ export default function Home() {
           {currentPage === 'plan-fact' && <PlanFactPage />}
           {currentPage === 'offline' && <OfflineEventsPage />}
           {currentPage === 'balance' && <BalanceForecastPage />}
+          {currentPage === 'life-wheel' && (
+            <LifeWheelPage
+              participantId={(userRole === 'employee' || userRole === 'manager' || userRole === 'participant') && userParticipantId ? userParticipantId : undefined}
+              participantName={userFullName || undefined}
+            />
+          )}
 
           {/* HR Pages */}
           {currentPage === 'hr-dashboard' && <HRDashboard />}

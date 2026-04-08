@@ -45,6 +45,7 @@ export async function POST(request: Request) {
                 employee_id: user.employee_id,
                 employee_name: employeeName,
                 position: position,
+                participant_id: user.participant_id,
             }
         });
     } catch (error: any) {

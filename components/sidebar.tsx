@@ -17,7 +17,7 @@ import {
 import { Button } from '@/components/ui/button'
 
 export type PageType =
-  | 'dashboard' | 'participants' | 'income' | 'plan-fact' | 'offline' | 'balance' | 'programs' | 'opiu-reports'
+  | 'dashboard' | 'participants' | 'income' | 'plan-fact' | 'offline' | 'balance' | 'programs' | 'opiu-reports' | 'life-wheel'
   | 'hr-dashboard' | 'employees' | 'schedule' | 'payroll' | 'vacations' | 'timesheet'
   | 'users' | 'employee-dashboard' | 'manager-dashboard'
 
@@ -27,7 +27,7 @@ interface SidebarProps {
   isOpen?: boolean
   onClose?: () => void
   mode: 'finance' | 'hr' | 'employee'
-  userRole?: 'admin' | 'finance' | 'employee' | 'manager'
+  userRole?: 'admin' | 'finance' | 'employee' | 'manager' | 'participant'
 }
 
 export function Sidebar({ currentPage, onPageChange, isOpen = true, onClose, mode, userRole = 'admin' }: SidebarProps) {
@@ -39,6 +39,7 @@ export function Sidebar({ currentPage, onPageChange, isOpen = true, onClose, mod
     { id: 'plan-fact', icon: Target, label: 'План–Факт', section: 'finance' },
     { id: 'offline', icon: Calendar, label: 'Оффлайн события', section: 'finance' },
     { id: 'balance', icon: PieChart, label: 'Прогноз баланса', section: 'finance' },
+    { id: 'life-wheel', icon: PieChart, label: 'Колесо баланса', section: 'participants' },
     { id: 'opiu-reports', icon: FileText, label: 'Ежемесячные отчеты', section: 'opiu' },
   ]
 
@@ -56,14 +57,19 @@ export function Sidebar({ currentPage, onPageChange, isOpen = true, onClose, mod
   ]
 
   const employeeMenuItems: { id: PageType; icon: any; label: string; section?: string; badge?: any }[] = [
-    { id: 'employee-dashboard', icon: User, label: 'Мой кабинет' }
+    { id: 'employee-dashboard', icon: User, label: 'Мой кабинет' },
+    { id: 'life-wheel', icon: PieChart, label: 'Колесо баланса' },
+  ]
+
+  const participantMenuItems: { id: PageType; icon: any; label: string; section?: string; badge?: any }[] = [
+    { id: 'life-wheel', icon: PieChart, label: 'Колесо баланса' },
   ]
 
   if (userRole === 'manager') {
     employeeMenuItems.push({ id: 'manager-dashboard', icon: Users, label: 'Задачи сотрудников' })
   }
 
-  let menuItems = mode === 'finance' ? financeMenuItems : mode === 'hr' ? hrMenuItems : employeeMenuItems
+  let menuItems = mode === 'finance' ? financeMenuItems : mode === 'hr' ? hrMenuItems : userRole === 'participant' ? participantMenuItems : employeeMenuItems
 
   if (userRole === 'admin' && (mode === 'finance' || mode === 'hr')) {
     menuItems = [...menuItems, ...adminMenuItems]
@@ -131,7 +137,7 @@ export function Sidebar({ currentPage, onPageChange, isOpen = true, onClose, mod
                 {showSectionHeader && (
                   <div className="px-3 py-2 mt-4 first:mt-0">
                     <p className="text-xs font-semibold text-sidebar-foreground/60 uppercase tracking-wider">
-                      {item.section === 'opiu' ? 'ОПиУ' : item.section === 'admin' ? 'Пользователи' : 'Финансы'}
+                      {item.section === 'opiu' ? 'ОПиУ' : item.section === 'admin' ? 'Пользователи' : item.section === 'participants' ? 'Участники' : 'Финансы'}
                     </p>
                   </div>
                 )}

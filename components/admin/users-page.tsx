@@ -22,6 +22,10 @@ type AppUser = {
         last_name: string
         position: string
     }
+    participant_id?: string
+    participant?: {
+        name: string
+    }
     created_at: string
 }
 
@@ -31,6 +35,7 @@ export function UsersPage() {
     const [isDialogOpen, setIsDialogOpen] = useState(false)
     const [editingUser, setEditingUser] = useState<AppUser | null>(null)
     const [employees, setEmployees] = useState<any[]>([])
+    const [participants, setParticipants] = useState<any[]>([])
 
     // Form state
     const [formData, setFormData] = useState({
@@ -38,17 +43,25 @@ export function UsersPage() {
         password: '',
         role: 'finance',
         full_name: '',
-        employee_id: 'none'
+        employee_id: 'none',
+        participant_id: 'none'
     })
 
     const fetchUsersAndEmployees = async () => {
         try {
-            const [usersRes, empRes] = await Promise.all([
+            const [usersRes, empRes, partRes] = await Promise.all([
                 fetch('/api/admin/users'),
-                fetch('/api/hr/employees')
+                fetch('/api/hr/employees'),
+                fetch('/api/participants')
             ])
             if (usersRes.ok) setUsers(await usersRes.json())
             if (empRes.ok) setEmployees(await empRes.json())
+            if (partRes.ok) {
+                const partsData = await partRes.json()
+                if (partsData.data && Array.isArray(partsData.data)) {
+                    setParticipants(partsData.data.filter((p: any) => p.status === 'active'))
+                }
+            }
         } catch (error) {
             console.error('Failed to fetch data:', error)
         } finally {
@@ -67,9 +80,8 @@ export function UsersPage() {
             const method = editingUser ? 'PUT' : 'POST'
 
             const submitData = { ...formData };
-            if (submitData.employee_id === 'none') {
-                submitData.employee_id = ''; // Send empty string for null
-            }
+            if (submitData.employee_id === 'none') submitData.employee_id = '';
+            if (submitData.participant_id === 'none') submitData.participant_id = '';
 
             const res = await fetch(url, {
                 method,
@@ -111,14 +123,15 @@ export function UsersPage() {
             password: '', // Password not shown for security, user can enter new one to change
             role: user.role,
             full_name: user.full_name || '',
-            employee_id: user.employee_id || 'none'
+            employee_id: user.employee_id || 'none',
+            participant_id: user.participant_id || 'none'
         })
         setIsDialogOpen(true)
     }
 
     const resetForm = () => {
         setEditingUser(null)
-        setFormData({ username: '', password: '', role: 'finance', full_name: '', employee_id: 'none' })
+        setFormData({ username: '', password: '', role: 'finance', full_name: '', employee_id: 'none', participant_id: 'none' })
     }
 
     return (
@@ -169,6 +182,11 @@ export function UsersPage() {
                                             {user.employee && (
                                                 <Badge variant="outline" className="ml-2">
                                                     HR: {user.employee.first_name} {user.employee.last_name}
+                                                </Badge>
+                                            )}
+                                            {user.participant && (
+                                                <Badge variant="outline" className="ml-2 border-primary/30 text-primary">
+                                                    🎯 {user.participant.name}
                                                 </Badge>
                                             )}
                                         </TableCell>
@@ -247,7 +265,14 @@ export function UsersPage() {
                                 <Label>Привязка к сотруднику (Необязательно)</Label>
                                 <Select
                                     value={formData.employee_id}
-                                    onValueChange={val => setFormData({ ...formData, employee_id: val })}
+                                    onValueChange={val => {
+                                        const emp = employees.find((x: any) => x.id === val)
+                                        setFormData({ 
+                                            ...formData, 
+                                            employee_id: val,
+                                            full_name: emp ? `${emp.first_name} ${emp.last_name}` : formData.full_name
+                                        })
+                                    }}
                                 >
                                     <SelectTrigger>
                                         <SelectValue placeholder="Без привязки" />
@@ -257,6 +282,35 @@ export function UsersPage() {
                                         {employees.map(emp => (
                                             <SelectItem key={emp.id} value={emp.id}>
                                                 {emp.first_name} {emp.last_name} ({emp.position})
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        )}
+
+                        {formData.role === 'participant' && (
+                            <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
+                                <Label>Привязка к Участнику</Label>
+                                <Select
+                                    value={formData.participant_id}
+                                    onValueChange={val => {
+                                        const p = participants.find((x: any) => x.id === val)
+                                        setFormData({ 
+                                            ...formData, 
+                                            participant_id: val,
+                                            full_name: p ? p.name : formData.full_name
+                                        })
+                                    }}
+                                >
+                                    <SelectTrigger className="border-primary/50 focus:ring-primary">
+                                        <SelectValue placeholder="Выберите участника" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="none">Без привязки</SelectItem>
+                                        {participants.map(p => (
+                                            <SelectItem key={p.id} value={p.id}>
+                                                🎯 {p.name}
                                             </SelectItem>
                                         ))}
                                     </SelectContent>
