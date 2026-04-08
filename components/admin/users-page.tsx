@@ -26,6 +26,7 @@ type AppUser = {
     participant?: {
         name: string
     }
+    last_login_at?: string
     created_at: string
 }
 
@@ -170,7 +171,18 @@ export function UsersPage() {
                                                 <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold">
                                                     <User className="w-4 h-4" />
                                                 </div>
-                                                {user.full_name || user.username}
+                                                <div className="flex flex-col">
+                                                    <span>{user.full_name || user.username}</span>
+                                                    {user.last_login_at ? (
+                                                        <span className="text-xs text-muted-foreground font-normal">
+                                                            Был(а) в сети: {new Date(user.last_login_at).toLocaleString('ru-RU')}
+                                                        </span>
+                                                    ) : (
+                                                        <span className="text-xs text-muted-foreground font-normal opacity-50">
+                                                            Никогда не заходил(а)
+                                                        </span>
+                                                    )}
+                                                </div>
                                             </div>
                                         </TableCell>
                                         <TableCell>{user.username}</TableCell>

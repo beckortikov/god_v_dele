@@ -8,7 +8,7 @@ const _geist = Geist({ subsets: ["latin"] });
 const _geistMono = Geist_Mono({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: 'План–Факт | Финансовая платформа',
+  title: 'Год в деле - обучение твой рост',
   description: 'Прозрачный финансовый учет для образовательных проектов',
   generator: 'v0.app',
   icons: {

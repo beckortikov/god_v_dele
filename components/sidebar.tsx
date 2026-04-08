@@ -110,8 +110,8 @@ export function Sidebar({ currentPage, onPageChange, isOpen = true, onClose, mod
         {/* Logo */}
         <div className="p-4 sm:p-6 border-b border-sidebar-border flex items-center justify-between">
           <div>
-            <h1 className="text-xl sm:text-2xl font-bold text-sidebar-primary">План–Факт</h1>
-            <p className="text-xs text-sidebar-foreground/60 mt-1">Финансовая платформа</p>
+            <h1 className="text-xl sm:text-2xl font-bold text-sidebar-primary">Год в деле</h1>
+            <p className="text-xs text-sidebar-foreground/60 mt-1">Обучение твой рост</p>
           </div>
           {/* Close button - mobile only */}
           {onClose && (

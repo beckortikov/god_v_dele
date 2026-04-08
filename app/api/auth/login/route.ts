@@ -35,6 +35,14 @@ export async function POST(request: Request) {
             }
         }
 
+        // Update last login timestamp
+        // We don't await this so it doesn't block the login response, 
+        // or we await it to ensure it executes. Let's await to be safe against edge functions terminating.
+        await supabaseAdmin
+            .from('app_users')
+            .update({ last_login_at: new Date().toISOString() })
+            .eq('id', user.id);
+
         return NextResponse.json({
             success: true,
             user: {
