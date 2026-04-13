@@ -17,6 +17,7 @@ interface Participant {
 
 interface WheelCategory {
     id: string
+    group?: string
     name: string
     value: number
     color: string
@@ -40,11 +41,14 @@ const PALETTE = [
 ]
 
 const DEFAULT_CATEGORIES: WheelCategory[] = [
-    { id: '1', name: 'Работа', value: 40, color: '#6366f1' },
-    { id: '2', name: 'Семья', value: 20, color: '#ec4899' },
-    { id: '3', name: 'Здоровье', value: 15, color: '#22c55e' },
-    { id: '4', name: 'Обучение', value: 15, color: '#f97316' },
-    { id: '5', name: 'Отдых', value: 10, color: '#14b8a6' },
+    { id: '1', group: 'Карьера', name: 'Текущие задачи', value: 20, color: '#6366f1' },
+    { id: '11', group: 'Карьера', name: 'Нетворкинг', value: 10, color: '#8b5cf6' },
+    { id: '2', group: 'Отношения', name: 'Семья', value: 15, color: '#ec4899' },
+    { id: '21', group: 'Отношения', name: 'Друзья', value: 5, color: '#f43f5e' },
+    { id: '3', group: 'Здоровье', name: 'Тренировки', value: 10, color: '#22c55e' },
+    { id: '31', group: 'Здоровье', name: 'Сон и Режим', value: 15, color: '#14b8a6' },
+    { id: '4', group: 'Хобби', name: 'Творчество', value: 15, color: '#f97316' },
+    { id: '5', group: 'Хобби', name: 'Игры', value: 10, color: '#eab308' },
 ]
 
 // ─────────────────────────── Helpers ───────────────────────────
@@ -77,144 +81,139 @@ function generateId() {
     return Math.random().toString(36).slice(2, 9)
 }
 
-// ─────────────────────────── SVG Pie Chart ───────────────────────────
-function PieChartSVG({ categories }: { categories: WheelCategory[] }) {
-    // Увеличим viewBox до 600x500 чтобы текст по бокам не обрезался
+// ─────────────────────────── SVG Sunburst Chart ───────────────────────────
+function SunburstChartSVG({ categories }: { categories: WheelCategory[] }) {
     const width = 600
     const height = 500
     const cx = width / 2
     const cy = height / 2
-    const r = 150       // чуть уменьшили радиус с 160 до 150 для верности
-    const inner = 70
+    
+    // Radii
+    const rOuter = 210
+    const rMid = 140
+    const rInner = 80
 
     const total = categories.reduce((s, c) => s + (c.value || 0), 0)
-    if (total === 0) {
+    if (total === 0 || categories.length === 0) {
         return (
             <div className="flex flex-col items-center justify-center h-[350px] text-muted-foreground gap-2">
-                <PieChart className="w-16 h-16 opacity-30" />
-                <p className="text-sm">Добавьте категории</p>
+                <AlertCircle className="w-16 h-16 opacity-30" />
+                <p className="text-sm">Нет данных для графика</p>
             </div>
         )
     }
 
+    const grouped = new Map<string, { value: number; color: string; items: WheelCategory[] }>()
+    categories.filter(c => c.value > 0).forEach(c => {
+        const gName = (c.group && c.group.trim() !== '') ? c.group.trim() : 'Прочее'
+        if (!grouped.has(gName)) {
+            grouped.set(gName, { value: 0, color: c.color, items: [] })
+        }
+        const g = grouped.get(gName)!
+        g.value += c.value
+        g.items.push(c)
+    })
+
+    const createArc = (startAngle: number, angle: number, radiusInner: number, radiusOuter: number) => {
+        // SVG paths typically break if a single arc approaches 360deg perfectly (2*PI)
+        const safeAngle = Math.min(angle, Math.PI * 2 - 0.0001)
+        const endAngle = startAngle + safeAngle
+        
+        const x1Inner = cx + radiusInner * Math.cos(startAngle)
+        const y1Inner = cy + radiusInner * Math.sin(startAngle)
+        const x2Inner = cx + radiusInner * Math.cos(endAngle)
+        const y2Inner = cy + radiusInner * Math.sin(endAngle)
+        
+        const x1Outer = cx + radiusOuter * Math.cos(startAngle)
+        const y1Outer = cy + radiusOuter * Math.sin(startAngle)
+        const x2Outer = cx + radiusOuter * Math.cos(endAngle)
+        const y2Outer = cy + radiusOuter * Math.sin(endAngle)
+        
+        const largeArc = safeAngle > Math.PI ? 1 : 0
+        
+        return [
+            `M ${x1Inner} ${y1Inner}`,
+            `L ${x1Outer} ${y1Outer}`,
+            `A ${radiusOuter} ${radiusOuter} 0 ${largeArc} 1 ${x2Outer} ${y2Outer}`,
+            `L ${x2Inner} ${y2Inner}`,
+            `A ${radiusInner} ${radiusInner} 0 ${largeArc} 0 ${x1Inner} ${y1Inner}`,
+            'Z'
+        ].join(' ')
+    }
+
+    const slices: any[] = []
     let cumAngle = -Math.PI / 2
 
-    const slices = categories
-        .filter(c => c.value > 0)
-        .map(c => {
-            const pct = c.value / total
-            const angle = pct * 2 * Math.PI
-            const startAngle = cumAngle
-            cumAngle += angle
-            const endAngle = cumAngle
-
-            const x1 = cx + r * Math.cos(startAngle)
-            const y1 = cy + r * Math.sin(startAngle)
-            const x2 = cx + r * Math.cos(endAngle)
-            const y2 = cy + r * Math.sin(endAngle)
-
-            const ix1 = cx + inner * Math.cos(startAngle)
-            const iy1 = cy + inner * Math.sin(startAngle)
-            const ix2 = cx + inner * Math.cos(endAngle)
-            const iy2 = cy + inner * Math.sin(endAngle)
-
-            const largeArc = angle > Math.PI ? 1 : 0
-
-            const midAngle = startAngle + angle / 2
-
-            // Leader line: start at slice edge, elbow, then horizontal to label
-            const lineR1 = r + 15
-            const lineR2 = r + 35
-            const lx1 = cx + lineR1 * Math.cos(midAngle)
-            const ly1 = cy + lineR1 * Math.sin(midAngle)
-            const lx2 = cx + lineR2 * Math.cos(midAngle)
-            const ly2 = cy + lineR2 * Math.sin(midAngle)
-            const isRight = Math.cos(midAngle) >= 0
-            const lx3 = lx2 + (isRight ? 25 : -25)
-            const ly3 = ly2
-
-            // Label position
-            const labelX = lx3 + (isRight ? 6 : -6)
-            const labelY = ly3
-            const textAnchor = (isRight ? 'start' : 'end') as 'start' | 'end'
-
-            const d = [
-                `M ${ix1} ${iy1}`,
-                `L ${x1} ${y1}`,
-                `A ${r} ${r} 0 ${largeArc} 1 ${x2} ${y2}`,
-                `L ${ix2} ${iy2}`,
-                `A ${inner} ${inner} 0 ${largeArc} 0 ${ix1} ${iy1}`,
-                'Z',
-            ].join(' ')
-
-            return { d, pct, color: c.color, name: c.name, value: c.value, midAngle, lx1, ly1, lx2, ly2, lx3, ly3, labelX, labelY, textAnchor }
+    grouped.forEach((g, gName) => {
+        const gAngle = (g.value / total) * 2 * Math.PI
+        const gStart = cumAngle
+        
+        slices.push({
+            type: 'group', name: gName, value: g.value, color: g.color,
+            d: createArc(gStart, gAngle, rInner, rMid),
         })
 
+        let childCumAngle = gStart
+        g.items.forEach(child => {
+            const cAngle = (child.value / total) * 2 * Math.PI
+            if (cAngle > 0) {
+                slices.push({
+                    type: 'child', name: child.name, value: child.value, color: child.color, parent: gName,
+                    d: createArc(childCumAngle, cAngle, rMid + 3, rOuter), // Gap between circles
+                })
+            }
+            childCumAngle += cAngle
+        })
+
+        cumAngle += gAngle
+    })
+
+    const [hoveredNode, setHoveredNode] = useState<any>(null)
+
     return (
-        <svg viewBox={`0 0 ${width} ${height}`} className="w-full max-w-[600px] drop-shadow-sm" aria-label="Диаграмма времени">
-            {/* Slices */}
-            {slices.map((s, i) => (
-                <g key={i}>
+        <div className="relative w-full max-w-[600px] flex justify-center">
+            <svg viewBox={`0 0 ${width} ${height}`} className="w-full drop-shadow-sm font-sans" aria-label="Солнечные лучи">
+                {slices.map((s, i) => (
                     <path
+                        key={i}
                         d={s.d}
                         fill={s.color}
                         stroke="hsl(var(--background))"
                         strokeWidth="2"
-                        className="hover:opacity-85 transition-opacity cursor-pointer"
-                        style={{ filter: `drop-shadow(0 1px 4px ${s.color}55)` }}
+                        className="transition-opacity duration-200 cursor-pointer outline-none"
+                        style={{
+                            opacity: hoveredNode 
+                                ? (hoveredNode.name === s.name || hoveredNode.name === s.parent || hoveredNode.parent === s.name ? 1 : 0.25)
+                                : 1
+                        }}
+                        onMouseEnter={() => setHoveredNode(s)}
+                        onMouseLeave={() => setHoveredNode(null)}
                     />
-                </g>
-            ))}
+                ))}
+            </svg>
 
-            {/* Center label */}
-            <circle cx={cx} cy={cy} r={inner - 2} fill="hsl(var(--background))" />
-            <text x={cx} y={cy - 6} textAnchor="middle" fontSize="24" fontWeight="bold" fill="hsl(var(--foreground))">
-                {total}%
-            </text>
-            <text x={cx} y={cy + 16} textAnchor="middle" fontSize="13" fill="hsl(var(--muted-foreground))">
-                итого
-            </text>
-
-            {/* Leader lines + labels — only when slice is big enough */}
-            {slices.map((s, i) => (
-                s.pct > 0.03 && (
-                    <g key={`label-${i}`}>
-                        {/* Leader line */}
-                        <polyline
-                            points={`${s.lx1},${s.ly1} ${s.lx2},${s.ly2} ${s.lx3},${s.ly3}`}
-                            fill="none"
-                            stroke={s.color}
-                            strokeWidth="1.2"
-                            opacity="0.8"
-                        />
-                        {/* Dot at elbow */}
-                        <circle cx={s.lx3} cy={s.ly3} r="2.5" fill={s.color} />
-                        {/* Name */}
-                        <text
-                            x={s.labelX}
-                            y={s.labelY - 8}
-                            textAnchor={s.textAnchor}
-                            fontSize="15"
-                            fontWeight="600"
-                            fill="hsl(var(--foreground))"
-                        >
-                            {s.name.length > 14 ? s.name.slice(0, 14) + '…' : s.name}
-                        </text>
-                        {/* Percentage */}
-                        <text
-                            x={s.labelX}
-                            y={s.labelY + 12}
-                            textAnchor={s.textAnchor}
-                            fontSize="14"
-                            fill={s.color}
-                            fontWeight="700"
-                        >
-                            {Math.round(s.pct * 100)}%
-                        </text>
-                    </g>
-                )
-            ))}
-        </svg>
+            {/* Central Info HUD */}
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none transition-opacity duration-200">
+               {hoveredNode ? (
+                   <div className="bg-background/95 backdrop-blur-md border border-border shadow-lg rounded-full w-40 h-40 p-4 flex flex-col items-center justify-center animate-in zoom-in-95 duration-200">
+                       <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground line-clamp-1 mb-0.5">
+                           {hoveredNode.type === 'group' ? 'БЛОК' : hoveredNode.parent}
+                       </span>
+                       <span className="text-sm font-bold text-foreground text-center line-clamp-2 w-full leading-tight">
+                           {hoveredNode.name}
+                       </span>
+                       <div className="mt-1 text-2xl font-black tabular-nums" style={{ color: hoveredNode.color }}>
+                           {hoveredNode.value}%
+                       </div>
+                   </div>
+               ) : (
+                   <div className="text-center bg-background/50 backdrop-blur-sm rounded-full w-32 h-32 flex flex-col items-center justify-center shadow-sm border border-border/50 transition-opacity duration-300">
+                      <p className="text-3xl font-bold text-foreground">{total}%</p>
+                      <p className="text-xs text-muted-foreground uppercase tracking-widest mt-0.5">итого</p>
+                   </div>
+               )}
+            </div>
+        </div>
     )
 }
 
@@ -326,7 +325,7 @@ export function LifeWheelPage({ participantId: fixedParticipantId, participantNa
         setCategories(prev => [...prev, { id: generateId(), name: '', value: 0, color: nextColor }])
     }
 
-    const updateCategory = (id: string, field: 'name' | 'value' | 'color', val: string | number) => {
+    const updateCategory = (id: string, field: 'name' | 'value' | 'color' | 'group', val: string | number) => {
         setCategories(prev => prev.map(c => c.id === id ? { ...c, [field]: val } : c))
     }
 
@@ -556,28 +555,37 @@ export function LifeWheelPage({ participantId: fixedParticipantId, participantNa
                                             type="color"
                                             value={cat.color}
                                             onChange={e => updateCategory(cat.id, 'color', e.target.value)}
-                                            className="w-8 h-8 rounded-lg border-2 border-border cursor-pointer p-0.5 bg-transparent"
+                                            className="w-7 h-7 rounded-[4px] border-2 border-border cursor-pointer p-0 bg-transparent"
                                             title="Выберите цвет"
                                         />
                                     </div>
 
-                                    {/* Name */}
-                                    <Input
-                                        placeholder="Название категории"
-                                        value={cat.name}
-                                        onChange={e => updateCategory(cat.id, 'name', e.target.value)}
-                                        className="flex-1 h-9 text-sm"
-                                    />
+                                    {/* Group & Name Split */}
+                                    <div className="flex flex-1 -space-x-px">
+                                         <Input
+                                             placeholder="Сфера (Блок)"
+                                             value={cat.group || ''}
+                                             title="Укажите сферу, в которую входит категория (напр. 'Работа' или 'Семья')"
+                                             onChange={e => updateCategory(cat.id, 'group', e.target.value)}
+                                             className="w-1/2 h-9 text-xs font-medium rounded-r-none focus-visible:z-10 bg-muted/30 placeholder:text-muted-foreground/50"
+                                         />
+                                         <Input
+                                             placeholder="Категория"
+                                             value={cat.name}
+                                             onChange={e => updateCategory(cat.id, 'name', e.target.value)}
+                                             className="w-1/2 h-9 text-sm font-medium rounded-l-none focus-visible:z-10"
+                                         />
+                                    </div>
 
                                     {/* Value */}
-                                    <div className="relative flex-shrink-0 w-20">
+                                    <div className="relative flex-shrink-0 w-[72px]">
                                         <Input
                                             type="number"
                                             min={0}
                                             max={100}
                                             value={cat.value}
                                             onChange={e => updateCategory(cat.id, 'value', Math.max(0, Math.min(100, Number(e.target.value))))}
-                                            className="h-9 text-sm pr-6 text-right"
+                                            className="h-9 text-sm pr-6 text-right font-medium"
                                         />
                                         <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none">%</span>
                                     </div>
@@ -585,9 +593,9 @@ export function LifeWheelPage({ participantId: fixedParticipantId, participantNa
                                     {/* Delete */}
                                     <button
                                         onClick={() => removeCategory(cat.id)}
-                                        className="opacity-0 group-hover:opacity-100 p-1.5 text-muted-foreground hover:text-red-500 transition-all rounded-lg hover:bg-red-50 dark:hover:bg-red-950"
+                                        className="opacity-0 group-hover:opacity-100 p-1.5 text-muted-foreground hover:text-red-500 transition-all rounded-lg hover:bg-red-50 dark:hover:bg-red-950 flex-shrink-0"
                                     >
-                                        <Trash2 className="w-3.5 h-3.5" />
+                                        <Trash2 className="w-4 h-4" />
                                     </button>
                                 </div>
                             ))}
@@ -604,7 +612,7 @@ export function LifeWheelPage({ participantId: fixedParticipantId, participantNa
                     <div className="space-y-4">
                         <Card className="p-4 sm:p-6 border-border flex flex-col items-center">
                             <h2 className="font-semibold text-foreground mb-4 self-start">Диаграмма</h2>
-                            <PieChartSVG categories={categories} />
+                            <SunburstChartSVG categories={categories} />
                         </Card>
 
                         {/* History */}
