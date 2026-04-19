@@ -57,8 +57,8 @@ export default function Home() {
       const storedUser = localStorage.getItem('user')
       if (storedUser) {
         const userData = JSON.parse(storedUser)
-        setUserParticipantId(userData.participant_id || null)
-        setUserFullName(userData.full_name || userData.employee_name || null)
+        setUserParticipantId(userData.participant_id || userData.employee_id || userData.id || null)
+        setUserFullName(userData.full_name || userData.employee_name || userData.username || null)
       }
     } catch (e) { /* ignore */ }
   }, [])
@@ -106,8 +106,8 @@ export default function Home() {
         const storedUser = localStorage.getItem('user')
         if (storedUser) {
           const userData = JSON.parse(storedUser)
-          setUserParticipantId(userData.participant_id || null)
-          setUserFullName(userData.full_name || userData.employee_name || null)
+          setUserParticipantId(userData.participant_id || userData.employee_id || userData.id || null)
+          setUserFullName(userData.full_name || userData.employee_name || userData.username || null)
         }
       } catch (e) { /* ignore */ }
 
