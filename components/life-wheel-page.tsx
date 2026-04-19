@@ -116,10 +116,71 @@ function generateId() {
     return Math.random().toString(36).slice(2, 9)
 }
 
+function balanceCategories(cats: WheelCategory[], fixedId: string | null = null): WheelCategory[] {
+    if (cats.length === 0) return []
+    const result = cats.map(c => ({ ...c, value: c.value || 0 }))
+    const sum = result.reduce((acc, c) => acc + c.value, 0)
+    
+    if (sum === 100) return result
+    
+    let diff = 100 - sum
+    const others = result.filter(c => c.id !== fixedId)
+    
+    if (others.length === 0) {
+        if (fixedId) {
+            const fixed = result.find(c => c.id === fixedId)
+            if (fixed) fixed.value = 100
+        } else {
+            result[0].value = 100
+        }
+        return result
+    }
+
+    const othersSum = others.reduce((acc, c) => acc + c.value, 0)
+
+    if (diff > 0 && othersSum === 0) {
+        const perItem = Math.floor(diff / others.length)
+        const rem = diff % others.length
+        others.forEach((c, i) => {
+            c.value += perItem + (i < rem ? 1 : 0)
+        })
+        return result
+    }
+
+    const ideal: Record<string, number> = {}
+    others.forEach(c => {
+        ideal[c.id] = c.value + diff * (c.value / othersSum)
+    })
+
+    let iterations = 0
+    while (diff !== 0 && iterations < 1000) {
+        iterations++
+        if (diff > 0) {
+            // Добавляем пропорционально идеалу
+            others.sort((a, b) => (ideal[b.id] - b.value) - (ideal[a.id] - a.value))
+            others[0].value += 1
+            diff -= 1
+        } else {
+            // Забираем у "богатых" (самых больших), чтобы не занулять мелкие
+            const available = others.filter(c => c.value > 0)
+            if (available.length === 0) {
+                const fixed = result.find(c => c.id === fixedId)
+                if (fixed) fixed.value += diff
+                break
+            }
+            available.sort((a, b) => b.value - a.value)
+            available[0].value -= 1
+            diff += 1
+        }
+    }
+    
+    return result
+}
+
 // ─────────────────────────── SVG Sunburst Chart ───────────────────────────
 function SunburstChartSVG({ categories }: { categories: WheelCategory[] }) {
-    const width = 600
-    const height = 500
+    const width = 800
+    const height = 550
     const cx = width / 2
     const cy = height / 2
     
@@ -186,6 +247,8 @@ function SunburstChartSVG({ categories }: { categories: WheelCategory[] }) {
         slices.push({
             type: 'group', name: gName, value: g.value, color: g.color,
             d: createArc(gStart, gAngle, rInner, rMid),
+            midAngle: gStart + gAngle / 2,
+            angle: gAngle,
         })
 
         let childCumAngle = gStart
@@ -195,6 +258,8 @@ function SunburstChartSVG({ categories }: { categories: WheelCategory[] }) {
                 slices.push({
                     type: 'child', name: child.name, value: child.value, color: child.color, parent: gName,
                     d: createArc(childCumAngle, cAngle, rMid + 3, rOuter), // Gap between circles
+                    midAngle: childCumAngle + cAngle / 2,
+                    angle: cAngle,
                 })
             }
             childCumAngle += cAngle
@@ -205,9 +270,44 @@ function SunburstChartSVG({ categories }: { categories: WheelCategory[] }) {
 
     const [hoveredNode, setHoveredNode] = useState<any>(null)
 
+    // Вычисляем данные для выносных линий (callouts)
+    const labels: any[] = []
+    slices.forEach((s) => {
+        // Пропускаем очень мелкие доли, чтобы не было нагромождения (меньше 1.5% примерно)
+        if (s.type === 'child' && s.angle >= 0.05) {
+            const isRight = Math.cos(s.midAngle) >= 0;
+            labels.push({ s, isRight, y1: 0, x1: 0 });
+        }
+    });
+    
+    // Алгоритм избегания наложения по оси Y
+    const MIN_Y_DIST = 20;
+    ['right', 'left'].forEach(side => {
+        const sideLabels = labels.filter(l => (side === 'right' ? l.isRight : !l.isRight));
+        sideLabels.sort((a, b) => {
+            const yA = cy + (rOuter + 15) * Math.sin(a.s.midAngle);
+            const yB = cy + (rOuter + 15) * Math.sin(b.s.midAngle);
+            return yA - yB;
+        });
+        
+        for (let i = 1; i < sideLabels.length; i++) {
+            const prevY = sideLabels[i-1].y1 || (cy + (rOuter + 15) * Math.sin(sideLabels[i-1].s.midAngle));
+            let currY = cy + (rOuter + 15) * Math.sin(sideLabels[i].s.midAngle);
+            if (currY - prevY < MIN_Y_DIST) {
+                currY = prevY + MIN_Y_DIST;
+            }
+            sideLabels[i].y1 = currY;
+        }
+        
+        sideLabels.forEach(l => {
+            if (!l.y1) l.y1 = cy + (rOuter + 15) * Math.sin(l.s.midAngle);
+            l.x1 = cx + (rOuter + 15) * Math.cos(l.s.midAngle);
+        });
+    });
+
     return (
-        <div className="relative w-full max-w-[600px] flex justify-center">
-            <svg viewBox={`0 0 ${width} ${height}`} className="w-full drop-shadow-sm font-sans" aria-label="Солнечные лучи">
+        <div className="relative w-full flex justify-center">
+            <svg viewBox={`0 0 ${width} ${height}`} className="w-full max-w-[800px] drop-shadow-sm font-sans overflow-visible" aria-label="Солнечные лучи">
                 {slices.map((s, i) => (
                     <path
                         key={i}
@@ -225,6 +325,52 @@ function SunburstChartSVG({ categories }: { categories: WheelCategory[] }) {
                         onMouseLeave={() => setHoveredNode(null)}
                     />
                 ))}
+
+                {/* Выносные линии и текст (Callouts) */}
+                {labels.map((l, i) => {
+                    const s = l.s;
+                    const x0 = cx + rOuter * Math.cos(s.midAngle);
+                    const y0 = cy + rOuter * Math.sin(s.midAngle);
+                    
+                    const x1 = l.x1;
+                    const y1 = l.y1;
+                    
+                    const x2 = l.isRight ? x1 + 15 : x1 - 15;
+                    const textX = l.isRight ? x2 + 5 : x2 - 5;
+                    const textAnchor = l.isRight ? "start" : "end";
+                    
+                    return (
+                        <g key={`label-${i}`} 
+                            className="transition-opacity duration-200"
+                            style={{
+                                opacity: hoveredNode 
+                                    ? (hoveredNode.name === s.name || hoveredNode.name === s.parent || hoveredNode.parent === s.name ? 1 : 0.15)
+                                    : 1
+                            }}>
+                            <polyline 
+                                points={`${x0},${y0} ${x1},${y1} ${x2},${y1}`} 
+                                fill="none" 
+                                stroke={s.color} 
+                                strokeWidth="1.5"
+                                opacity="0.6"
+                            />
+                            <text 
+                                x={textX} 
+                                y={y1} 
+                                textAnchor={textAnchor} 
+                                dominantBaseline="middle" 
+                                className="text-[13px] font-medium"
+                            >
+                                <tspan fill="hsl(var(--foreground))" opacity="0.8">
+                                    {s.name.length > 22 ? s.name.substring(0, 21) + '…' : s.name}
+                                </tspan>
+                                <tspan fill={s.color} fontWeight="bold" dx="6">
+                                    {s.value}%
+                                </tspan>
+                            </text>
+                        </g>
+                    )
+                })}
             </svg>
 
             {/* Central Info HUD */}
@@ -267,7 +413,7 @@ export function LifeWheelPage({ participantId: fixedParticipantId, participantNa
     const [selectedParticipantId, setSelectedParticipantId] = useState<string>(fixedParticipantId || '')
     const [periodType, setPeriodType] = useState<'weekly' | 'monthly'>('monthly')
     const [periodOffset, setPeriodOffset] = useState(0)
-    const [categories, setCategories] = useState<WheelCategory[]>(DEFAULT_CATEGORIES)
+    const [categories, setCategories] = useState<WheelCategory[]>(() => balanceCategories(DEFAULT_CATEGORIES))
     const [isSaving, setIsSaving] = useState(false)
     const [isLoading, setIsLoading] = useState(false)
     const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle')
@@ -313,7 +459,7 @@ export function LifeWheelPage({ participantId: fixedParticipantId, participantNa
             const res = await fetch(`/api/life-wheel?${params}`)
             const { data } = await res.json()
             if (data && data.length > 0 && data[0].categories?.length > 0) {
-                setCategories(data[0].categories)
+                setCategories(balanceCategories(data[0].categories))
             } else {
                 // If it's a real user and they have no data, try fetching the global template first
                 if (pid !== TEMPLATE_ID) {
@@ -321,18 +467,18 @@ export function LifeWheelPage({ participantId: fixedParticipantId, participantNa
                         const tempRes = await fetch(`/api/life-wheel?participant_id=${TEMPLATE_ID}&period_type=monthly&period_label=template`)
                         const tempJson = await tempRes.json()
                         if (tempJson.data && tempJson.data.length > 0 && tempJson.data[0].categories?.length > 0) {
-                            setCategories(tempJson.data[0].categories)
+                            setCategories(balanceCategories(tempJson.data[0].categories))
                             setIsLoading(false)
                             setHasUnsavedChanges(false)
                             return
                         }
                     } catch (err) { console.error('Failed to fetch template', err) }
                 }
-                setCategories(DEFAULT_CATEGORIES)
+                setCategories(balanceCategories(DEFAULT_CATEGORIES))
             }
         } catch (e) {
             console.error(e)
-            setCategories(DEFAULT_CATEGORIES)
+            setCategories(balanceCategories(DEFAULT_CATEGORIES))
         } finally {
             setIsLoading(false)
             setHasUnsavedChanges(false)
@@ -425,24 +571,30 @@ export function LifeWheelPage({ participantId: fixedParticipantId, participantNa
     // ── Category operations
     const addCategory = () => {
         const nextColor = PALETTE[categories.length % PALETTE.length]
-        setCategories(prev => [...prev, { id: generateId(), name: '', value: 0, color: nextColor }])
+        setCategories(prev => balanceCategories([...prev, { id: generateId(), name: '', value: 0, color: nextColor }]))
         setHasUnsavedChanges(true)
     }
 
     const updateCategory = (id: string, field: 'name' | 'value' | 'color' | 'group', val: string | number) => {
-        setCategories(prev => prev.map(c => c.id === id ? { ...c, [field]: val } : c))
+        setCategories(prev => {
+            let next = prev.map(c => c.id === id ? { ...c, [field]: val } : c)
+            if (field === 'value') {
+                next = balanceCategories(next, id)
+            }
+            return next
+        })
         setHasUnsavedChanges(true)
     }
 
     const removeCategory = (id: string, name: string) => {
         if (window.confirm(`Вы уверены, что хотите удалить категорию "${name || 'Без названия'}"?`)) {
-            setCategories(prev => prev.filter(c => c.id !== id))
+            setCategories(prev => balanceCategories(prev.filter(c => c.id !== id)))
             setHasUnsavedChanges(true)
         }
     }
 
     const resetToDefault = () => {
-        setCategories(DEFAULT_CATEGORIES)
+        setCategories(balanceCategories(DEFAULT_CATEGORIES))
         setHasUnsavedChanges(true)
     }
 
@@ -681,9 +833,11 @@ export function LifeWheelPage({ participantId: fixedParticipantId, participantNa
 
                     {/* ── Right: Chart */}
                     <div className="space-y-4">
-                        <Card className="p-4 sm:p-6 border-border flex flex-col items-center">
+                        <Card className="p-4 sm:p-6 border-border flex flex-col items-center overflow-hidden">
                             <h2 className="font-semibold text-foreground mb-4 self-start">Диаграмма</h2>
-                            <SunburstChartSVG categories={categories} />
+                            <div className="w-full max-w-[800px]">
+                                <SunburstChartSVG categories={categories} />
+                            </div>
                         </Card>
 
                         {/* History */}
