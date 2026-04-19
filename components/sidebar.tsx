@@ -39,7 +39,7 @@ export function Sidebar({ currentPage, onPageChange, isOpen = true, onClose, mod
     { id: 'plan-fact', icon: Target, label: 'План–Факт', section: 'finance' },
     { id: 'offline', icon: Calendar, label: 'Оффлайн события', section: 'finance' },
     { id: 'balance', icon: PieChart, label: 'Прогноз баланса', section: 'finance' },
-    { id: 'life-wheel', icon: PieChart, label: 'Колесо баланса', section: 'participants' },
+    { id: 'life-wheel', icon: PieChart, label: 'Колесо внимания', section: 'participants' },
     { id: 'opiu-reports', icon: FileText, label: 'Ежемесячные отчеты', section: 'opiu' },
   ]
 
@@ -58,11 +58,11 @@ export function Sidebar({ currentPage, onPageChange, isOpen = true, onClose, mod
 
   const employeeMenuItems: { id: PageType; icon: any; label: string; section?: string; badge?: any }[] = [
     { id: 'employee-dashboard', icon: User, label: 'Мой кабинет' },
-    { id: 'life-wheel', icon: PieChart, label: 'Колесо баланса' },
+    { id: 'life-wheel', icon: PieChart, label: 'Колесо внимания' },
   ]
 
   const participantMenuItems: { id: PageType; icon: any; label: string; section?: string; badge?: any }[] = [
-    { id: 'life-wheel', icon: PieChart, label: 'Колесо баланса' },
+    { id: 'life-wheel', icon: PieChart, label: 'Колесо внимания' },
   ]
 
   if (userRole === 'manager') {

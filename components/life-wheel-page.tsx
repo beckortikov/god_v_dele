@@ -41,14 +41,49 @@ const PALETTE = [
 ]
 
 const DEFAULT_CATEGORIES: WheelCategory[] = [
-    { id: '1', group: 'Карьера', name: 'Текущие задачи', value: 20, color: '#6366f1' },
-    { id: '11', group: 'Карьера', name: 'Нетворкинг', value: 10, color: '#8b5cf6' },
-    { id: '2', group: 'Отношения', name: 'Семья', value: 15, color: '#ec4899' },
-    { id: '21', group: 'Отношения', name: 'Друзья', value: 5, color: '#f43f5e' },
-    { id: '3', group: 'Здоровье', name: 'Тренировки', value: 10, color: '#22c55e' },
-    { id: '31', group: 'Здоровье', name: 'Сон и Режим', value: 15, color: '#14b8a6' },
-    { id: '4', group: 'Хобби', name: 'Творчество', value: 15, color: '#f97316' },
-    { id: '5', group: 'Хобби', name: 'Игры', value: 10, color: '#eab308' },
+    // 1. Здоровье и Энергия (Indigo)
+    { id: '1', group: 'Здоровье и Энергия', name: 'Здоровье', value: 0, color: '#4f46e5' },
+    { id: '2', group: 'Здоровье и Энергия', name: 'Спорт', value: 0, color: '#6366f1' },
+    { id: '3', group: 'Здоровье и Энергия', name: 'Сон', value: 0, color: '#818cf8' },
+    
+    // 2. Семья и Отношения (Pink)
+    { id: '4', group: 'Семья и Отношения', name: 'Жена', value: 0, color: '#be185d' },
+    { id: '5', group: 'Семья и Отношения', name: 'Дети и их воспитание', value: 0, color: '#db2777' },
+    { id: '6', group: 'Семья и Отношения', name: 'Родители', value: 0, color: '#ec4899' },
+    { id: '7', group: 'Семья и Отношения', name: 'Братья, Сестры', value: 0, color: '#f472b6' },
+    { id: '8', group: 'Семья и Отношения', name: 'Родственники', value: 0, color: '#f9a8d4' },
+    { id: '9', group: 'Семья и Отношения', name: '2 ГА или любовница', value: 0, color: '#fbcfe8' },
+    
+    // 3. Бизнес и Работа (Blue)
+    { id: '10', group: 'Бизнес и Работа', name: 'Операционка', value: 0, color: '#1d4ed8' },
+    { id: '11', group: 'Бизнес и Работа', name: 'Сотрудники', value: 0, color: '#2563eb' },
+    { id: '12', group: 'Бизнес и Работа', name: 'Стратегия - новый уровень', value: 0, color: '#3b82f6' },
+    { id: '13', group: 'Бизнес и Работа', name: 'Планирование', value: 0, color: '#60a5fa' },
+    { id: '14', group: 'Бизнес и Работа', name: 'Личный бренд', value: 0, color: '#93c5fd' },
+    
+    // 4. Окружение и Коммуникации (Purple)
+    { id: '15', group: 'Окружение и Коммуникации', name: 'Друзья', value: 0, color: '#7e22ce' },
+    { id: '16', group: 'Окружение и Коммуникации', name: 'Наставники', value: 0, color: '#9333ea' },
+    { id: '17', group: 'Окружение и Коммуникации', name: 'Свадьбы - поседелки', value: 0, color: '#a855f7' },
+    
+    // 5. Личностный рост (Teal)
+    { id: '18', group: 'Личностный рост', name: 'Саморазвитие', value: 0, color: '#0f766e' },
+    { id: '19', group: 'Личностный рост', name: 'Чтение', value: 0, color: '#0d9488' },
+    { id: '20', group: 'Личностный рост', name: 'Навыки', value: 0, color: '#14b8a6' },
+    { id: '21', group: 'Личностный рост', name: 'Насмотренность - Идея', value: 0, color: '#2dd4bf' },
+    
+    // 6. Яркость жизни и Отдых (Orange)
+    { id: '22', group: 'Яркость жизни и Отдых', name: 'Отдых - путешествие', value: 0, color: '#ea580c' },
+    { id: '23', group: 'Яркость жизни и Отдых', name: 'Хобби', value: 0, color: '#f97316' },
+    { id: '24', group: 'Яркость жизни и Отдых', name: 'Фильмы - Сериалы', value: 0, color: '#fb923c' },
+    
+    // 7. Духовность (Yellow)
+    { id: '25', group: 'Духовность', name: 'Духовность', value: 0, color: '#eab308' },
+    
+    // 8. Пожиратели времени (Rose)
+    { id: '26', group: 'Пожиратели времени', name: 'Соц. сети', value: 0, color: '#e11d48' },
+    { id: '27', group: 'Пожиратели времени', name: 'Телевизоров', value: 0, color: '#f43f5e' },
+    { id: '28', group: 'Пожиратели времени', name: 'Плохая привычка', value: 0, color: '#fb7185' }
 ]
 
 // ─────────────────────────── Helpers ───────────────────────────
@@ -237,6 +272,7 @@ export function LifeWheelPage({ participantId: fixedParticipantId, participantNa
     const [isLoading, setIsLoading] = useState(false)
     const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle')
     const [history, setHistory] = useState<Array<{ label: string; period_type: string }>>([])
+    const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
 
     const currentLabel = getPeriodLabel(periodType, periodOffset)
     const total = categories.reduce((s, c) => s + (c.value || 0), 0)
@@ -287,6 +323,7 @@ export function LifeWheelPage({ participantId: fixedParticipantId, participantNa
                         if (tempJson.data && tempJson.data.length > 0 && tempJson.data[0].categories?.length > 0) {
                             setCategories(tempJson.data[0].categories)
                             setIsLoading(false)
+                            setHasUnsavedChanges(false)
                             return
                         }
                     } catch (err) { console.error('Failed to fetch template', err) }
@@ -298,6 +335,7 @@ export function LifeWheelPage({ participantId: fixedParticipantId, participantNa
             setCategories(DEFAULT_CATEGORIES)
         } finally {
             setIsLoading(false)
+            setHasUnsavedChanges(false)
         }
     }, [fixedParticipantId, selectedParticipantId, periodType, currentLabel])
 
@@ -319,32 +357,14 @@ export function LifeWheelPage({ participantId: fixedParticipantId, participantNa
             .catch(console.error)
     }, [fixedParticipantId, selectedParticipantId, saveStatus])
 
-    // ── Category operations
-    const addCategory = () => {
-        const nextColor = PALETTE[categories.length % PALETTE.length]
-        setCategories(prev => [...prev, { id: generateId(), name: '', value: 0, color: nextColor }])
-    }
-
-    const updateCategory = (id: string, field: 'name' | 'value' | 'color' | 'group', val: string | number) => {
-        setCategories(prev => prev.map(c => c.id === id ? { ...c, [field]: val } : c))
-    }
-
-    const removeCategory = (id: string) => {
-        setCategories(prev => prev.filter(c => c.id !== id))
-    }
-
-    const resetToDefault = () => {
-        setCategories(DEFAULT_CATEGORIES)
-    }
-
-    // ── Save
-    const handleSave = async () => {
+    // ── Save Logic
+    const handleSave = async (silent = false) => {
         const pid = fixedParticipantId || selectedParticipantId
         if (!pid) return
         if (isOverLimit) return
 
-        setIsSaving(true)
-        setSaveStatus('idle')
+        if (!silent) setIsSaving(true)
+        if (!silent) setSaveStatus('idle')
 
         let pType = periodType
         let pLabel = currentLabel
@@ -366,14 +386,53 @@ export function LifeWheelPage({ participantId: fixedParticipantId, participantNa
             })
             const result = await res.json()
             if (result.error) throw new Error(result.error)
-            setSaveStatus('success')
-            setTimeout(() => setSaveStatus('idle'), 3000)
+            
+            if (!silent) {
+                setSaveStatus('success')
+                setTimeout(() => setSaveStatus('idle'), 3000)
+            }
+            setHasUnsavedChanges(false)
         } catch (e: any) {
-            setSaveStatus('error')
-            alert('Ошибка сохранения: ' + e.message)
+            if (!silent) {
+                setSaveStatus('error')
+                alert('Ошибка сохранения: ' + e.message)
+            } else {
+                console.error('Autosave error:', e)
+            }
         } finally {
-            setIsSaving(false)
+            if (!silent) setIsSaving(false)
         }
+    }
+
+    // ── Auto-save Effect
+    useEffect(() => {
+        if (!hasUnsavedChanges || isOverLimit || !selectedParticipantId) return;
+        const timer = setTimeout(() => {
+            handleSave(true)
+        }, 1500)
+        return () => clearTimeout(timer)
+    }, [categories, hasUnsavedChanges, isOverLimit, selectedParticipantId])
+
+    // ── Category operations
+    const addCategory = () => {
+        const nextColor = PALETTE[categories.length % PALETTE.length]
+        setCategories(prev => [...prev, { id: generateId(), name: '', value: 0, color: nextColor }])
+        setHasUnsavedChanges(true)
+    }
+
+    const updateCategory = (id: string, field: 'name' | 'value' | 'color' | 'group', val: string | number) => {
+        setCategories(prev => prev.map(c => c.id === id ? { ...c, [field]: val } : c))
+        setHasUnsavedChanges(true)
+    }
+
+    const removeCategory = (id: string) => {
+        setCategories(prev => prev.filter(c => c.id !== id))
+        setHasUnsavedChanges(true)
+    }
+
+    const resetToDefault = () => {
+        setCategories(DEFAULT_CATEGORIES)
+        setHasUnsavedChanges(true)
     }
 
     return (
@@ -383,7 +442,7 @@ export function LifeWheelPage({ participantId: fixedParticipantId, participantNa
                 <div>
                     <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
                         <span className="text-2xl">🎯</span>
-                        Колесо баланса
+                        Колесо внимания
                         {isParticipantMode && participantName && (
                             <Badge variant="secondary" className="ml-2 text-sm font-normal">{participantName}</Badge>
                         )}
@@ -502,7 +561,7 @@ export function LifeWheelPage({ participantId: fixedParticipantId, participantNa
                 <div className="flex flex-col items-center justify-center py-20 gap-4 text-muted-foreground">
                     <PieChart className="w-16 h-16 opacity-20" />
                     <p className="text-lg font-medium">Выберите участника</p>
-                    <p className="text-sm">чтобы увидеть или заполнить колесо баланса</p>
+                    <p className="text-sm">чтобы увидеть или заполнить колесо внимания</p>
                 </div>
             ) : (
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

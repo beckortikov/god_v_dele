@@ -25,6 +25,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS trigger_life_wheel_updated_at ON life_wheel_entries;
 CREATE TRIGGER trigger_life_wheel_updated_at
   BEFORE UPDATE ON life_wheel_entries
   FOR EACH ROW
