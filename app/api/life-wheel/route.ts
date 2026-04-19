@@ -59,12 +59,15 @@ export async function POST(req: Request) {
             )
             .select()
 
-        if (error) throw error
+        if (error) {
+            console.error('Supabase error:', error)
+            throw error
+        }
 
         return NextResponse.json({ data }, { status: 200 })
     } catch (error: any) {
-        console.error('Error saving life wheel:', error)
-        return NextResponse.json({ error: error.message }, { status: 500 })
+        console.error('API Error saving life wheel:', error)
+        return NextResponse.json({ error: error.message || String(error) }, { status: 500 })
     }
 }
 

@@ -384,8 +384,17 @@ export function LifeWheelPage({ participantId: fixedParticipantId, participantNa
                     categories,
                 }),
             })
-            const result = await res.json()
-            if (result.error) throw new Error(result.error)
+            
+            let result;
+            try {
+                result = await res.json()
+            } catch (err) {
+                throw new Error('Не удалось прочитать ответ сервера')
+            }
+            
+            if (!res.ok || result?.error) {
+                throw new Error(result?.error || 'Ошибка сервера при сохранении')
+            }
             
             if (!silent) {
                 setSaveStatus('success')
@@ -395,9 +404,9 @@ export function LifeWheelPage({ participantId: fixedParticipantId, participantNa
         } catch (e: any) {
             if (!silent) {
                 setSaveStatus('error')
-                alert('Ошибка сохранения: ' + e.message)
+                alert('Ошибка сохранения: ' + (e.message || 'Неизвестная ошибка'))
             } else {
-                console.error('Autosave error:', e)
+                console.error('Autosave error:', e.message || e)
             }
         } finally {
             if (!silent) setIsSaving(false)
@@ -464,7 +473,7 @@ export function LifeWheelPage({ participantId: fixedParticipantId, participantNa
                         </span>
                     )}
                     <Button
-                        onClick={handleSave}
+                        onClick={() => handleSave(false)}
                         disabled={isSaving || !selectedParticipantId || isOverLimit}
                         className="gap-2 min-w-[120px]"
                         id="life-wheel-save-btn"
