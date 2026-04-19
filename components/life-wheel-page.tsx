@@ -425,9 +425,11 @@ export function LifeWheelPage({ participantId: fixedParticipantId, participantNa
         setHasUnsavedChanges(true)
     }
 
-    const removeCategory = (id: string) => {
-        setCategories(prev => prev.filter(c => c.id !== id))
-        setHasUnsavedChanges(true)
+    const removeCategory = (id: string, name: string) => {
+        if (window.confirm(`Вы уверены, что хотите удалить категорию "${name || 'Без названия'}"?`)) {
+            setCategories(prev => prev.filter(c => c.id !== id))
+            setHasUnsavedChanges(true)
+        }
     }
 
     const resetToDefault = () => {
@@ -651,8 +653,9 @@ export function LifeWheelPage({ participantId: fixedParticipantId, participantNa
 
                                     {/* Delete */}
                                     <button
-                                        onClick={() => removeCategory(cat.id)}
-                                        className="opacity-0 group-hover:opacity-100 p-1.5 text-muted-foreground hover:text-red-500 transition-all rounded-lg hover:bg-red-50 dark:hover:bg-red-950 flex-shrink-0"
+                                        onClick={() => removeCategory(cat.id, cat.name)}
+                                        className="opacity-0 group-hover:opacity-100 p-1.5 text-muted-foreground hover:text-red-500 transition-all rounded-lg hover:bg-red-50 flex-shrink-0"
+                                        title="Удалить категорию"
                                     >
                                         <Trash2 className="w-4 h-4" />
                                     </button>
