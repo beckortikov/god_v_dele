@@ -44,11 +44,10 @@ export default function Home() {
 
     if (role === 'finance') {
       setMode('finance')
-    } else if (role === 'employee' || role === 'manager') {
+    } else if (role === 'manager') {
       setMode('employee')
-      setCurrentPage('employee-dashboard')
-    } else if (role === 'participant') {
-      // Participant only uses the life wheel
+      setCurrentPage('manager-dashboard')
+    } else if (role === 'employee' || role === 'participant') {
       setMode('employee')
       setCurrentPage('life-wheel')
     }
@@ -115,10 +114,10 @@ export default function Home() {
       if (role === 'finance') {
         setMode('finance')
         setCurrentPage('dashboard')
-      } else if (role === 'employee' || role === 'manager') {
+      } else if (role === 'manager') {
         setMode('employee')
-        setCurrentPage('employee-dashboard')
-      } else if (role === 'participant') {
+        setCurrentPage('manager-dashboard')
+      } else if (role === 'employee' || role === 'participant') {
         setMode('employee')
         setCurrentPage('life-wheel')
       }
