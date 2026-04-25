@@ -118,63 +118,7 @@ function generateId() {
 
 function balanceCategories(cats: WheelCategory[], fixedId: string | null = null): WheelCategory[] {
     if (cats.length === 0) return []
-    const result = cats.map(c => ({ ...c, value: c.value || 0 }))
-    const sum = result.reduce((acc, c) => acc + c.value, 0)
-    
-    if (sum === 100) return result
-    
-    let diff = 100 - sum
-    const others = result.filter(c => c.id !== fixedId)
-    
-    if (others.length === 0) {
-        if (fixedId) {
-            const fixed = result.find(c => c.id === fixedId)
-            if (fixed) fixed.value = 100
-        } else {
-            result[0].value = 100
-        }
-        return result
-    }
-
-    const othersSum = others.reduce((acc, c) => acc + c.value, 0)
-
-    if (diff > 0 && othersSum === 0) {
-        const perItem = Math.floor(diff / others.length)
-        const rem = diff % others.length
-        others.forEach((c, i) => {
-            c.value += perItem + (i < rem ? 1 : 0)
-        })
-        return result
-    }
-
-    const ideal: Record<string, number> = {}
-    others.forEach(c => {
-        ideal[c.id] = c.value + diff * (c.value / othersSum)
-    })
-
-    let iterations = 0
-    while (diff !== 0 && iterations < 1000) {
-        iterations++
-        if (diff > 0) {
-            // Добавляем пропорционально идеалу
-            others.sort((a, b) => (ideal[b.id] - b.value) - (ideal[a.id] - a.value))
-            others[0].value += 1
-            diff -= 1
-        } else {
-            // Забираем у "богатых" (самых больших), чтобы не занулять мелкие
-            const available = others.filter(c => c.value > 0)
-            if (available.length === 0) {
-                const fixed = result.find(c => c.id === fixedId)
-                if (fixed) fixed.value += diff
-                break
-            }
-            available.sort((a, b) => b.value - a.value)
-            available[0].value -= 1
-            diff += 1
-        }
-    }
-    
-    return result
+    return cats.map(c => ({ ...c, value: Number(c.value) || 0 }))
 }
 
 // ─────────────────────────── SVG Sunburst Chart ───────────────────────────
@@ -243,9 +187,10 @@ function SunburstChartSVG({ categories }: { categories: WheelCategory[] }) {
     grouped.forEach((g, gName) => {
         const gAngle = (g.value / total) * 2 * Math.PI
         const gStart = cumAngle
+        const gPercentage = total > 0 ? Math.round((g.value / total) * 100) : 0
         
         slices.push({
-            type: 'group', name: gName, value: g.value, color: g.color,
+            type: 'group', name: gName, value: g.value, percentage: gPercentage, color: g.color,
             d: createArc(gStart, gAngle, rInner, rMid),
             midAngle: gStart + gAngle / 2,
             angle: gAngle,
@@ -254,9 +199,10 @@ function SunburstChartSVG({ categories }: { categories: WheelCategory[] }) {
         let childCumAngle = gStart
         g.items.forEach(child => {
             const cAngle = (child.value / total) * 2 * Math.PI
+            const cPercentage = total > 0 ? Math.round((child.value / total) * 100) : 0
             if (cAngle > 0) {
                 slices.push({
-                    type: 'child', name: child.name, value: child.value, color: child.color, parent: gName,
+                    type: 'child', name: child.name, value: child.value, percentage: cPercentage, color: child.color, parent: gName,
                     d: createArc(childCumAngle, cAngle, rMid + 3, rOuter), // Gap between circles
                     midAngle: childCumAngle + cAngle / 2,
                     angle: cAngle,
@@ -365,7 +311,7 @@ function SunburstChartSVG({ categories }: { categories: WheelCategory[] }) {
                                     {s.name.length > 22 ? s.name.substring(0, 21) + '…' : s.name}
                                 </tspan>
                                 <tspan fill={s.color} fontWeight="bold" dx="6">
-                                    {s.value}%
+                                    {s.percentage}%
                                 </tspan>
                             </text>
                         </g>
@@ -384,13 +330,16 @@ function SunburstChartSVG({ categories }: { categories: WheelCategory[] }) {
                            {hoveredNode.name}
                        </span>
                        <div className="mt-1 text-2xl font-black tabular-nums" style={{ color: hoveredNode.color }}>
-                           {hoveredNode.value}%
+                           {hoveredNode.percentage}%
+                       </div>
+                       <div className="text-xs font-medium text-muted-foreground mt-0.5">
+                           {hoveredNode.value} ч.
                        </div>
                    </div>
                ) : (
                    <div className="text-center bg-background/50 backdrop-blur-sm rounded-full w-32 h-32 flex flex-col items-center justify-center shadow-sm border border-border/50 transition-opacity duration-300">
-                      <p className="text-3xl font-bold text-foreground">{total}%</p>
-                      <p className="text-xs text-muted-foreground uppercase tracking-widest mt-0.5">итого</p>
+                      <p className="text-3xl font-bold text-foreground">100%</p>
+                      <p className="text-[10px] text-muted-foreground uppercase tracking-widest mt-0.5">итого: {Number.isInteger(total) ? total : total.toFixed(1)} ч.</p>
                    </div>
                )}
             </div>
@@ -422,7 +371,8 @@ export function LifeWheelPage({ participantId: fixedParticipantId, participantNa
 
     const currentLabel = getPeriodLabel(periodType, periodOffset)
     const total = categories.reduce((s, c) => s + (c.value || 0), 0)
-    const isOverLimit = total > 100
+    const maxHours = periodType === 'weekly' ? 168 : 720
+    const isOverLimit = total > maxHours
     const selectedParticipant = participants.find(p => p.id === selectedParticipantId)
 
     // ── Fetch list of participants (admin mode only)
@@ -507,7 +457,6 @@ export function LifeWheelPage({ participantId: fixedParticipantId, participantNa
     const handleSave = async (silent = false) => {
         const pid = fixedParticipantId || selectedParticipantId
         if (!pid) return
-        if (isOverLimit) return
 
         if (!silent) setIsSaving(true)
         if (!silent) setSaveStatus('idle')
@@ -561,12 +510,12 @@ export function LifeWheelPage({ participantId: fixedParticipantId, participantNa
 
     // ── Auto-save Effect
     useEffect(() => {
-        if (!hasUnsavedChanges || isOverLimit || !selectedParticipantId) return;
+        if (!hasUnsavedChanges || !selectedParticipantId) return;
         const timer = setTimeout(() => {
             handleSave(true)
         }, 1500)
         return () => clearTimeout(timer)
-    }, [categories, hasUnsavedChanges, isOverLimit, selectedParticipantId])
+    }, [categories, hasUnsavedChanges, selectedParticipantId])
 
     // ── Category operations
     const addCategory = () => {
@@ -626,7 +575,7 @@ export function LifeWheelPage({ participantId: fixedParticipantId, participantNa
                     )}
                     <Button
                         onClick={() => handleSave(false)}
-                        disabled={isSaving || !selectedParticipantId || isOverLimit}
+                        disabled={isSaving || !selectedParticipantId}
                         className="gap-2 min-w-[120px]"
                         id="life-wheel-save-btn"
                     >
@@ -754,15 +703,15 @@ export function LifeWheelPage({ participantId: fixedParticipantId, participantNa
                         {/* Total progress bar */}
                         <div className="space-y-1.5">
                             <div className="flex justify-between text-xs">
-                                <span className="text-muted-foreground">Итого</span>
-                                <span className={`font-semibold ${isOverLimit ? 'text-red-500' : total === 100 ? 'text-green-600' : 'text-foreground'}`}>
-                                    {total}% {isOverLimit ? '⚠️ превышает 100%' : total === 100 ? '✓ идеально' : `(осталось ${100 - total}%)`}
+                                <span className="text-muted-foreground">Итого часов</span>
+                                <span className={`font-semibold ${isOverLimit ? 'text-red-500' : 'text-foreground'}`}>
+                                    {Number.isInteger(total) ? total : total.toFixed(1)} ч. {isOverLimit && <span className="text-red-500">(⚠️ превышает {maxHours} ч.)</span>}
                                 </span>
                             </div>
                             <div className="h-2 bg-muted rounded-full overflow-hidden">
                                 <div
-                                    className={`h-full rounded-full transition-all duration-500 ${isOverLimit ? 'bg-red-500' : total === 100 ? 'bg-green-500' : 'bg-primary'}`}
-                                    style={{ width: `${Math.min(total, 100)}%` }}
+                                    className={`h-full rounded-full transition-all duration-500 ${isOverLimit ? 'bg-red-500' : 'bg-primary'}`}
+                                    style={{ width: `${Math.min((total / maxHours) * 100, 100)}%` }}
                                 />
                             </div>
                         </div>
@@ -799,18 +748,20 @@ export function LifeWheelPage({ participantId: fixedParticipantId, participantNa
                                          />
                                     </div>
 
-                                    {/* Value */}
-                                    <div className="relative flex-shrink-0 w-[72px]">
-                                        <Input
-                                            type="number"
-                                            min={0}
-                                            max={100}
-                                            value={cat.value}
-                                            onChange={e => updateCategory(cat.id, 'value', Math.max(0, Math.min(100, Number(e.target.value))))}
-                                            className="h-9 text-sm pr-6 text-right font-medium"
-                                        />
-                                        <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none">%</span>
-                                    </div>
+                                     {/* Value */}
+                                     <div className="relative flex-shrink-0 w-[70px]">
+                                         <Input
+                                             type="number"
+                                             min={0}
+                                             step="0.1"
+                                             value={cat.value || ''}
+                                             onChange={e => updateCategory(cat.id, 'value', Math.max(0, Number(e.target.value)))}
+                                             className="h-9 text-sm pr-2 text-right font-medium"
+                                         />
+                                     </div>
+                                     <div className="w-[38px] text-right text-xs font-semibold text-muted-foreground flex-shrink-0">
+                                         {total > 0 ? Math.round((cat.value / total) * 100) : 0}%
+                                     </div>
 
                                     {/* Delete */}
                                     <button
