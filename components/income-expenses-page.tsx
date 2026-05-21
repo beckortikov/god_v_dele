@@ -12,7 +12,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
-import { Plus, Edit2, Trash2, ArrowUpRight, ArrowDownRight, Filter, AlertCircle, MessageSquare } from 'lucide-react'
+import { Plus, Edit2, Trash2, ArrowUpRight, ArrowDownRight, Filter, AlertCircle, MessageSquare, Landmark } from 'lucide-react'
 
 interface IncomeItem {
   id: string
@@ -59,6 +59,7 @@ export function IncomeExpensesPage() {
 
   const [participants, setParticipants] = useState<Participant[]>([])
   const [programs, setPrograms] = useState<{ id: string; name: string }[]>([])
+  const [accounts, setAccounts] = useState<any[]>([])
   const [filterProgram, setFilterProgram] = useState<string>('all')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -76,18 +77,37 @@ export function IncomeExpensesPage() {
     category: string;
     date: string;
     description: string;
+    id?: string;
+    name: string;
+    amount: string;
+    category: string;
+    date: string;
+    description: string;
     employee_id?: string;
     program_id?: string;
+    account_id?: string;
   }>({
     name: '',
     amount: '',
     category: '',
     date: new Date().toISOString().split('T')[0],
     description: '',
-    program_id: ''
+    program_id: '',
+    account_id: ''
   })
 
   const [employees, setEmployees] = useState<any[]>([])
+
+  // Accounts state
+  const [isAccountOpen, setIsAccountOpen] = useState(false)
+  const [accountForm, setAccountForm] = useState({
+    id: '',
+    name: '',
+    currency: 'USD',
+    program_id: 'none',
+    is_default: false,
+    initial_balance: '0'
+  })
 
   // Currency states
   const [currency, setCurrency] = useState<'USD' | 'TJS'>('USD')
@@ -98,7 +118,8 @@ export function IncomeExpensesPage() {
     amount: '',
     month: String(new Date().getMonth() + 1),
     year: String(new Date().getFullYear()),
-    notes: ''
+    notes: '',
+    account_id: ''
   })
 
   useEffect(() => {
@@ -107,12 +128,13 @@ export function IncomeExpensesPage() {
 
   const fetchData = async () => {
     try {
-      const [paymentsRes, expensesRes, participantsRes, programsRes, employeesRes] = await Promise.all([
-        fetch('/api/monthly-payments').then(res => res.json()),
-        fetch('/api/expenses?exclude_events=true').then(res => res.json()),
+      const [paymentsRes, expensesRes, participantsRes, programsRes, employeesRes, accountsRes] = await Promise.all([
+        fetch(`/api/monthly-payments${filterProgram !== 'all' ? `?program_id=${filterProgram}` : ''}`).then(res => res.json()),
+        fetch(`/api/expenses${filterProgram !== 'all' ? `?program_id=${filterProgram}` : ''}`).then(res => res.json()),
         fetch('/api/participants').then(res => res.json()),
         fetch('/api/programs').then(res => res.json()),
-        fetch('/api/hr/employees').then(res => res.json())
+        fetch('/api/employees').then(res => res.json()).catch(() => []),
+        fetch(`/api/accounts${filterProgram !== 'all' ? `?program_id=${filterProgram}` : ''}`).then(res => res.json()).catch(() => [])
       ])
 
       if (paymentsRes.error) throw new Error(paymentsRes.error)
@@ -155,6 +177,7 @@ export function IncomeExpensesPage() {
       setParticipants(participantsRes.data || [])
       setPrograms(programsRes.data || [])
       setEmployees(employeesRes || [])
+      setAccounts(Array.isArray(accountsRes) ? accountsRes : [])
       setLoading(false)
     } catch (err: any) {
       setError(err.message)
@@ -206,6 +229,12 @@ export function IncomeExpensesPage() {
       finalAmountUSD = originalAmount / rate
     }
 
+    if (!expenseForm.account_id || expenseForm.account_id === 'none') {
+        alert('Пожалуйста, выберите счет списания');
+        setSubmitLoading(false);
+        return;
+    }
+
     try {
       const isEdit = !!expenseForm.id;
       const url = isEdit ? '/api/expenses' : '/api/expenses';
@@ -222,7 +251,8 @@ export function IncomeExpensesPage() {
         description: expenseForm.description,
         status: 'approved',
         employee_id: expenseForm.employee_id,
-        program_id: expenseForm.program_id || null
+        program_id: expenseForm.program_id || null,
+        account_id: expenseForm.account_id || null
       };
 
       if (isEdit) body.id = expenseForm.id;
@@ -270,6 +300,12 @@ export function IncomeExpensesPage() {
         finalAmountUSD = originalAmount / rate
       }
 
+      if (!incomeForm.account_id || incomeForm.account_id === 'none') {
+          alert('Пожалуйста, выберите счет зачисления');
+          setSubmitLoading(false);
+          return;
+      }
+
       // We need to send correct fields: plan_amount, payment_month, program_id
       const res = await fetch('/api/monthly-payments', {
         method: 'POST',
@@ -287,7 +323,8 @@ export function IncomeExpensesPage() {
           year: Number(incomeForm.year),
           status: 'paid',
           paid_date: new Date().toISOString(),
-          notes: incomeForm.notes || null
+          notes: incomeForm.notes || null,
+          account_id: incomeForm.account_id || null
         })
       })
       const result = await res.json()
@@ -300,6 +337,49 @@ export function IncomeExpensesPage() {
       alert('Error adding income: ' + err.message)
     } finally {
       setSubmitLoading(false)
+    }
+  }
+
+  const handleAddAccount = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setSubmitLoading(true)
+    try {
+      const isEdit = !!accountForm.id;
+      const method = isEdit ? 'PUT' : 'POST';
+      const body = {
+        id: accountForm.id || undefined,
+        name: accountForm.name,
+        currency: accountForm.currency,
+        program_id: accountForm.program_id === 'none' ? null : accountForm.program_id,
+        is_default: accountForm.is_default,
+        initial_balance: Number(accountForm.initial_balance) || 0
+      }
+      const res = await fetch('/api/accounts', {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      })
+      const result = await res.json()
+      if (result.error) throw new Error(result.error)
+      setIsAccountOpen(false)
+      setAccountForm({ id: '', name: '', currency: 'USD', program_id: 'none', is_default: false, initial_balance: '0' })
+      fetchData()
+    } catch (err: any) {
+      alert('Error saving account: ' + err.message)
+    } finally {
+      setSubmitLoading(false)
+    }
+  }
+
+  const handleDeleteAccount = async (id: string) => {
+    if (!confirm('Удалить счет? Все связанные транзакции потеряют привязку к счету!')) return;
+    try {
+      const res = await fetch(`/api/accounts?id=${id}`, { method: 'DELETE' });
+      const result = await res.json();
+      if (result.error) throw new Error(result.error);
+      fetchData();
+    } catch (err: any) {
+      alert('Error deleting account: ' + err.message);
     }
   }
 
@@ -407,9 +487,10 @@ export function IncomeExpensesPage() {
       </div>
 
       <Tabs defaultValue="transactions" className="w-full">
-        <TabsList className="grid w-full grid-cols-2 lg:w-[400px]">
+        <TabsList className="grid w-full grid-cols-3 lg:w-[600px]">
           <TabsTrigger value="transactions">Транзакции</TabsTrigger>
           <TabsTrigger value="analysis">Аналитика</TabsTrigger>
+          <TabsTrigger value="accounts">Счета</TabsTrigger>
         </TabsList>
 
         <TabsContent value="transactions" className="space-y-6 mt-6">
@@ -580,6 +661,79 @@ export function IncomeExpensesPage() {
             </Card>
           </div>
         </TabsContent>
+
+        <TabsContent value="accounts" className="space-y-6 mt-6">
+            <Card className="bg-card border-border">
+              <div className="p-4 border-b border-border flex justify-between items-center">
+                <h3 className="font-semibold text-foreground">Управление счетами</h3>
+                <Button size="sm" variant="default" onClick={() => {
+                    setAccountForm({ id: '', name: '', currency: 'USD', program_id: 'none', is_default: false, initial_balance: '0' });
+                    setIsAccountOpen(true);
+                }}>
+                  <Plus className="w-4 h-4 mr-2" /> Добавить счет
+                </Button>
+              </div>
+              <div className="p-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Название</TableHead>
+                      <TableHead>Программа</TableHead>
+                      <TableHead>Валюта</TableHead>
+                      <TableHead>Остаток</TableHead>
+                      <TableHead>По умолчанию</TableHead>
+                      <TableHead className="w-[100px]"></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {accounts.map((item) => (
+                      <TableRow key={item.id}>
+                        <TableCell className="font-medium">
+                            <div className="flex items-center gap-2">
+                                <Landmark className="w-4 h-4 text-slate-400" />
+                                {item.name}
+                            </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className="text-xs">
+                            {item.program?.name || 'Глобальный счет'}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>{item.currency}</TableCell>
+                        <TableCell className="font-semibold text-foreground">
+                            {item.currency === 'USD' ? '$' : ''}
+                            {item.balance?.toLocaleString() || 0}
+                            {item.currency === 'TJS' ? ' TJS' : ''}
+                        </TableCell>
+                        <TableCell>{item.is_default ? 'Да' : 'Нет'}</TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-2">
+                            <Button size="sm" variant="outline" onClick={() => {
+                                setAccountForm({
+                                    id: item.id,
+                                    name: item.name,
+                                    currency: item.currency,
+                                    program_id: item.program_id || 'none',
+                                    is_default: item.is_default,
+                                    initial_balance: String(item.initial_balance || 0)
+                                });
+                                setIsAccountOpen(true);
+                            }}>
+                              <Edit2 className="h-4 w-4 mr-1 text-blue-500" />
+                            </Button>
+                            <Button size="sm" variant="outline" onClick={() => handleDeleteAccount(item.id)}>
+                              <Trash2 className="h-4 w-4 mr-1 text-red-500" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {accounts.length === 0 && <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground">Нет данных</TableCell></TableRow>}
+                  </TableBody>
+                </Table>
+              </div>
+            </Card>
+        </TabsContent>
       </Tabs >
 
       {/* Add Expense Dialog */}
@@ -600,6 +754,22 @@ export function IncomeExpensesPage() {
                   <SelectItem value="none">— Без программы —</SelectItem>
                   {programs.map(prog => (
                     <SelectItem key={prog.id} value={prog.id}>{prog.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Account Selection */}
+            <div className="space-y-2">
+              <Label>Счет списания *</Label>
+              <Select value={expenseForm.account_id || ''} onValueChange={(v) => setExpenseForm({ ...expenseForm, account_id: v })} required>
+                <SelectTrigger><SelectValue placeholder="Выберите счет" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">— Не указан —</SelectItem>
+                  {accounts
+                    .filter(acc => !expenseForm.program_id || acc.program_id === expenseForm.program_id || acc.program_id === null)
+                    .map(acc => (
+                      <SelectItem key={acc.id} value={acc.id}>{acc.name} ({acc.currency})</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -736,10 +906,28 @@ export function IncomeExpensesPage() {
                     .filter(p => p.status === 'active')
                     .filter(p => incomeDialogProgramFilter === 'all' || p.program_id === incomeDialogProgramFilter)
                     .map(p => (
-                      <SelectItem key={p.id} value={p.id}>
-                        {p.name} ({p.program?.name || 'Без программы'})
-                      </SelectItem>
+                      <SelectItem key={p.id} value={p.id}>{p.name} ({p.program?.name || 'Нет программы'})</SelectItem>
                     ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Account Selection */}
+            <div className="space-y-2">
+              <Label>Счет зачисления *</Label>
+              <Select value={incomeForm.account_id || ''} onValueChange={(v) => setIncomeForm({ ...incomeForm, account_id: v })} required>
+                <SelectTrigger><SelectValue placeholder="Выберите счет" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">— Не указан —</SelectItem>
+                  {accounts
+                    .filter(acc => {
+                        const participant = participants.find(p => p.id === incomeForm.participant_id);
+                        const programId = participant?.program_id;
+                        return !programId || acc.program_id === programId || acc.program_id === null;
+                    })
+                    .map(acc => (
+                      <SelectItem key={acc.id} value={acc.id}>{acc.name} ({acc.currency})</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -816,6 +1004,68 @@ export function IncomeExpensesPage() {
             </div>
             <DialogFooter>
               <Button type="submit" disabled={submitLoading}>{submitLoading ? 'Сохранение...' : 'Зарегистрировать'}</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Account Dialog */}
+      <Dialog open={isAccountOpen} onOpenChange={setIsAccountOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{accountForm.id ? 'Редактировать счет' : 'Создать счет'}</DialogTitle>
+            <DialogDescription>Заполните информацию о счете</DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleAddAccount} className="space-y-4">
+            <div className="space-y-2">
+              <Label>Название счета</Label>
+              <Input value={accountForm.name} onChange={e => setAccountForm({ ...accountForm, name: e.target.value })} placeholder="Например: Касса (Сомони)" required />
+            </div>
+            
+            <div className="space-y-2">
+              <Label>Валюта</Label>
+              <Select value={accountForm.currency} onValueChange={(v) => setAccountForm({ ...accountForm, currency: v })}>
+                <SelectTrigger><SelectValue placeholder="Выберите валюту" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="USD">Доллар США (USD)</SelectItem>
+                  <SelectItem value="TJS">Таджикский сомони (TJS)</SelectItem>
+                  <SelectItem value="RUB">Российский рубль (RUB)</SelectItem>
+                  <SelectItem value="EUR">Евро (EUR)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Программа (необязательно)</Label>
+              <Select value={accountForm.program_id} onValueChange={(v) => setAccountForm({ ...accountForm, program_id: v })}>
+                <SelectTrigger><SelectValue placeholder="Без программы (Глобальный счет)" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Без программы (Глобальный счет)</SelectItem>
+                  {programs.map(prog => (
+                    <SelectItem key={prog.id} value={prog.id}>{prog.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Начальный остаток</Label>
+              <Input type="number" value={accountForm.initial_balance} onChange={e => setAccountForm({ ...accountForm, initial_balance: e.target.value })} placeholder="0.00" />
+            </div>
+
+            <div className="flex items-center space-x-2 mt-4">
+                <input 
+                    type="checkbox" 
+                    id="is_default_acc" 
+                    checked={accountForm.is_default}
+                    onChange={(e) => setAccountForm({ ...accountForm, is_default: e.target.checked })}
+                    className="rounded border-gray-300 text-primary focus:ring-primary"
+                />
+                <Label htmlFor="is_default_acc">Счет по умолчанию</Label>
+            </div>
+
+            <DialogFooter>
+              <Button type="submit" disabled={submitLoading}>{submitLoading ? 'Сохранение...' : accountForm.id ? 'Сохранить' : 'Создать'}</Button>
             </DialogFooter>
           </form>
         </DialogContent>

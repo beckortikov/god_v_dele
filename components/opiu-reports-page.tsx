@@ -100,17 +100,40 @@ export default function OPiUReportsPage() {
                         widths: ['*', 'auto'],
                         body: [
                             ['Показатель', 'Значение'],
+                            ['Сальдо на начало', `$${reportData.summary.opening_balance_usd.toLocaleString()} ${reportData.summary.opening_balance_tjs > 0 ? `(${reportData.summary.opening_balance_tjs.toLocaleString()} TJS)` : ''}`],
+                            ['Сальдо на конец', `$${reportData.summary.closing_balance_usd.toLocaleString()} ${reportData.summary.closing_balance_tjs > 0 ? `(${reportData.summary.closing_balance_tjs.toLocaleString()} TJS)` : ''}`],
                             ['Всего участников', reportData.summary.total_participants.toString()],
                             ['Активных участников', reportData.summary.active_participants.toString()],
                             ['Завершивших программу', reportData.summary.completed_participants.toString()],
                             ['План по доходам', `$${reportData.summary.plan_income.toLocaleString()}`],
-                            ['Факт по доходам', `$${reportData.summary.fact_income.toLocaleString()}`],
-                            ['Всего расходов', `$${reportData.summary.total_expenses.toLocaleString()}`],
+                            ['Факт по доходам', `$${reportData.summary.fact_income.toLocaleString()} ${reportData.summary.fact_income_tjs > 0 ? `(${reportData.summary.fact_income_tjs.toLocaleString()} TJS)` : ''}`],
+                            ['Всего расходов', `$${reportData.summary.total_expenses.toLocaleString()} ${reportData.summary.total_expenses_tjs > 0 ? `(${reportData.summary.total_expenses_tjs.toLocaleString()} TJS)` : ''}`],
                             ['Чистая прибыль', `$${reportData.summary.net_profit.toLocaleString()}`],
                             ['Процент выполнения', `${reportData.summary.completion_rate.toFixed(1)}%`],
                             ['Оплачено полностью', reportData.summary.paid_count.toString()],
                             ['Частичная оплата', reportData.summary.partial_count.toString()],
                             ['Просрочено', reportData.summary.overdue_count.toString()]
+                        ]
+                    },
+                    layout: 'lightHorizontalLines',
+                    margin: [0, 0, 0, 20]
+                },
+
+                // Detailed Accounts Section
+                { text: 'Остатки на счетах (детализация)', style: 'sectionHeader', margin: [0, 0, 0, 10] },
+                {
+                    table: {
+                        widths: ['*', 'auto', 'auto', 'auto', 'auto', 'auto'],
+                        body: [
+                            ['Счет', 'Валюта', 'На начало', 'Приход', 'Расход', 'На конец'],
+                            ...reportData.summary.account_balances.map((acc: any) => [
+                                acc.name,
+                                acc.currency,
+                                acc.currency === 'TJS' ? `${acc.opening_balance.toLocaleString()} TJS` : `$${acc.opening_balance.toLocaleString()}`,
+                                acc.currency === 'TJS' ? `${acc.fact_income.toLocaleString()} TJS` : `$${acc.fact_income.toLocaleString()}`,
+                                acc.currency === 'TJS' ? `${acc.total_expenses.toLocaleString()} TJS` : `$${acc.total_expenses.toLocaleString()}`,
+                                acc.currency === 'TJS' ? `${acc.closing_balance.toLocaleString()} TJS` : `$${acc.closing_balance.toLocaleString()}`
+                            ])
                         ]
                     },
                     layout: 'lightHorizontalLines',
@@ -215,6 +238,29 @@ export default function OPiUReportsPage() {
             }
         }
 
+        // Add Program Analytics
+        docDefinition.content.push(
+            { text: 'Аналитика по программам', style: 'sectionHeader', pageBreak: 'before', margin: [0, 0, 0, 10] },
+            {
+                table: {
+                    widths: ['*', 'auto', 'auto', 'auto', 'auto', 'auto'],
+                    body: [
+                        ['Программа', 'Участников (акт.)', 'План ($)', 'Факт ($)', 'Факт (TJS)', 'Выполнение'],
+                        ...reportData.program_analytics.map((p: any) => [
+                            p.program_name,
+                            p.active_participants.toString(),
+                            `$${p.plan_income.toLocaleString()}`,
+                            `$${p.fact_income.toLocaleString()}`,
+                            p.fact_income_tjs > 0 ? `${p.fact_income_tjs.toLocaleString()} TJS` : '—',
+                            p.plan_income > 0 ? `${((p.fact_income / p.plan_income) * 100).toFixed(1)}%` : '0%'
+                        ])
+                    ]
+                },
+                layout: 'lightHorizontalLines',
+                margin: [0, 0, 0, 20]
+            }
+        )
+
         // Add problem participants if any
         if (reportData.problem_participants.overdue.length > 0) {
             docDefinition.content.push(
@@ -251,20 +297,44 @@ export default function OPiUReportsPage() {
             [`${reportData.period.month_name} ${reportData.period.year}`],
             [],
             ['Общая статистика'],
-            ['Показатель', 'Значение'],
-            ['Всего участников', reportData.summary.total_participants],
-            ['Активных участников', reportData.summary.active_participants],
-            ['Завершивших программу', reportData.summary.completed_participants],
-            ['План по доходам', reportData.summary.plan_income],
-            ['Факт по доходам', reportData.summary.fact_income],
-            ['Процент выполнения', `${reportData.summary.completion_rate.toFixed(1)}%`],
-            ['Оплачено полностью', reportData.summary.paid_count],
-            ['Частичная оплата', reportData.summary.partial_count],
-            ['Просрочено', reportData.summary.overdue_count]
+            ['Показатель', 'Значение', 'Сомони (TJS)'],
+            ['Сальдо на начало', reportData.summary.opening_balance_usd, reportData.summary.opening_balance_tjs || 0],
+            ['Сальдо на конец', reportData.summary.closing_balance_usd, reportData.summary.closing_balance_tjs || 0],
+            ['Всего участников', reportData.summary.total_participants, ''],
+            ['Активных участников', reportData.summary.active_participants, ''],
+            ['Завершивших программу', reportData.summary.completed_participants, ''],
+            ['План по доходам', reportData.summary.plan_income, ''],
+            ['Факт по доходам', reportData.summary.fact_income, reportData.summary.fact_income_tjs || 0],
+            ['Всего расходов', reportData.summary.total_expenses, reportData.summary.total_expenses_tjs || 0],
+            ['Процент выполнения', `${reportData.summary.completion_rate.toFixed(1)}%`, ''],
+            ['Оплачено полностью', reportData.summary.paid_count, ''],
+            ['Частичная оплата', reportData.summary.partial_count, ''],
+            ['Просрочено', reportData.summary.overdue_count, '']
         ]
 
         const ws1 = XLSX.utils.aoa_to_sheet(summaryData)
         XLSX.utils.book_append_sheet(wb, ws1, 'Общая статистика')
+
+        // Account Balances sheet
+        const accountsData = [
+            ['Остатки на счетах (Сальдо)'],
+            [],
+            ['Счет', 'Валюта', 'На начало', 'Приход', 'Расход', 'На конец']
+        ]
+
+        reportData.summary.account_balances.forEach((acc: any) => {
+            accountsData.push([
+                acc.name,
+                acc.currency,
+                acc.currency === 'TJS' ? `${acc.opening_balance.toLocaleString()} TJS` : `$${acc.opening_balance.toLocaleString()}`,
+                acc.currency === 'TJS' ? `${acc.fact_income.toLocaleString()} TJS` : `$${acc.fact_income.toLocaleString()}`,
+                acc.currency === 'TJS' ? `${acc.total_expenses.toLocaleString()} TJS` : `$${acc.total_expenses.toLocaleString()}`,
+                acc.currency === 'TJS' ? `${acc.closing_balance.toLocaleString()} TJS` : `$${acc.closing_balance.toLocaleString()}`
+            ])
+        })
+
+        const wsAccounts = XLSX.utils.aoa_to_sheet(accountsData)
+        XLSX.utils.book_append_sheet(wb, wsAccounts, 'Счета')
 
         // IFRS Metrics sheet
         const ifrsData = [
@@ -304,6 +374,27 @@ export default function OPiUReportsPage() {
 
         const ws3 = XLSX.utils.aoa_to_sheet(paymentsData)
         XLSX.utils.book_append_sheet(wb, ws3, 'Платежи')
+
+        // Program Analytics sheet
+        const programData = [
+            ['Аналитика по программам'],
+            [],
+            ['Программа', 'Всего участников', 'Активных', 'План ($)', 'Факт ($)', 'Факт (TJS)', 'Выполнение']
+        ]
+
+        reportData.program_analytics.forEach((p: any) => {
+            programData.push([
+                p.program_name,
+                p.total_participants,
+                p.active_participants,
+                p.plan_income,
+                p.fact_income,
+                p.fact_income_tjs,
+                p.plan_income > 0 ? `${((p.fact_income / p.plan_income) * 100).toFixed(1)}%` : '0%'
+            ])
+        })
+        const ws4 = XLSX.utils.aoa_to_sheet(programData)
+        XLSX.utils.book_append_sheet(wb, ws4, 'Программы')
 
         XLSX.writeFile(wb, `opiu-report-${reportData.period.month}-${reportData.period.year}.xlsx`)
     }
@@ -410,6 +501,61 @@ export default function OPiUReportsPage() {
                 </div>
             </Card>
 
+            {/* Balances Section */}
+            <div className="mb-4">
+                <h3 className="text-lg font-semibold text-foreground mb-3">Остатки на счетах (Сальдо)</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {reportData.summary.account_balances?.map((acc: any) => (
+                        <Card key={acc.id} className="p-4 bg-slate-50 dark:bg-slate-900/50">
+                            <div className="flex items-start justify-between mb-2">
+                                <div>
+                                    <p className="font-semibold text-foreground">{acc.name}</p>
+                                    <p className="text-xs text-muted-foreground">{acc.currency}</p>
+                                </div>
+                                <DollarSign className="h-5 w-5 text-slate-400" />
+                            </div>
+                            
+                            <div className="space-y-2 mt-4">
+                                <div className="flex justify-between items-center text-sm">
+                                    <span className="text-muted-foreground">На начало:</span>
+                                    <span className="font-medium text-foreground">
+                                        {acc.currency === 'USD' ? `$${acc.opening_balance.toLocaleString()} ` : ''}
+                                        {acc.currency === 'TJS' ? `${acc.opening_balance.toLocaleString()} TJS` : ''}
+                                    </span>
+                                </div>
+                                <div className="flex justify-between items-center text-sm">
+                                    <span className="text-muted-foreground">Приход:</span>
+                                    <span className="font-medium text-green-600">
+                                        {acc.currency === 'USD' ? `+$${acc.fact_income.toLocaleString()} ` : ''}
+                                        {acc.currency === 'TJS' ? `+${acc.fact_income.toLocaleString()} TJS` : ''}
+                                    </span>
+                                </div>
+                                <div className="flex justify-between items-center text-sm">
+                                    <span className="text-muted-foreground">Расход:</span>
+                                    <span className="font-medium text-red-600">
+                                        {acc.currency === 'USD' ? `-$${acc.total_expenses.toLocaleString()} ` : ''}
+                                        {acc.currency === 'TJS' ? `-${acc.total_expenses.toLocaleString()} TJS` : ''}
+                                    </span>
+                                </div>
+                                <div className="pt-2 mt-2 border-t border-slate-200 dark:border-slate-800 flex justify-between items-center">
+                                    <span className="font-semibold text-foreground text-sm">На конец:</span>
+                                    <span className="font-bold text-foreground">
+                                        {acc.currency === 'USD' ? `$${acc.closing_balance.toLocaleString()} ` : ''}
+                                        {acc.currency === 'TJS' ? `${acc.closing_balance.toLocaleString()} TJS` : ''}
+                                    </span>
+                                </div>
+                            </div>
+                        </Card>
+                    ))}
+                    
+                    {(!reportData.summary.account_balances || reportData.summary.account_balances.length === 0) && (
+                        <div className="col-span-full text-center p-4 text-muted-foreground">
+                            Нет данных по счетам
+                        </div>
+                    )}
+                </div>
+            </div>
+
             {/* Summary Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
                 <Card className="p-4">
@@ -426,7 +572,12 @@ export default function OPiUReportsPage() {
                     <div className="flex items-center justify-between">
                         <div>
                             <p className="text-sm text-muted-foreground">Доходы (факт)</p>
-                            <p className="text-2xl font-bold text-green-600 mt-1">${reportData.summary.fact_income.toLocaleString()}</p>
+                            <div className="flex items-baseline gap-2 mt-1">
+                                <p className="text-2xl font-bold text-green-600">${reportData.summary.fact_income.toLocaleString()}</p>
+                                {reportData.summary.fact_income_tjs > 0 && (
+                                    <p className="text-xs text-muted-foreground">({reportData.summary.fact_income_tjs.toLocaleString()} TJS)</p>
+                                )}
+                            </div>
                         </div>
                         <TrendingUp className="h-8 w-8 text-green-600" />
                     </div>
@@ -436,7 +587,12 @@ export default function OPiUReportsPage() {
                     <div className="flex items-center justify-between">
                         <div>
                             <p className="text-sm text-muted-foreground">Расходы</p>
-                            <p className="text-2xl font-bold text-red-600 mt-1">${reportData.summary.total_expenses.toLocaleString()}</p>
+                            <div className="flex items-baseline gap-2 mt-1">
+                                <p className="text-2xl font-bold text-red-600">${reportData.summary.total_expenses.toLocaleString()}</p>
+                                {reportData.summary.total_expenses_tjs > 0 && (
+                                    <p className="text-xs text-muted-foreground">({reportData.summary.total_expenses_tjs.toLocaleString()} TJS)</p>
+                                )}
+                            </div>
                         </div>
                         <TrendingDown className="h-8 w-8 text-red-600" />
                     </div>
@@ -675,7 +831,8 @@ export default function OPiUReportsPage() {
                                 <TableHead className="text-right">Всего участников</TableHead>
                                 <TableHead className="text-right">Активных</TableHead>
                                 <TableHead className="text-right">План</TableHead>
-                                <TableHead className="text-right">Факт</TableHead>
+                                <TableHead className="text-right">Факт ($)</TableHead>
+                                <TableHead className="text-right">Факт (TJS)</TableHead>
                                 <TableHead className="text-right">Выполнение</TableHead>
                             </TableRow>
                         </TableHeader>
@@ -687,6 +844,7 @@ export default function OPiUReportsPage() {
                                     <TableCell className="text-right">{p.active_participants}</TableCell>
                                     <TableCell className="text-right">${p.plan_income.toLocaleString()}</TableCell>
                                     <TableCell className="text-right">${p.fact_income.toLocaleString()}</TableCell>
+                                    <TableCell className="text-right">{p.fact_income_tjs > 0 ? `${p.fact_income_tjs.toLocaleString()} TJS` : '—'}</TableCell>
                                     <TableCell className="text-right">
                                         <Badge variant={p.plan_income > 0 && (p.fact_income / p.plan_income) >= 1 ? 'default' : 'secondary'}>
                                             {p.plan_income > 0 ? ((p.fact_income / p.plan_income) * 100).toFixed(1) : 0}%

@@ -24,26 +24,143 @@ export async function GET(req: Request) {
 
         if (participantsError) throw participantsError
 
+        // Fetch accounts
+        let accountsQuery = supabaseAdmin.from('accounts').select('*')
+        if (programId !== 'all') {
+            accountsQuery = accountsQuery.or(`program_id.eq.${programId},program_id.is.null`)
+        }
+        const { data: accounts, error: accountsError } = await accountsQuery
+        // Ignore accountsError for now if table doesn't exist yet, we'll handle gracefully.
+
         // Fetch payments for the selected month
-        const { data: payments, error: paymentsError } = await supabaseAdmin
+        let paymentsQuery = supabaseAdmin
             .from('monthly_payments')
-            .select('*')
+            .select('*, participant:participants!inner(program_id)')
             .eq('month_number', month)
             .eq('year', year)
 
+        if (programId !== 'all') {
+            paymentsQuery = paymentsQuery.eq('participant.program_id', programId)
+        }
+
+        const { data: payments, error: paymentsError } = await paymentsQuery
         if (paymentsError) throw paymentsError
 
         // Fetch expenses for the selected month
         const startDate = new Date(year, month - 1, 1).toISOString().split('T')[0]
         const endDate = new Date(year, month, 0).toISOString().split('T')[0]
 
-        const { data: expenses, error: expensesError } = await supabaseAdmin
+        let expensesQuery = supabaseAdmin
             .from('expenses')
             .select('*')
             .gte('expense_date', startDate)
             .lte('expense_date', endDate)
 
+        if (programId !== 'all') {
+            expensesQuery = expensesQuery.eq('program_id', programId)
+        }
+
+        const { data: expenses, error: expensesError } = await expensesQuery
         if (expensesError) throw expensesError
+
+        // Fetch Opening Balances (Before startDate)
+        let openingPaymentsQuery = supabaseAdmin
+            .from('monthly_payments')
+            .select('fact_amount, currency, original_amount, account_id, participant:participants!inner(program_id)')
+            .or(`year.lt.${year},and(year.eq.${year},month_number.lt.${month})`)
+            
+        if (programId !== 'all') {
+            openingPaymentsQuery = openingPaymentsQuery.eq('participant.program_id', programId)
+        }
+        
+        const { data: openingPayments, error: openingPaymentsError } = await openingPaymentsQuery
+        if (openingPaymentsError) throw openingPaymentsError
+
+        let openingExpensesQuery = supabaseAdmin
+            .from('expenses')
+            .select('amount, currency, original_amount, account_id')
+            .lt('expense_date', startDate)
+
+        if (programId !== 'all') {
+            openingExpensesQuery = openingExpensesQuery.eq('program_id', programId)
+        }
+
+        const { data: openingExpenses, error: openingExpensesError } = await openingExpensesQuery
+        if (openingExpensesError) throw openingExpensesError
+
+        let openingBalanceUSD = 0
+        let openingBalanceTJS = 0
+
+        const accountBalances: Record<string, any> = {}
+        accounts?.forEach(acc => {
+            accountBalances[acc.id] = {
+                id: acc.id,
+                name: acc.name,
+                currency: acc.currency,
+                opening_balance: Number(acc.initial_balance) || 0,
+                closing_balance: 0,
+                fact_income: 0,
+                total_expenses: 0
+            }
+        })
+
+        openingPayments?.forEach(p => {
+            openingBalanceUSD += p.fact_amount || 0
+            if (p.currency === 'TJS') openingBalanceTJS += p.original_amount || 0
+            
+            const acc = p.account_id ? accountBalances[p.account_id] : null
+            if (acc) {
+                if (acc.currency === 'TJS') {
+                    acc.opening_balance += p.original_amount || 0
+                } else {
+                    acc.opening_balance += p.fact_amount || 0
+                }
+            }
+        })
+
+        openingExpenses?.forEach(e => {
+            openingBalanceUSD -= e.amount || 0
+            if (e.currency === 'TJS') openingBalanceTJS -= e.original_amount || 0
+            
+            const acc = e.account_id ? accountBalances[e.account_id] : null
+            if (acc) {
+                if (acc.currency === 'TJS') {
+                    acc.opening_balance -= e.original_amount || 0
+                } else {
+                    acc.opening_balance -= e.amount || 0
+                }
+            }
+        })
+
+        // Current month calculations for accounts
+        payments?.forEach(p => {
+            const acc = p.account_id ? accountBalances[p.account_id] : null
+            if (acc) {
+                if (acc.currency === 'TJS') {
+                    acc.fact_income += p.original_amount || 0
+                } else {
+                    acc.fact_income += p.fact_amount || 0
+                }
+            }
+        })
+
+        expenses?.forEach(e => {
+            const acc = e.account_id ? accountBalances[e.account_id] : null
+            if (acc) {
+                if (acc.currency === 'TJS') {
+                    acc.total_expenses += e.original_amount || 0
+                } else {
+                    acc.total_expenses += e.amount || 0
+                }
+            }
+        })
+
+        // Calculate closing balances per account
+        Object.values(accountBalances).forEach(acc => {
+            acc.closing_balance = acc.opening_balance + acc.fact_income - acc.total_expenses
+        })
+
+        let account_balances_list = Object.values(accountBalances)
 
         // Fetch all payments for the year (for YTD calculations)
         const { data: ytdPayments, error: ytdError } = await supabaseAdmin
@@ -72,6 +189,7 @@ export async function GET(req: Request) {
         // Financial metrics for the month - INCOME
         let planIncome = 0
         let factIncome = 0
+        let factIncomeTJS = 0
         let overdueCount = 0
         let partialCount = 0
         let paidCount = 0
@@ -80,9 +198,11 @@ export async function GET(req: Request) {
             const payment = payments?.find(p => p.participant_id === participant.id)
             const plan = payment?.amount || participant.tariff || participant.program?.price_per_month || 0
             const fact = payment?.fact_amount || 0
+            const factTJS = payment?.currency === 'TJS' ? (payment.original_amount || 0) : 0
 
             planIncome += plan
             factIncome += fact
+            factIncomeTJS += factTJS
 
             let status = 'unpaid'
             if (fact >= plan && fact > 0) {
@@ -102,6 +222,7 @@ export async function GET(req: Request) {
                 program_name: participant.program?.name || 'Без программы',
                 plan,
                 fact,
+                factTJS,
                 deviation: fact - plan,
                 status,
                 notes: payment?.notes || null
@@ -119,6 +240,8 @@ export async function GET(req: Request) {
             other: 0
         }
 
+        let totalExpensesTJS = 0
+
         const categoryMapping: { [key: string]: keyof typeof expensesByCategory } = {
             'Маркетинг': 'marketing',
             'Зарплаты': 'salaries',
@@ -132,9 +255,15 @@ export async function GET(req: Request) {
         expenses?.forEach(expense => {
             const category = categoryMapping[expense.category] || 'other'
             expensesByCategory[category] += expense.amount || 0
+            if (expense.currency === 'TJS') {
+                totalExpensesTJS += expense.original_amount || 0
+            }
         })
 
         const totalExpenses = Object.values(expensesByCategory).reduce((sum, val) => sum + val, 0)
+        
+        const closingBalanceUSD = openingBalanceUSD + factIncome - totalExpenses
+        const closingBalanceTJS = openingBalanceTJS + factIncomeTJS - totalExpensesTJS
 
         // YTD (Year-to-Date) calculations
         let ytdPlanIncome = 0
@@ -180,7 +309,8 @@ export async function GET(req: Request) {
                     active_participants: 0,
                     completed_participants: 0,
                     plan_income: 0,
-                    fact_income: 0
+                    fact_income: 0,
+                    fact_income_tjs: 0
                 }
             }
 
@@ -192,9 +322,11 @@ export async function GET(req: Request) {
             const payment = payments?.find(p => p.participant_id === participant.id)
             const plan = payment?.amount || participant.tariff || participant.program?.price_per_month || 0
             const fact = payment?.fact_amount || 0
+            const factTJS = payment?.currency === 'TJS' ? (payment.original_amount || 0) : 0
 
             acc[programId].plan_income += plan
             acc[programId].fact_income += fact
+            acc[programId].fact_income_tjs += factTJS
 
             return acc
         }, {})
@@ -256,16 +388,23 @@ export async function GET(req: Request) {
                 active_participants: activeParticipants.length,
                 completed_participants: completedParticipants.length,
                 archived_participants: archivedParticipants.length,
+                opening_balance_usd: openingBalanceUSD,
+                opening_balance_tjs: openingBalanceTJS,
+                closing_balance_usd: closingBalanceUSD,
+                closing_balance_tjs: closingBalanceTJS,
                 plan_income: planIncome,
                 fact_income: factIncome,
+                fact_income_tjs: factIncomeTJS,
                 total_expenses: totalExpenses,
+                total_expenses_tjs: totalExpensesTJS,
                 gross_profit: grossProfit,
                 net_profit: netProfit,
                 deviation: factIncome - planIncome,
                 completion_rate: planIncome > 0 ? (factIncome / planIncome) * 100 : 0,
                 paid_count: paidCount,
                 partial_count: partialCount,
-                overdue_count: overdueCount
+                overdue_count: overdueCount,
+                account_balances: account_balances_list
             },
             ifrs_metrics: ifrsMetrics,
             program_analytics: programAnalytics,
