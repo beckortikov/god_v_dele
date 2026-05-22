@@ -332,7 +332,7 @@ export function IncomeExpensesPage() {
       if (result.error) throw new Error(result.error)
 
       setIsIncomeOpen(false)
-      setIncomeForm({ participant_id: '', amount: '', month: String(new Date().getMonth() + 1), year: String(new Date().getFullYear()), notes: '' })
+      setIncomeForm({ participant_id: '', amount: '', month: String(new Date().getMonth() + 1), year: String(new Date().getFullYear()), notes: '', account_id: '' })
       fetchData()
     } catch (err: any) {
       alert('Error adding income: ' + err.message)
