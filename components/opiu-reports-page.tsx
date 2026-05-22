@@ -165,13 +165,10 @@ export default function OPiUReportsPage() {
                         widths: ['*', 'auto'],
                         body: [
                             ['Категория', 'Сумма'],
-                            ['Зарплаты', `$${reportData.ifrs_metrics.expenses_by_category.salaries.toLocaleString()}`],
-                            ['Маркетинг', `$${reportData.ifrs_metrics.expenses_by_category.marketing.toLocaleString()}`],
-                            ['Офис', `$${reportData.ifrs_metrics.expenses_by_category.office.toLocaleString()}`],
-                            ['Мероприятия', `$${reportData.ifrs_metrics.expenses_by_category.events.toLocaleString()}`],
-                            ['Бонусы', `$${reportData.ifrs_metrics.expenses_by_category.bonuses.toLocaleString()}`],
-                            ['Организационные', `$${reportData.ifrs_metrics.expenses_by_category.organizational.toLocaleString()}`],
-                            ['Прочее', `$${reportData.ifrs_metrics.expenses_by_category.other.toLocaleString()}`],
+                            ...Object.entries(reportData.ifrs_metrics.expenses_by_category || {}).map(([catName, amount]) => [
+                                catName,
+                                `$${Number(amount || 0).toLocaleString()}`
+                            ]),
                             ['ВСЕГО РАСХОДОВ', `$${reportData.ifrs_metrics.total_expenses.toLocaleString()}`]
                         ]
                     },
@@ -653,34 +650,27 @@ export default function OPiUReportsPage() {
                 {/* Expenses Breakdown */}
                 <h3 className="text-sm font-semibold text-muted-foreground mb-3">Расходы по категориям</h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-                    <div className="p-3 bg-red-50 dark:bg-red-950/20 rounded-lg border border-red-200 dark:border-red-800">
-                        <p className="text-xs text-muted-foreground">Зарплаты</p>
-                        <p className="text-lg font-bold text-foreground mt-1">${reportData.ifrs_metrics.expenses_by_category.salaries.toLocaleString()}</p>
-                    </div>
-                    <div className="p-3 bg-pink-50 dark:bg-pink-950/20 rounded-lg border border-pink-200 dark:border-pink-800">
-                        <p className="text-xs text-muted-foreground">Маркетинг</p>
-                        <p className="text-lg font-bold text-foreground mt-1">${reportData.ifrs_metrics.expenses_by_category.marketing.toLocaleString()}</p>
-                    </div>
-                    <div className="p-3 bg-amber-50 dark:bg-amber-950/20 rounded-lg border border-amber-200 dark:border-amber-800">
-                        <p className="text-xs text-muted-foreground">Офис</p>
-                        <p className="text-lg font-bold text-foreground mt-1">${reportData.ifrs_metrics.expenses_by_category.office.toLocaleString()}</p>
-                    </div>
-                    <div className="p-3 bg-violet-50 dark:bg-violet-950/20 rounded-lg border border-violet-200 dark:border-violet-800">
-                        <p className="text-xs text-muted-foreground">Мероприятия</p>
-                        <p className="text-lg font-bold text-foreground mt-1">${reportData.ifrs_metrics.expenses_by_category.events.toLocaleString()}</p>
-                    </div>
-                    <div className="p-3 bg-emerald-50 dark:bg-emerald-950/20 rounded-lg border border-emerald-200 dark:border-emerald-800">
-                        <p className="text-xs text-muted-foreground">Бонусы</p>
-                        <p className="text-lg font-bold text-foreground mt-1">${reportData.ifrs_metrics.expenses_by_category.bonuses.toLocaleString()}</p>
-                    </div>
-                    <div className="p-3 bg-sky-50 dark:bg-sky-950/20 rounded-lg border border-sky-200 dark:border-sky-800">
-                        <p className="text-xs text-muted-foreground">Организационные</p>
-                        <p className="text-lg font-bold text-foreground mt-1">${reportData.ifrs_metrics.expenses_by_category.organizational.toLocaleString()}</p>
-                    </div>
-                    <div className="p-3 bg-slate-50 dark:bg-slate-950/20 rounded-lg border border-slate-200 dark:border-slate-800">
-                        <p className="text-xs text-muted-foreground">Прочее</p>
-                        <p className="text-lg font-bold text-foreground mt-1">${reportData.ifrs_metrics.expenses_by_category.other.toLocaleString()}</p>
-                    </div>
+                    {Object.entries(reportData.ifrs_metrics.expenses_by_category || {}).map(([catName, amount], index) => {
+                        const colors = [
+                            { bg: 'bg-red-50 dark:bg-red-950/20', border: 'border-red-200 dark:border-red-800' },
+                            { bg: 'bg-pink-50 dark:bg-pink-950/20', border: 'border-pink-200 dark:border-pink-800' },
+                            { bg: 'bg-amber-50 dark:bg-amber-950/20', border: 'border-amber-200 dark:border-amber-800' },
+                            { bg: 'bg-violet-50 dark:bg-violet-950/20', border: 'border-violet-200 dark:border-violet-800' },
+                            { bg: 'bg-emerald-50 dark:bg-emerald-950/20', border: 'border-emerald-200 dark:border-emerald-800' },
+                            { bg: 'bg-sky-50 dark:bg-sky-950/20', border: 'border-sky-200 dark:border-sky-800' },
+                            { bg: 'bg-indigo-50 dark:bg-indigo-950/20', border: 'border-indigo-200 dark:border-indigo-800' },
+                            { bg: 'bg-slate-50 dark:bg-slate-950/20', border: 'border-slate-200 dark:border-slate-800' }
+                        ]
+                        const color = colors[index % colors.length]
+                        return (
+                            <div key={catName} className={`p-3 rounded-lg border ${color.bg} ${color.border}`}>
+                                <p className="text-xs text-muted-foreground">{catName}</p>
+                                <p className="text-lg font-bold text-foreground mt-1">
+                                    ${Number(amount || 0).toLocaleString()}
+                                </p>
+                            </div>
+                        )
+                    })}
                     <div className="p-3 bg-red-100 dark:bg-red-900/30 rounded-lg border-2 border-red-300 dark:border-red-700">
                         <p className="text-xs text-muted-foreground font-semibold">Всего расходов</p>
                         <p className="text-lg font-bold text-red-600 mt-1">${reportData.ifrs_metrics.total_expenses.toLocaleString()}</p>

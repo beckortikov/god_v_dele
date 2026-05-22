@@ -229,32 +229,22 @@ export async function GET(req: Request) {
             }
         })
 
-        // Calculate EXPENSES by category
-        const expensesByCategory = {
-            marketing: 0,
-            salaries: 0,
-            office: 0,
-            events: 0,
-            bonuses: 0,
-            organizational: 0,
-            other: 0
+        // Calculate EXPENSES by category dynamically
+        const expensesByCategory: Record<string, number> = {
+            'Зарплаты': 0,
+            'Маркетинг': 0,
+            'Офис': 0,
+            'Мероприятия': 0,
+            'Бонусы': 0,
+            'Организационные': 0,
+            'Прочее': 0
         }
 
         let totalExpensesTJS = 0
 
-        const categoryMapping: { [key: string]: keyof typeof expensesByCategory } = {
-            'Маркетинг': 'marketing',
-            'Зарплаты': 'salaries',
-            'Офис': 'office',
-            'Мероприятия': 'events',
-            'Бонусы': 'bonuses',
-            'Организационные': 'organizational',
-            'Прочее': 'other'
-        }
-
         expenses?.forEach(expense => {
-            const category = categoryMapping[expense.category] || 'other'
-            expensesByCategory[category] += expense.amount || 0
+            const category = expense.category || 'Прочее'
+            expensesByCategory[category] = (expensesByCategory[category] || 0) + Number(expense.amount || 0)
             if (expense.currency === 'TJS') {
                 totalExpensesTJS += expense.original_amount || 0
             }
@@ -278,20 +268,20 @@ export async function GET(req: Request) {
             })
         })
 
-        // YTD Expenses
-        const ytdExpensesByCategory = {
-            marketing: 0,
-            salaries: 0,
-            office: 0,
-            events: 0,
-            bonuses: 0,
-            organizational: 0,
-            other: 0
+        // YTD Expenses dynamically
+        const ytdExpensesByCategory: Record<string, number> = {
+            'Зарплаты': 0,
+            'Маркетинг': 0,
+            'Офис': 0,
+            'Мероприятия': 0,
+            'Бонусы': 0,
+            'Организационные': 0,
+            'Прочее': 0
         }
 
         ytdExpenses?.forEach(expense => {
-            const category = categoryMapping[expense.category] || 'other'
-            ytdExpensesByCategory[category] += expense.amount || 0
+            const category = expense.category || 'Прочее'
+            ytdExpensesByCategory[category] = (ytdExpensesByCategory[category] || 0) + Number(expense.amount || 0)
         })
 
         const ytdTotalExpenses = Object.values(ytdExpensesByCategory).reduce((sum, val) => sum + val, 0)

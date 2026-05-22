@@ -66,17 +66,12 @@ export function IncomeExpensesPage() {
 
   const [isIncomeOpen, setIsIncomeOpen] = useState(false)
   const [isExpenseOpen, setIsExpenseOpen] = useState(false)
+  const [isCustomCategory, setIsCustomCategory] = useState(false)
   const [submitLoading, setSubmitLoading] = useState(false)
   const [incomeDialogProgramFilter, setIncomeDialogProgramFilter] = useState<string>('all')
 
   // Form states
   const [expenseForm, setExpenseForm] = useState<{
-    id?: string;
-    name: string;
-    amount: string;
-    category: string;
-    date: string;
-    description: string;
     id?: string;
     name: string;
     amount: string;
@@ -125,6 +120,12 @@ export function IncomeExpensesPage() {
   useEffect(() => {
     fetchData()
   }, [])
+
+  useEffect(() => {
+    if (!isExpenseOpen) {
+      setIsCustomCategory(false)
+    }
+  }, [isExpenseOpen])
 
   const fetchData = async () => {
     try {
@@ -394,6 +395,14 @@ export function IncomeExpensesPage() {
 
   const filteredExpenseData = expenseData
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()) // Sort by date descending
+
+  const defaultCategories = ['Зарплаты', 'Маркетинг', 'Офис', 'Мероприятия', 'Бонусы', 'Организационные', 'Прочее']
+  const allCategories = Array.from(
+    new Set([
+      ...defaultCategories,
+      ...expenseData.map(e => e.category).filter(Boolean)
+    ])
+  )
 
   const totalIncome = filteredIncomeData.reduce((sum, item) => sum + Number(item.amount), 0)
   const totalExpenses = filteredExpenseData.reduce((sum, item) => sum + Number(item.amount), 0)
@@ -849,17 +858,49 @@ export function IncomeExpensesPage() {
               )}
             </div>
             <div className="space-y-2">
-              <Label>Категория</Label>
-              <Select value={expenseForm.category} onValueChange={(v) => setExpenseForm({ ...expenseForm, category: v })}>
-                <SelectTrigger><SelectValue placeholder="Выберите категорию" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Маркетинг">Маркетинг</SelectItem>
-                  <SelectItem value="Зарплаты">Зарплаты</SelectItem>
-                  <SelectItem value="Офис">Офис</SelectItem>
-                  <SelectItem value="Мероприятия">Мероприятия</SelectItem>
-                  <SelectItem value="Прочее">Прочее</SelectItem>
-                </SelectContent>
-              </Select>
+              <div className="flex items-center justify-between">
+                <Label>Категория</Label>
+                <Button 
+                  type="button" 
+                  variant="link" 
+                  className="h-auto p-0 text-xs text-primary" 
+                  onClick={() => {
+                    setIsCustomCategory(!isCustomCategory);
+                    setExpenseForm({ ...expenseForm, category: '' });
+                  }}
+                >
+                  {isCustomCategory ? "Выбрать из списка" : "+ Ввести новую категорию"}
+                </Button>
+              </div>
+              
+              {isCustomCategory ? (
+                <Input 
+                  placeholder="Введите название новой категории" 
+                  value={expenseForm.category} 
+                  onChange={e => setExpenseForm({ ...expenseForm, category: e.target.value })}
+                  required
+                />
+              ) : (
+                <Select 
+                  value={expenseForm.category} 
+                  onValueChange={(v) => {
+                    if (v === 'ADD_NEW') {
+                      setIsCustomCategory(true);
+                      setExpenseForm({ ...expenseForm, category: '' });
+                    } else {
+                      setExpenseForm({ ...expenseForm, category: v });
+                    }
+                  }}
+                >
+                  <SelectTrigger><SelectValue placeholder="Выберите категорию" /></SelectTrigger>
+                  <SelectContent>
+                    {allCategories.map(cat => (
+                      <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                    ))}
+                    <SelectItem value="ADD_NEW" className="text-primary font-medium cursor-pointer">+ Добавить новую...</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
             </div>
             <div className="space-y-2">
               <Label>Дата</Label>
