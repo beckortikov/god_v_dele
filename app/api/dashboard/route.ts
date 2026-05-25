@@ -10,14 +10,14 @@ export async function GET(request: Request) {
         const currentYear = new Date().getFullYear()
         const currentMonth = new Date().getMonth() + 1
 
-        // Fetch all monthly payments for current year with participant data
+        // Fetch all monthly payments for current year by actual receipt date OR planned billing year if not paid yet
         let paymentsQuery = supabaseAdmin
             .from('monthly_payments')
             .select(`
                 *,
                 participant:participants(id, program_id)
             `)
-            .eq('year', currentYear)
+            .or(`paid_date.gte.${currentYear}-01-01,and(paid_date.is.null,year.eq.${currentYear})`)
 
         const { data: paymentsData, error: paymentsError } = await paymentsQuery
 
@@ -37,13 +37,24 @@ export async function GET(request: Request) {
 
         if (expensesError) throw expensesError
 
-        // Calculate YTD metrics for Current Balance
-        const totalRevenueYTD = payments?.reduce((sum, p) => sum + (Number(p.fact_amount) || 0), 0) || 0
+        // Calculate YTD metrics for Current Balance (using actual paid payments in this year)
+        const totalRevenueYTD = payments?.filter(p => {
+            if (p.paid_date) {
+                return p.paid_date >= `${currentYear}-01-01`
+            }
+            return false
+        }).reduce((sum, p) => sum + (Number(p.fact_amount) || 0), 0) || 0
         const totalExpensesYTD = expenses?.reduce((sum, e) => sum + Number(e.amount), 0) || 0
         const currentBalance = totalRevenueYTD - totalExpensesYTD
 
-        // Calculate current month metrics
-        const currentMonthPayments = payments?.filter(p => p.month_number === currentMonth) || []
+        // Calculate current month metrics (using actual cash receipts by paid_date)
+        const currentMonthPayments = payments?.filter(p => {
+            if (p.paid_date) {
+                const pDate = new Date(p.paid_date)
+                return pDate.getMonth() + 1 === currentMonth && pDate.getFullYear() === currentYear
+            }
+            return false
+        }) || []
         const monthlyRevenue = currentMonthPayments.reduce((sum, p) => sum + (Number(p.fact_amount) || 0), 0)
 
         const currentMonthExpenses = expenses?.filter(e => {
@@ -120,9 +131,14 @@ export async function GET(request: Request) {
             const targetYear = targetMonth > 0 ? currentYear : currentYear - 1
             const adjustedMonth = targetMonth > 0 ? targetMonth : 12 + targetMonth
 
-            const monthPayments = payments?.filter(p =>
-                p.month_number === adjustedMonth && p.year === targetYear
-            ) || []
+            // Select actual cash payments received in this adjustedMonth/targetYear by paid_date
+            const monthPayments = payments?.filter(p => {
+                if (p.paid_date) {
+                    const pDate = new Date(p.paid_date)
+                    return pDate.getMonth() + 1 === adjustedMonth && pDate.getFullYear() === targetYear
+                }
+                return false
+            }) || []
 
             const monthExpenses = expenses?.filter(e => {
                 const expenseDate = new Date(e.expense_date)
@@ -132,15 +148,20 @@ export async function GET(request: Request) {
             const income = monthPayments.reduce((sum, p) => sum + (Number(p.fact_amount) || 0), 0)
             const expense = monthExpenses.reduce((sum, e) => sum + Number(e.amount), 0)
 
+            // Cohort billing payments for rate/participants tracking
+            const cohortPayments = payments?.filter(p =>
+                p.month_number === adjustedMonth && p.year === targetYear
+            ) || []
+
             monthlyData.push({
                 month: monthNames[adjustedMonth - 1],
                 income,
                 expenses: expense,
                 balance: income - expense,
                 mrr: income,
-                participants: monthPayments.length,
-                paymentRate: monthPayments.length > 0
-                    ? Math.round((monthPayments.filter(p => p.status === 'paid').length / monthPayments.length) * 100)
+                participants: cohortPayments.length,
+                paymentRate: cohortPayments.length > 0
+                    ? Math.round((cohortPayments.filter(p => p.status === 'paid').length / cohortPayments.length) * 100)
                     : 0
             })
         }

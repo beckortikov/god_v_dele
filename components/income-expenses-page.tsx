@@ -114,7 +114,8 @@ export function IncomeExpensesPage() {
     month: String(new Date().getMonth() + 1),
     year: String(new Date().getFullYear()),
     notes: '',
-    account_id: ''
+    account_id: '',
+    paid_date: new Date().toISOString().split('T')[0]
   })
 
   useEffect(() => {
@@ -323,7 +324,7 @@ export function IncomeExpensesPage() {
           payment_month: monthName,
           year: Number(incomeForm.year),
           status: 'paid',
-          paid_date: new Date().toISOString(),
+          paid_date: incomeForm.paid_date || new Date().toISOString().split('T')[0],
           notes: incomeForm.notes || null,
           account_id: incomeForm.account_id || null
         })
@@ -332,7 +333,7 @@ export function IncomeExpensesPage() {
       if (result.error) throw new Error(result.error)
 
       setIsIncomeOpen(false)
-      setIncomeForm({ participant_id: '', amount: '', month: String(new Date().getMonth() + 1), year: String(new Date().getFullYear()), notes: '', account_id: '' })
+      setIncomeForm({ participant_id: '', amount: '', month: String(new Date().getMonth() + 1), year: String(new Date().getFullYear()), notes: '', account_id: '', paid_date: new Date().toISOString().split('T')[0] })
       fetchData()
     } catch (err: any) {
       alert('Error adding income: ' + err.message)
@@ -1017,12 +1018,23 @@ export function IncomeExpensesPage() {
                 </div>
               )}
 
+              <div className="space-y-2 col-span-2">
+                <Label htmlFor="income-paid-date">Дата прихода (фактическая) *</Label>
+                <Input
+                  id="income-paid-date"
+                  type="date"
+                  value={incomeForm.paid_date}
+                  onChange={(e) => setIncomeForm({ ...incomeForm, paid_date: e.target.value })}
+                  required
+                />
+              </div>
+
               <div className="space-y-2">
-                <Label>Месяц (номер)</Label>
+                <Label>Месяц (целевой период)</Label>
                 <Input type="number" min="1" max="12" value={incomeForm.month} onChange={e => setIncomeForm({ ...incomeForm, month: e.target.value })} required />
               </div>
               <div className="space-y-2">
-                <Label>Год</Label>
+                <Label>Год (целевой период)</Label>
                 <Input type="number" value={incomeForm.year} onChange={e => setIncomeForm({ ...incomeForm, year: e.target.value })} required />
               </div>
             </div>
