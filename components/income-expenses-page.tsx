@@ -12,7 +12,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
-import { Plus, Edit2, Trash2, ArrowUpRight, ArrowDownRight, Filter, AlertCircle, MessageSquare, Landmark } from 'lucide-react'
+import { Plus, Edit2, Trash2, ArrowUpRight, ArrowDownRight, Filter, AlertCircle, MessageSquare, Landmark, ChevronLeft, ChevronRight } from 'lucide-react'
 
 interface IncomeItem {
   id: string
@@ -24,6 +24,7 @@ interface IncomeItem {
   currency?: string
   original_amount?: number
   notes?: string
+  account_id?: string
 }
 
 interface ExpenseItem {
@@ -38,6 +39,8 @@ interface ExpenseItem {
   original_amount?: number
   program_id?: string
   program_name?: string
+  account_id?: string
+  exchange_rate?: number
 }
 
 
@@ -61,6 +64,17 @@ export function IncomeExpensesPage() {
   const [programs, setPrograms] = useState<{ id: string; name: string }[]>([])
   const [accounts, setAccounts] = useState<any[]>([])
   const [filterProgram, setFilterProgram] = useState<string>('all')
+  
+  // Pagination states
+  const [incomePage, setIncomePage] = useState(1)
+  const [expensePage, setExpensePage] = useState(1)
+  const itemsPerPage = 10
+
+  useEffect(() => {
+    setIncomePage(1)
+    setExpensePage(1)
+  }, [filterProgram])
+
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -154,7 +168,8 @@ export function IncomeExpensesPage() {
         method: 'Перевод',
         currency: p.currency,
         original_amount: p.original_amount,
-        notes: p.notes
+        notes: p.notes,
+        account_id: p.account_id
       })).filter((i: any) => i.amount > 0)
 
       // Transform general expense data (no event_id)
@@ -169,6 +184,8 @@ export function IncomeExpensesPage() {
         currency: e.currency,
         original_amount: e.original_amount,
         program_id: e.program_id,
+        account_id: e.account_id,
+        exchange_rate: e.exchange_rate,
         program_name: e.program_id
           ? (programsRes.data || []).find((p: any) => p.id === e.program_id)?.name || '—'
           : '—'
@@ -188,15 +205,35 @@ export function IncomeExpensesPage() {
   }
 
   const handleStartEditExpense = (item: ExpenseItem) => {
+    // Restore currency and exchange rate states from the record
+    setCurrency((item.currency as 'USD' | 'TJS') || 'USD')
+    setExchangeRate(String(item.exchange_rate || '10.5'))
+
     setExpenseForm({
       id: item.id,
       name: item.name,
-      amount: String(item.amount),
+      amount: String(item.original_amount || item.amount),
       category: item.category,
       date: item.date,
       description: item.description || '',
       employee_id: undefined,
-      program_id: item.program_id || ''
+      program_id: item.program_id || '',
+      account_id: item.account_id || ''
+    })
+    setIsExpenseOpen(true)
+  }
+
+  const handleStartAddExpense = () => {
+    setCurrency('USD')
+    setExchangeRate('10.5')
+    setExpenseForm({
+      name: '',
+      amount: '',
+      category: '',
+      date: new Date().toISOString().split('T')[0],
+      description: '',
+      program_id: '',
+      account_id: ''
     })
     setIsExpenseOpen(true)
   }
@@ -269,7 +306,9 @@ export function IncomeExpensesPage() {
       if (result.error) throw new Error(result.error)
 
       setIsExpenseOpen(false)
-      setExpenseForm({ name: '', amount: '', category: '', date: new Date().toISOString().split('T')[0], description: '', program_id: '' })
+      setExpenseForm({ name: '', amount: '', category: '', date: new Date().toISOString().split('T')[0], description: '', program_id: '', account_id: '' })
+      setCurrency('USD')
+      setExchangeRate('10.5')
       fetchData() // Refresh data
     } catch (err: any) {
       alert('Error saving expense: ' + err.message)
@@ -409,6 +448,19 @@ export function IncomeExpensesPage() {
   const totalExpenses = filteredExpenseData.reduce((sum, item) => sum + Number(item.amount), 0)
   const balance = totalIncome - totalExpenses
 
+  // Pagination page slices
+  const totalIncomePages = Math.ceil(filteredIncomeData.length / itemsPerPage)
+  const paginatedIncomeData = filteredIncomeData.slice(
+    (incomePage - 1) * itemsPerPage,
+    incomePage * itemsPerPage
+  )
+
+  const totalExpensePages = Math.ceil(filteredExpenseData.length / itemsPerPage)
+  const paginatedExpenseData = filteredExpenseData.slice(
+    (expensePage - 1) * itemsPerPage,
+    expensePage * itemsPerPage
+  )
+
   const expenseCategories = filteredExpenseData.reduce((acc, curr) => {
     acc[curr.category] = (acc[curr.category] || 0) + Number(curr.amount)
     return acc
@@ -496,152 +548,242 @@ export function IncomeExpensesPage() {
         </Card>
       </div>
 
-      <Tabs defaultValue="transactions" className="w-full">
-        <TabsList className="grid w-full grid-cols-3 lg:w-[600px]">
-          <TabsTrigger value="transactions">Транзакции</TabsTrigger>
+      <Tabs defaultValue="income" className="w-full">
+        <TabsList className="grid w-full grid-cols-4 lg:w-[800px]">
+          <TabsTrigger value="income">Поступления (Доходы)</TabsTrigger>
+          <TabsTrigger value="expenses">Расходы</TabsTrigger>
           <TabsTrigger value="analysis">Аналитика</TabsTrigger>
           <TabsTrigger value="accounts">Счета</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="transactions" className="space-y-6 mt-6">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Income Section */}
-            <Card className="bg-card border-border">
-              <div className="p-4 border-b border-border flex justify-between items-center">
-                <h3 className="font-semibold text-foreground">Последние поступления</h3>
-                <Button size="sm" variant="ghost" onClick={() => setIsIncomeOpen(true)}>
-                  <Plus className="w-4 h-4 mr-2" /> Добавить
-                </Button>
-              </div>
-              <div className="p-0">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Дата</TableHead>
-                      <TableHead>Участник</TableHead>
-                      <TableHead>Сумма</TableHead>
-                      <TableHead>Статус</TableHead>
-                      <TableHead className="w-[100px]"></TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredIncomeData.slice(0, 5).map((item) => (
-                      <TableRow key={item.id}>
-                        <TableCell>{new Date(item.date).toLocaleDateString('ru-RU')}</TableCell>
-                        <TableCell>{item.participant}</TableCell>
-                        <TableCell className="text-green-600 font-medium">
-                          +${Number(item.amount).toLocaleString()}
-                          {item.currency === 'TJS' && item.original_amount && (
-                            <span className="text-xs text-muted-foreground block">
-                              ({Number(item.original_amount).toLocaleString()} TJS)
-                            </span>
+        <TabsContent value="income" className="space-y-6 mt-6">
+          <Card className="bg-card border-border">
+            <div className="p-4 border-b border-border flex justify-between items-center">
+              <h3 className="font-semibold text-foreground">Последние поступления</h3>
+              <Button size="sm" variant="ghost" onClick={() => setIsIncomeOpen(true)}>
+                <Plus className="w-4 h-4 mr-2" /> Добавить
+              </Button>
+            </div>
+            <div className="p-0 overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Дата</TableHead>
+                    <TableHead>Участник</TableHead>
+                    <TableHead>Сумма</TableHead>
+                    <TableHead>Счет зачисления</TableHead>
+                    <TableHead>Статус</TableHead>
+                    <TableHead className="w-[100px]"></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {paginatedIncomeData.map((item) => (
+                    <TableRow key={item.id}>
+                      <TableCell>{new Date(item.date).toLocaleDateString('ru-RU')}</TableCell>
+                      <TableCell>{item.participant}</TableCell>
+                      <TableCell className="text-green-600 font-medium">
+                        +${Number(item.amount).toLocaleString()}
+                        {item.currency === 'TJS' && item.original_amount && (
+                          <span className="text-xs text-muted-foreground block">
+                            ({Number(item.original_amount).toLocaleString()} TJS)
+                          </span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className="bg-green-50/50 dark:bg-green-950/20 text-green-700 dark:text-green-400 border-green-200 dark:border-green-800">
+                          {accounts.find(acc => acc.id === item.account_id)?.name || '—'}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={item.status === 'получен' ? 'default' : 'secondary'}>
+                          {item.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-2 items-center">
+                          {item.notes && (
+                            <Dialog>
+                              <DialogTrigger asChild>
+                                <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                                  <MessageSquare className="h-4 w-4 text-gray-400" />
+                                </Button>
+                              </DialogTrigger>
+                              <DialogContent className="max-w-md">
+                                <DialogHeader>
+                                  <DialogTitle>Комментарий к платежу</DialogTitle>
+                                  <DialogDescription>
+                                    {item.participant} • {new Date(item.date).toLocaleDateString('ru-RU')}
+                                  </DialogDescription>
+                                </DialogHeader>
+                                <div className="bg-blue-50 dark:bg-blue-950/20 p-4 rounded-lg border border-blue-200 dark:border-blue-800">
+                                  <p className="text-sm text-foreground whitespace-pre-wrap">{item.notes}</p>
+                                </div>
+                              </DialogContent>
+                            </Dialog>
                           )}
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant={item.status === 'получен' ? 'default' : 'secondary'}>
-                            {item.status}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex justify-end gap-2 items-center">
-                            {item.notes && (
-                              <Dialog>
-                                <DialogTrigger asChild>
-                                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                                    <MessageSquare className="h-4 w-4 text-gray-400" />
-                                  </Button>
-                                </DialogTrigger>
-                                <DialogContent className="max-w-md">
-                                  <DialogHeader>
-                                    <DialogTitle>Комментарий к платежу</DialogTitle>
-                                    <DialogDescription>
-                                      {item.participant} • {new Date(item.date).toLocaleDateString('ru-RU')}
-                                    </DialogDescription>
-                                  </DialogHeader>
-                                  <div className="bg-blue-50 dark:bg-blue-950/20 p-4 rounded-lg border border-blue-200 dark:border-blue-800">
-                                    <p className="text-sm text-foreground whitespace-pre-wrap">{item.notes}</p>
-                                  </div>
-                                </DialogContent>
-                              </Dialog>
-                            )}
-                            <Button size="sm" variant="ghost" className="h-8 w-8 p-0"
-                              onClick={async () => {
-                                if (!confirm('Удалить этот платеж?')) return;
-                                await fetch(`/api/monthly-payments?id=${item.id}`, { method: 'DELETE' });
-                                fetchData();
-                              }}
-                            >
-                              <Trash2 className="h-4 w-4 text-red-500" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                    {incomeData.length === 0 && <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground">Нет данных</TableCell></TableRow>}
-                  </TableBody>
-                </Table>
-              </div>
-            </Card>
-
-            {/* Expenses Section */}
-            <Card className="bg-card border-border">
-              <div className="p-4 border-b border-border flex justify-between items-center">
-                <h3 className="font-semibold text-foreground">Последние расходы</h3>
-                <Button size="sm" variant="ghost" onClick={() => setIsExpenseOpen(true)}>
-                  <Plus className="w-4 h-4 mr-2" /> Добавить
-                </Button>
-              </div>
-              <div className="p-0">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Дата</TableHead>
-                      <TableHead>Название</TableHead>
-                      <TableHead>Программа</TableHead>
-                      <TableHead>Сумма</TableHead>
-                      <TableHead className="w-[100px]"></TableHead>
+                          <Button size="sm" variant="ghost" className="h-8 w-8 p-0"
+                            onClick={async () => {
+                              if (!confirm('Удалить этот платеж?')) return;
+                              await fetch(`/api/monthly-payments?id=${item.id}`, { method: 'DELETE' });
+                              fetchData();
+                            }}
+                          >
+                            <Trash2 className="h-4 w-4 text-red-500" />
+                          </Button>
+                        </div>
+                      </TableCell>
                     </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredExpenseData.slice(0, 5).map((item) => (
-                      <TableRow key={item.id}>
-                        <TableCell>{new Date(item.date).toLocaleDateString('ru-RU')}</TableCell>
-                        <TableCell>{item.name}</TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className="text-xs">
-                            {item.program_name || '—'}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-red-600 font-medium">
-                          -${Number(item.amount).toLocaleString()}
-                          {item.currency === 'TJS' && item.original_amount && (
-                            <span className="text-xs text-muted-foreground block">
-                              ({Number(item.original_amount).toLocaleString()} TJS)
-                            </span>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex justify-end gap-2">
-                            <Button size="sm" variant="outline" onClick={() => handleStartEditExpense(item)}>
-                              <Edit2 className="h-4 w-4 mr-1 text-blue-500" />
-                            </Button>
-                            <Button size="sm" variant="outline" onClick={() => handleDeleteExpense(item.id)}>
-                              <Trash2 className="h-4 w-4 mr-1 text-red-500" />
-                            </Button>
-                          </div>
-                        </TableCell>
-
-                      </TableRow>
-                    ))}
-                    {expenseData.length === 0 && <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground">Нет данных</TableCell></TableRow>}
-
-                  </TableBody>
-                </Table>
+                  ))}
+                  {filteredIncomeData.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center text-muted-foreground py-6">
+                        Нет данных
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+            
+            {/* Income Pagination Control */}
+            {totalIncomePages > 1 && (
+              <div className="flex justify-between items-center p-4 border-t border-border bg-card">
+                <div className="text-xs text-muted-foreground">
+                  Показано {(incomePage - 1) * itemsPerPage + 1} - {Math.min(incomePage * itemsPerPage, filteredIncomeData.length)} из {filteredIncomeData.length} поступлений
+                </div>
+                <div className="flex gap-2 items-center">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setIncomePage(prev => Math.max(prev - 1, 1))}
+                    disabled={incomePage === 1}
+                    className="h-8 w-8 p-0"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+                  <span className="text-xs text-foreground font-semibold px-2">
+                    Страница {incomePage} из {totalIncomePages}
+                  </span>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setIncomePage(prev => Math.min(prev + 1, totalIncomePages))}
+                    disabled={incomePage === totalIncomePages}
+                    className="h-8 w-8 p-0"
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
-            </Card>
-          </div>
+            )}
+          </Card>
+        </TabsContent>
 
-        </TabsContent >
+        <TabsContent value="expenses" className="space-y-6 mt-6">
+          <Card className="bg-card border-border">
+            <div className="p-4 border-b border-border flex justify-between items-center">
+              <h3 className="font-semibold text-foreground">Последние расходы</h3>
+              <Button size="sm" variant="ghost" onClick={handleStartAddExpense}>
+                <Plus className="w-4 h-4 mr-2" /> Добавить
+              </Button>
+            </div>
+            <div className="p-0 overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Дата</TableHead>
+                    <TableHead>Название</TableHead>
+                    <TableHead>Категория</TableHead>
+                    <TableHead>Программа</TableHead>
+                    <TableHead>Счет списания</TableHead>
+                    <TableHead>Сумма</TableHead>
+                    <TableHead className="w-[120px]"></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {paginatedExpenseData.map((item) => (
+                    <TableRow key={item.id}>
+                      <TableCell>{new Date(item.date).toLocaleDateString('ru-RU')}</TableCell>
+                      <TableCell className="font-medium text-foreground">{item.name}</TableCell>
+                      <TableCell>
+                        <Badge variant="secondary" className="text-xs">
+                          {item.category}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className="text-xs">
+                          {item.program_name || '—'}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className="bg-red-50/50 dark:bg-red-950/20 text-red-700 dark:text-red-400 border-red-200 dark:border-red-800">
+                          {accounts.find(acc => acc.id === item.account_id)?.name || '—'}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-red-600 font-medium">
+                        -${Number(item.amount).toLocaleString()}
+                        {item.currency === 'TJS' && item.original_amount && (
+                          <span className="text-xs text-muted-foreground block">
+                            ({Number(item.original_amount).toLocaleString()} TJS)
+                          </span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-2">
+                          <Button size="sm" variant="outline" className="h-8 w-8 p-0" onClick={() => handleStartEditExpense(item)}>
+                            <Edit2 className="h-4 w-4 text-blue-500" />
+                          </Button>
+                          <Button size="sm" variant="outline" className="h-8 w-8 p-0" onClick={() => handleDeleteExpense(item.id)}>
+                            <Trash2 className="h-4 w-4 text-red-500" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {filteredExpenseData.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={7} className="text-center text-muted-foreground py-6">
+                        Нет данных
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+            
+            {/* Expense Pagination Control */}
+            {totalExpensePages > 1 && (
+              <div className="flex justify-between items-center p-4 border-t border-border bg-card">
+                <div className="text-xs text-muted-foreground">
+                  Показано {(expensePage - 1) * itemsPerPage + 1} - {Math.min(expensePage * itemsPerPage, filteredExpenseData.length)} из {filteredExpenseData.length} расходов
+                </div>
+                <div className="flex gap-2 items-center">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setExpensePage(prev => Math.max(prev - 1, 1))}
+                    disabled={expensePage === 1}
+                    className="h-8 w-8 p-0"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+                  <span className="text-xs text-foreground font-semibold px-2">
+                    Страница {expensePage} из {totalExpensePages}
+                  </span>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setExpensePage(prev => Math.min(prev + 1, totalExpensePages))}
+                    disabled={expensePage === totalExpensePages}
+                    className="h-8 w-8 p-0"
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            )}
+          </Card>
+        </TabsContent>
 
         <TabsContent value="analysis" className="space-y-6 mt-6">
           {/* Analytics Charts */}
