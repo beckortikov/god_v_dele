@@ -104,13 +104,14 @@ export function Sidebar({ currentPage, onPageChange, isOpen = true, onClose, mod
         />
       )}
 
-      {/* Sidebar */}
       <aside
         className={`
-          fixed lg:static inset-y-0 left-0 z-50
-          w-64 bg-sidebar text-sidebar-foreground border-r border-sidebar-border flex flex-col
-          transform transition-transform duration-300 ease-in-out
-          ${isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+          fixed inset-y-0 left-0 z-50
+          bg-sidebar text-sidebar-foreground border-sidebar-border flex flex-col
+          transition-all duration-300 ease-in-out
+          ${isOpen ? 'translate-x-0' : '-translate-x-full'}
+          lg:static lg:translate-x-0
+          ${isOpen ? 'lg:w-64 lg:border-r' : 'lg:w-0 lg:border-r-0 lg:overflow-hidden'}
         `}
       >
         {/* Logo */}

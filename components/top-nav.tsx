@@ -46,7 +46,7 @@ export function TopNav({ currentPage, onLogout, onMenuClick, mode, onModeChange,
           <Button
             variant="ghost"
             size="icon"
-            className="lg:hidden text-foreground hover:bg-muted touch-manipulation"
+            className="text-foreground hover:bg-muted touch-manipulation"
             onClick={onMenuClick}
           >
             <Menu className="w-5 h-5" />

@@ -63,6 +63,11 @@ export default function Home() {
         setUserFullName(userData.full_name || userData.employee_name || userData.username || null)
       }
     } catch (e) { /* ignore */ }
+
+    // Set default sidebar state based on screen width
+    if (typeof window !== 'undefined' && window.innerWidth >= 1024) {
+      setIsSidebarOpen(true)
+    }
   }, [])
 
   const handleLogout = () => {
