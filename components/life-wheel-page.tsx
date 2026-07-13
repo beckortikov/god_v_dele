@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
-import { Plus, Trash2, Save, ChevronLeft, ChevronRight, PieChart, Loader2, CheckCircle2, AlertCircle, RefreshCw, Search, Eye } from 'lucide-react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
+import { Plus, Trash2, Save, ChevronLeft, ChevronRight, PieChart, Loader2, CheckCircle2, AlertCircle, RefreshCw, Search, Eye, Sparkles, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card } from '@/components/ui/card'
@@ -48,81 +48,75 @@ const DEFAULT_CATEGORIES: WheelCategory[] = [
     
     // 2. Семья и Отношения (Pink)
     { id: '4', group: 'Семья и Отношения', name: 'Жена', value: 0, color: '#be185d' },
-    { id: '5', group: 'Семья и Отношения', name: 'Дети и их воспитание', value: 0, color: '#db2777' },
+    { id: '5', group: 'Семья и Отношения', name: 'Дети', value: 0, color: '#db2777' },
     { id: '6', group: 'Семья и Отношения', name: 'Родители', value: 0, color: '#ec4899' },
-    { id: '7', group: 'Семья и Отношения', name: 'Братья, Сестры', value: 0, color: '#f472b6' },
+    { id: '7', group: 'Семья и Отношения', name: 'Братья / Сестры', value: 0, color: '#f472b6' },
     { id: '8', group: 'Семья и Отношения', name: 'Родственники', value: 0, color: '#f9a8d4' },
-    { id: '9', group: 'Семья и Отношения', name: '2 ГА или любовница', value: 0, color: '#fbcfe8' },
     
     // 3. Бизнес и Работа (Blue)
-    { id: '10', group: 'Бизнес и Работа', name: 'Операционка', value: 0, color: '#1d4ed8' },
-    { id: '11', group: 'Бизнес и Работа', name: 'Сотрудники', value: 0, color: '#2563eb' },
-    { id: '12', group: 'Бизнес и Работа', name: 'Стратегия - новый уровень', value: 0, color: '#3b82f6' },
-    { id: '13', group: 'Бизнес и Работа', name: 'Планирование', value: 0, color: '#60a5fa' },
-    { id: '14', group: 'Бизнес и Работа', name: 'Личный бренд', value: 0, color: '#93c5fd' },
+    { id: '9', group: 'Бизнес и Работа', name: 'Операционка', value: 0, color: '#1d4ed8' },
+    { id: '10', group: 'Бизнес и Работа', name: 'Сотрудники', value: 0, color: '#2563eb' },
+    { id: '11', group: 'Бизнес и Работа', name: 'Стратегия', value: 0, color: '#3b82f6' },
+    { id: '12', group: 'Бизнес и Работа', name: 'Маркетинг / Продажи', value: 0, color: '#60a5fa' },
     
-    // 4. Окружение и Коммуникации (Purple)
-    { id: '15', group: 'Окружение и Коммуникации', name: 'Друзья', value: 0, color: '#7e22ce' },
-    { id: '16', group: 'Окружение и Коммуникации', name: 'Наставники', value: 0, color: '#9333ea' },
-    { id: '17', group: 'Окружение и Коммуникации', name: 'Свадьбы - поседелки', value: 0, color: '#a855f7' },
+    // 4. Личность и Рост (Yellow/Amber)
+    { id: '13', group: 'Личность и Рост', name: 'Учеба / Чтение', value: 0, color: '#d97706' },
+    { id: '14', group: 'Личность и Рост', name: 'Хобби / Отдых', value: 0, color: '#f59e0b' },
+    { id: '15', group: 'Личность и Рост', name: 'Личный бренд', value: 0, color: '#fbbf24' },
+    { id: '16', group: 'Личность и Рост', name: 'Активы / Финансы', value: 0, color: '#fde047' },
     
-    // 5. Личностный рост (Teal)
-    { id: '18', group: 'Личностный рост', name: 'Саморазвитие', value: 0, color: '#0f766e' },
-    { id: '19', group: 'Личностный рост', name: 'Чтение', value: 0, color: '#0d9488' },
-    { id: '20', group: 'Личностный рост', name: 'Навыки', value: 0, color: '#14b8a6' },
-    { id: '21', group: 'Личностный рост', name: 'Насмотренность - Идея', value: 0, color: '#2dd4bf' },
-    
-    // 6. Яркость жизни и Отдых (Orange)
-    { id: '22', group: 'Яркость жизни и Отдых', name: 'Отдых - путешествие', value: 0, color: '#ea580c' },
-    { id: '23', group: 'Яркость жизни и Отдых', name: 'Хобби', value: 0, color: '#f97316' },
-    { id: '24', group: 'Яркость жизни и Отдых', name: 'Фильмы - Сериалы', value: 0, color: '#fb923c' },
-    
-    // 7. Духовность (Yellow)
-    { id: '25', group: 'Духовность', name: 'Духовность', value: 0, color: '#eab308' },
-    
-    // 8. Пожиратели времени (Rose)
-    { id: '26', group: 'Пожиратели времени', name: 'Соц. сети', value: 0, color: '#e11d48' },
-    { id: '27', group: 'Пожиратели времени', name: 'Телевизоров', value: 0, color: '#f43f5e' },
-    { id: '28', group: 'Пожиратели времени', name: 'Плохая привычка', value: 0, color: '#fb7185' }
+    // 5. Духовность (Teal/Green)
+    { id: '17', group: 'Духовность', name: 'Духовные практики', value: 0, color: '#0d9488' },
+    { id: '18', group: 'Духовность', name: 'Благотворительность', value: 0, color: '#14b8a6' },
+    { id: '19', group: 'Духовность', name: 'Окружение / Друзья', value: 0, color: '#22c55e' }
 ]
 
-// ─────────────────────────── Helpers ───────────────────────────
 function getPeriodLabel(type: 'weekly' | 'monthly', offset: number): string {
-    const now = new Date()
+    const d = new Date()
     if (type === 'monthly') {
-        now.setMonth(now.getMonth() + offset)
-        return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+        d.setMonth(d.getMonth() + offset)
+        const y = d.getFullYear()
+        const m = String(d.getMonth() + 1).padStart(2, '0')
+        return `${y}-${m}`
     } else {
-        // ISO week number
-        const d = new Date(now)
         d.setDate(d.getDate() + offset * 7)
-        const onejan = new Date(d.getFullYear(), 0, 1)
-        const week = Math.ceil((((d.getTime() - onejan.getTime()) / 86400000) + onejan.getDay() + 1) / 7)
-        return `${d.getFullYear()}-W${String(week).padStart(2, '0')}`
+        const y = d.getFullYear()
+        
+        // Calculate ISO Week Number
+        const tempDate = new Date(d.valueOf())
+        tempDate.setDate(tempDate.getDate() + 4 - (tempDate.getDay() || 7))
+        const yearStart = new Date(tempDate.getFullYear(), 0, 1)
+        const weekNo = Math.ceil((((tempDate.getTime() - yearStart.getTime()) / 86400000) + 1) / 7)
+        
+        const w = String(weekNo).padStart(2, '0')
+        return `${y}-W${w}`
     }
 }
 
 function formatPeriodLabel(label: string, type: 'weekly' | 'monthly'): string {
+    if (!label) return ''
+    if (label === 'template') return 'Базовый шаблон'
     if (type === 'monthly') {
-        const [year, month] = label.split('-')
-        const date = new Date(parseInt(year), parseInt(month) - 1)
-        return date.toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })
+        const [y, m] = label.split('-')
+        const monthNames = [
+            'Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
+            'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'
+        ]
+        const idx = parseInt(m, 10) - 1
+        return `${monthNames[idx] || m} ${y}`
+    } else {
+        const [y, w] = label.split('-W')
+        return `${w} неделя ${y}`
     }
-    const [year, week] = label.split('-W')
-    return `${year} — Неделя ${week}`
 }
 
-function generateId() {
-    return Math.random().toString(36).slice(2, 9)
-}
-
-function balanceCategories(cats: WheelCategory[], fixedId: string | null = null): WheelCategory[] {
-    if (cats.length === 0) return []
+function balanceCategories(cats: WheelCategory[]): WheelCategory[] {
+    if (!Array.isArray(cats)) return []
     return cats.map(c => ({ ...c, value: Number(c.value) || 0 }))
 }
 
 // ─────────────────────────── SVG Sunburst Chart ───────────────────────────
-function SunburstChartSVG({ categories }: { categories: WheelCategory[] }) {
+function SunburstChartSVG({ categories, periodType }: { categories: WheelCategory[], periodType: 'weekly' | 'monthly' }) {
     const width = 800
     const height = 550
     const cx = width / 2
@@ -143,6 +137,9 @@ function SunburstChartSVG({ categories }: { categories: WheelCategory[] }) {
         )
     }
 
+    const maxHours = periodType === 'weekly' ? 168 : 720
+    const percentageOfMax = Math.min(100, Math.round((total / maxHours) * 100))
+
     const grouped = new Map<string, { value: number; color: string; items: WheelCategory[] }>()
     categories.filter(c => c.value > 0).forEach(c => {
         const gName = (c.group && c.group.trim() !== '') ? c.group.trim() : 'Прочее'
@@ -155,7 +152,6 @@ function SunburstChartSVG({ categories }: { categories: WheelCategory[] }) {
     })
 
     const createArc = (startAngle: number, angle: number, radiusInner: number, radiusOuter: number) => {
-        // SVG paths typically break if a single arc approaches 360deg perfectly (2*PI)
         const safeAngle = Math.min(angle, Math.PI * 2 - 0.0001)
         const endAngle = startAngle + safeAngle
         
@@ -216,17 +212,14 @@ function SunburstChartSVG({ categories }: { categories: WheelCategory[] }) {
 
     const [hoveredNode, setHoveredNode] = useState<any>(null)
 
-    // Вычисляем данные для выносных линий (callouts)
     const labels: any[] = []
     slices.forEach((s) => {
-        // Пропускаем очень мелкие доли, чтобы не было нагромождения (меньше 1.5% примерно)
         if (s.type === 'child' && s.angle >= 0.05) {
             const isRight = Math.cos(s.midAngle) >= 0;
             labels.push({ s, isRight, y1: 0, x1: 0 });
         }
     });
     
-    // Алгоритм избегания наложения по оси Y
     const MIN_Y_DIST = 20;
     ['right', 'left'].forEach(side => {
         const sideLabels = labels.filter(l => (side === 'right' ? l.isRight : !l.isRight));
@@ -254,6 +247,30 @@ function SunburstChartSVG({ categories }: { categories: WheelCategory[] }) {
     return (
         <div className="relative w-full flex justify-center">
             <svg viewBox={`0 0 ${width} ${height}`} className="w-full max-w-[800px] drop-shadow-sm font-sans overflow-visible" aria-label="Солнечные лучи">
+                
+                {/* Center circle progress track (dial) */}
+                <circle 
+                    cx={cx} 
+                    cy={cy} 
+                    r={rInner - 8} 
+                    className="stroke-muted/30 dark:stroke-muted/10 fill-none" 
+                    strokeWidth="3.5" 
+                />
+                
+                {/* Center circle progress value ring */}
+                <circle 
+                    cx={cx} 
+                    cy={cy} 
+                    r={rInner - 8} 
+                    className="fill-none transition-all duration-700 ease-in-out origin-center" 
+                    strokeWidth="4.5" 
+                    strokeDasharray={2 * Math.PI * (rInner - 8)}
+                    strokeDashoffset={2 * Math.PI * (rInner - 8) - (2 * Math.PI * (rInner - 8) * Math.min(percentageOfMax, 100)) / 100}
+                    stroke={total > maxHours ? "#ef4444" : "#6366f1"}
+                    strokeLinecap="round"
+                    transform={`rotate(-90 ${cx} ${cy})`}
+                />
+
                 {slices.map((s, i) => (
                     <path
                         key={i}
@@ -261,7 +278,7 @@ function SunburstChartSVG({ categories }: { categories: WheelCategory[] }) {
                         fill={s.color}
                         stroke="hsl(var(--background))"
                         strokeWidth="2"
-                        className="transition-opacity duration-200 cursor-pointer outline-none"
+                        className="transition-opacity duration-200 cursor-pointer outline-none hover:brightness-110"
                         style={{
                             opacity: hoveredNode 
                                 ? (hoveredNode.name === s.name || hoveredNode.name === s.parent || hoveredNode.parent === s.name ? 1 : 0.25)
@@ -272,7 +289,7 @@ function SunburstChartSVG({ categories }: { categories: WheelCategory[] }) {
                     />
                 ))}
 
-                {/* Выносные линии и текст (Callouts) */}
+                {/* Callout lines and text labels */}
                 {labels.map((l, i) => {
                     const s = l.s;
                     const x0 = cx + rOuter * Math.cos(s.midAngle);
@@ -305,7 +322,7 @@ function SunburstChartSVG({ categories }: { categories: WheelCategory[] }) {
                                 y={y1} 
                                 textAnchor={textAnchor} 
                                 dominantBaseline="middle" 
-                                className="text-[13px] font-medium"
+                                className="text-[13px] font-bold"
                             >
                                 <tspan fill="hsl(var(--foreground))" opacity="0.8">
                                     {s.name.length > 22 ? s.name.substring(0, 21) + '…' : s.name}
@@ -319,28 +336,34 @@ function SunburstChartSVG({ categories }: { categories: WheelCategory[] }) {
                 })}
             </svg>
 
-            {/* Central Info HUD */}
+            {/* Central Info HUD inside Doughnut */}
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none transition-opacity duration-200">
                {hoveredNode ? (
-                   <div className="bg-background/95 backdrop-blur-md border border-border shadow-lg rounded-full w-40 h-40 p-4 flex flex-col items-center justify-center animate-in zoom-in-95 duration-200">
-                       <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground line-clamp-1 mb-0.5">
+                   <div className="bg-background/95 backdrop-blur-md border border-border shadow-lg rounded-full w-36 h-36 p-4 flex flex-col items-center justify-center animate-in zoom-in-95 duration-200">
+                       <span className="text-[8.5px] font-extrabold uppercase tracking-widest text-muted-foreground line-clamp-1 mb-0.5">
                            {hoveredNode.type === 'group' ? 'БЛОК' : hoveredNode.parent}
                        </span>
-                       <span className="text-sm font-bold text-foreground text-center line-clamp-2 w-full leading-tight">
+                       <span className="text-[11.5px] font-extrabold text-foreground text-center line-clamp-2 w-full leading-tight">
                            {hoveredNode.name}
                        </span>
-                       <div className="mt-1 text-2xl font-black tabular-nums" style={{ color: hoveredNode.color }}>
+                       <div className="mt-1 text-xl font-black tabular-nums" style={{ color: hoveredNode.color }}>
                            {hoveredNode.percentage}%
                        </div>
-                       <div className="text-xs font-medium text-muted-foreground mt-0.5">
+                       <div className="text-[10px] font-bold text-muted-foreground mt-0.5">
                            {hoveredNode.value} ч.
                        </div>
                    </div>
                ) : (
-                   <div className="text-center bg-background/50 backdrop-blur-sm rounded-full w-32 h-32 flex flex-col items-center justify-center shadow-sm border border-border/50 transition-opacity duration-300">
-                      <p className="text-3xl font-bold text-foreground">100%</p>
-                      <p className="text-[10px] text-muted-foreground uppercase tracking-widest mt-0.5">итого: {Number.isInteger(total) ? total : total.toFixed(1)} ч.</p>
-                      <p className="text-[9px] text-muted-foreground/80 mt-1">показателей: {categories.length}</p>
+                   <div className="text-center bg-card/85 backdrop-blur-md rounded-full w-[130px] h-[130px] flex flex-col items-center justify-center shadow-lg border border-border/60 transition-opacity duration-300">
+                      <p className={`text-xl font-extrabold leading-none ${total > maxHours ? "text-red-500 animate-pulse" : "text-foreground"}`}>
+                           {Number.isInteger(total) ? total : total.toFixed(1)} ч
+                      </p>
+                      <p className="text-[8px] text-muted-foreground font-bold uppercase tracking-widest mt-1">Итого часов</p>
+                      <span className={`text-[9.5px] font-bold mt-1 px-1.5 py-0.5 rounded-full ${
+                          total > maxHours ? 'bg-red-500/10 text-red-500' : 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400'
+                      }`}>
+                          {percentageOfMax}%
+                      </span>
                    </div>
                )}
             </div>
@@ -348,10 +371,8 @@ function SunburstChartSVG({ categories }: { categories: WheelCategory[] }) {
     )
 }
 
-
 // ─────────────────────────── Main Component ───────────────────────────
 interface LifeWheelPageProps {
-    // If provided, the component works in participant self-view mode
     participantId?: string
     participantName?: string
 }
@@ -369,6 +390,9 @@ export function LifeWheelPage({ participantId: fixedParticipantId, participantNa
     const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle')
     const [history, setHistory] = useState<Array<{ label: string; period_type: string }>>([])
     const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
+
+    // Filter query for category item highlight search
+    const [searchFilter, setSearchFilter] = useState('')
 
     // Report states
     const [activeTab, setActiveTab] = useState<'editor' | 'report'>('editor')
@@ -418,7 +442,7 @@ export function LifeWheelPage({ participantId: fixedParticipantId, participantNa
     const isOverLimit = total > maxHours
     const selectedParticipant = participants.find(p => p.id === selectedParticipantId)
 
-    // ── Fetch list of participants (admin mode only)
+    // Fetch list of participants (admin mode only)
     useEffect(() => {
         if (isParticipantMode) return
         fetch('/api/participants')
@@ -429,7 +453,7 @@ export function LifeWheelPage({ participantId: fixedParticipantId, participantNa
             .catch(console.error)
     }, [isParticipantMode])
 
-    // ── Fetch wheel entry for selected participant + period
+    // Fetch wheel entry for selected participant + period
     const fetchEntry = useCallback(async () => {
         const pid = fixedParticipantId || selectedParticipantId
         if (!pid) return
@@ -454,7 +478,6 @@ export function LifeWheelPage({ participantId: fixedParticipantId, participantNa
             if (data && data.length > 0 && data[0].categories?.length > 0) {
                 setCategories(balanceCategories(data[0].categories))
             } else {
-                // If it's a real user and they have no data, try fetching the global template first
                 if (pid !== TEMPLATE_ID) {
                     try {
                         const tempRes = await fetch(`/api/life-wheel?participant_id=${TEMPLATE_ID}&period_type=monthly&period_label=template`)
@@ -482,7 +505,7 @@ export function LifeWheelPage({ participantId: fixedParticipantId, participantNa
         fetchEntry()
     }, [fetchEntry])
 
-    // ── Fetch history (last 6 periods)
+    // Fetch history (last 6 periods)
     useEffect(() => {
         const pid = fixedParticipantId || selectedParticipantId
         if (!pid) return
@@ -496,7 +519,7 @@ export function LifeWheelPage({ participantId: fixedParticipantId, participantNa
             .catch(console.error)
     }, [fixedParticipantId, selectedParticipantId, saveStatus])
 
-    // ── Save Logic
+    // Save Logic
     const handleSave = async (silent = false) => {
         const pid = fixedParticipantId || selectedParticipantId
         if (!pid) return
@@ -547,110 +570,110 @@ export function LifeWheelPage({ participantId: fixedParticipantId, participantNa
         } catch (e: any) {
             if (!silent) {
                 setSaveStatus('error')
-                alert('Ошибка сохранения: ' + (e.message || 'Неизвестная ошибка'))
-            } else {
-                console.error('Autosave error:', e.message || e)
+                let userMsg = e.message || 'Неизвестная ошибка'
+                if (userMsg.includes('violates foreign key constraint')) {
+                    userMsg = 'Ваш аккаунт персонала не связан с записью участника в базе данных. Пожалуйста, обратитесь к администратору или примените SQL-миграцию.'
+                }
+                alert('Ошибка сохранения: ' + userMsg)
             }
         } finally {
             if (!silent) setIsSaving(false)
         }
     }
 
-    // ── Auto-save Effect
-    useEffect(() => {
-        if (!hasUnsavedChanges || !selectedParticipantId) return;
-        const timer = setTimeout(() => {
-            handleSave(true)
-        }, 1500)
-        return () => clearTimeout(timer)
-    }, [categories, hasUnsavedChanges, selectedParticipantId])
-
-    // ── Category operations
-    const addCategory = () => {
-        const nextColor = PALETTE[categories.length % PALETTE.length]
-        setCategories(prev => balanceCategories([...prev, { id: generateId(), name: '', value: 0, color: nextColor }]))
+    const updateCategory = (id: string, key: keyof WheelCategory, val: any) => {
+        setCategories(prev => prev.map(c => {
+            if (c.id === id) {
+                const next = { ...c, [key]: val }
+                return next
+            }
+            return c
+        }))
         setHasUnsavedChanges(true)
     }
 
-    const updateCategory = (id: string, field: 'name' | 'value' | 'color' | 'group', val: string | number) => {
-        setCategories(prev => {
-            let next = prev.map(c => c.id === id ? { ...c, [field]: val } : c)
-            if (field === 'value') {
-                next = balanceCategories(next, id)
-            }
-            return next
-        })
+    const addCategory = () => {
+        const id = String(Date.now())
+        const color = PALETTE[categories.length % PALETTE.length]
+        const group = categories[categories.length - 1]?.group || ''
+        setCategories(prev => [...prev, { id, name: 'Новая категория', value: 0, color, group }])
         setHasUnsavedChanges(true)
     }
 
     const removeCategory = (id: string, name: string) => {
-        if (window.confirm(`Вы уверены, что хотите удалить категорию "${name || 'Без названия'}"?`)) {
-            setCategories(prev => balanceCategories(prev.filter(c => c.id !== id)))
-            setHasUnsavedChanges(true)
-        }
+        if (!confirm(`Удалить категорию "${name}"?`)) return
+        setCategories(prev => prev.filter(c => c.id !== id))
+        setHasUnsavedChanges(true)
     }
 
     const resetToDefault = () => {
+        if (!confirm('Вы уверены, что хотите сбросить структуру категорий к стандартной? Все ваши изменения структуры сотрутся.')) return
         setCategories(balanceCategories(DEFAULT_CATEGORIES))
         setHasUnsavedChanges(true)
     }
 
     return (
-        <div className="p-4 sm:p-6 space-y-6 min-h-full bg-background">
-            {/* ── Header */}
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+        <div className="p-4 sm:p-6 space-y-6 min-h-full bg-background/50">
+            {/* Header Title */}
+            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border-b border-border pb-5">
                 <div>
-                    <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
-                        <span className="text-2xl">🎯</span>
+                    <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground flex items-center gap-2.5">
+                        <span className="text-3xl sm:text-4xl animate-pulse">🎯</span>
                         Колесо внимания
                         {isParticipantMode && participantName && (
-                            <Badge variant="secondary" className="ml-2 text-sm font-normal">{participantName}</Badge>
+                            <Badge variant="outline" className="ml-2 text-xs font-bold py-1 px-2.5 border-indigo-500/30 text-indigo-600 dark:text-indigo-400 bg-indigo-500/5">
+                                {participantName}
+                            </Badge>
                         )}
                     </h1>
-                    <p className="text-sm text-muted-foreground mt-1">Распределение времени по категориям жизни</p>
+                    <p className="text-xs sm:text-sm text-muted-foreground mt-1 font-medium">Распределение времени по категориям жизни и сферам внимания</p>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2.5 flex-wrap w-full md:w-auto justify-end">
                     {activeTab === 'editor' && saveStatus === 'success' && (
-                        <span className="flex items-center gap-1 text-sm text-green-600 animate-in fade-in">
-                            <CheckCircle2 className="w-4 h-4" /> Сохранено
+                        <span className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400 bg-green-500/10 border border-green-500/20 px-3 py-1.5 rounded-lg animate-in fade-in zoom-in duration-300 font-semibold">
+                            <CheckCircle2 className="w-4 h-4" /> Изменения сохранены!
                         </span>
                     )}
                     {activeTab === 'editor' && saveStatus === 'error' && (
-                        <span className="flex items-center gap-1 text-sm text-red-600">
-                            <AlertCircle className="w-4 h-4" /> Ошибка
+                        <span className="flex items-center gap-1 text-xs text-red-600 dark:text-red-400 bg-red-500/10 border border-red-500/20 px-3 py-1.5 rounded-lg animate-in fade-in zoom-in duration-300 font-semibold">
+                            <AlertCircle className="w-4 h-4" /> Ошибка сохранения
                         </span>
                     )}
+
                     {activeTab === 'editor' && (
                         <Button
                             onClick={() => handleSave(false)}
                             disabled={isSaving || !selectedParticipantId}
-                            className="gap-2 min-w-[120px]"
-                            id="life-wheel-save-btn"
+                            size="default"
+                            className="gap-2 font-bold bg-indigo-600 hover:bg-indigo-500 text-xs shadow-md px-5 py-2 transition-all active:scale-95 text-white"
                         >
                             {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                            {isSaving ? 'Сохранение...' : 'Сохранить'}
+                            {isSaving ? 'Сохранение...' : 'Сохранить изменения'}
                         </Button>
                     )}
                 </div>
             </div>
 
-            {/* Tabs (admin only) */}
+            {/* Tab Links (Admin Only) */}
             {!isParticipantMode && (
-                <div className="flex border-b border-border">
+                <div className="flex border-b border-border/80 gap-1">
                     <button
                         onClick={() => setActiveTab('editor')}
-                        className={`px-4 py-2 border-b-2 text-sm font-medium transition-colors ${activeTab === 'editor'
-                            ? 'border-primary text-primary'
+                        className={`px-5 py-2.5 border-b-2 text-xs font-bold transition-all relative ${activeTab === 'editor'
+                            ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400'
                             : 'border-transparent text-muted-foreground hover:text-foreground'
                         }`}
                     >
                         Колеса участников
+                        {hasUnsavedChanges && (
+                            <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                        )}
                     </button>
                     <button
                         onClick={() => setActiveTab('report')}
-                        className={`px-4 py-2 border-b-2 text-sm font-medium transition-colors ${activeTab === 'report'
-                            ? 'border-primary text-primary'
+                        className={`px-5 py-2.5 border-b-2 text-xs font-bold transition-all ${activeTab === 'report'
+                            ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400'
                             : 'border-transparent text-muted-foreground hover:text-foreground'
                         }`}
                     >
@@ -660,18 +683,17 @@ export function LifeWheelPage({ participantId: fixedParticipantId, participantNa
             )}
 
             {activeTab === 'editor' ? (
-                <>
-                    {/* ── Controls: Participant + Period */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div className="space-y-5">
+                    {/* Controls: Participant + Period */}
+                    <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
                         {/* Participant selector (admin only) */}
-                        {!isParticipantMode && (
-                            <div className="space-y-1.5">
-                                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Участник</label>
+                        {!isParticipantMode ? (
+                            <div className="md:col-span-4 bg-card border border-border p-3 rounded-xl shadow-sm space-y-1.5">
+                                <label className="text-[10px] font-extrabold text-muted-foreground uppercase tracking-wider">Участник</label>
                                 <select
                                     value={selectedParticipantId}
                                     onChange={e => { setSelectedParticipantId(e.target.value); setPeriodOffset(0) }}
-                                    className="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
-                                    id="life-wheel-participant-select"
+                                    className="w-full px-3 py-1.5 bg-background border border-border rounded-lg text-foreground text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/30 font-semibold"
                                 >
                                     <option value="">— Выберите участника —</option>
                                     <option value={TEMPLATE_ID}>⚙️ Базовый шаблон (для всех)</option>
@@ -680,22 +702,23 @@ export function LifeWheelPage({ participantId: fixedParticipantId, participantNa
                                     ))}
                                 </select>
                             </div>
+                        ) : (
+                            <div className="md:col-span-4" />
                         )}
 
-                        {/* Period type (Hidden if template) */}
-                        {selectedParticipantId !== TEMPLATE_ID && (
-                            <div className="space-y-1.5">
-                                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Период</label>
-                                <div className="flex rounded-lg border border-border overflow-hidden">
+                        {/* Period type */}
+                        {selectedParticipantId && selectedParticipantId !== TEMPLATE_ID && (
+                            <div className="md:col-span-3 bg-card border border-border p-3 rounded-xl shadow-sm space-y-1.5">
+                                <label className="text-[10px] font-extrabold text-muted-foreground uppercase tracking-wider">Масштаб периода</label>
+                                <div className="flex rounded-lg border border-border overflow-hidden p-0.5 bg-background">
                                     {(['monthly', 'weekly'] as const).map(t => (
                                         <button
                                             key={t}
                                             onClick={() => { setPeriodType(t); setPeriodOffset(0) }}
-                                            className={`flex-1 py-2 text-sm font-medium transition-colors ${periodType === t
-                                                ? 'bg-primary text-primary-foreground'
-                                                : 'bg-background text-muted-foreground hover:bg-muted/50'
+                                            className={`flex-1 py-1 text-xs font-bold rounded-md transition-all ${periodType === t
+                                                ? 'bg-indigo-600 text-white shadow-sm'
+                                                : 'text-muted-foreground hover:bg-muted/40 hover:text-foreground'
                                                 }`}
-                                            id={`period-type-${t}`}
                                         >
                                             {t === 'monthly' ? 'Месяц' : 'Неделя'}
                                         </button>
@@ -704,183 +727,229 @@ export function LifeWheelPage({ participantId: fixedParticipantId, participantNa
                             </div>
                         )}
 
-                        {/* Period navigation (Hidden if template) */}
-                        {selectedParticipantId !== TEMPLATE_ID && (
-                            <div className="space-y-1.5">
-                                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Выбор</label>
-                                <div className="flex items-center gap-2">
+                        {/* Period navigation */}
+                        {selectedParticipantId && selectedParticipantId !== TEMPLATE_ID && (
+                            <div className="md:col-span-3 bg-card border border-border p-3 rounded-xl shadow-sm space-y-1.5">
+                                <label className="text-[10px] font-extrabold text-muted-foreground uppercase tracking-wider">Текущий период</label>
+                                <div className="flex items-center gap-1">
                                     <button
                                         onClick={() => setPeriodOffset(o => o - 1)}
-                                        className="p-2 border border-border rounded-lg hover:bg-muted/50 transition-colors"
-                                        id="period-prev-btn"
+                                        className="p-1.5 border border-border rounded-lg hover:bg-muted/50 transition-colors"
                                     >
                                         <ChevronLeft className="w-4 h-4" />
                                     </button>
-                                    <div className="flex-1 text-center">
-                                        <p className="text-sm font-semibold text-foreground capitalize">
+                                    <div className="flex-1 text-center min-w-0">
+                                        <p className="text-xs font-bold text-foreground truncate capitalize">
                                             {formatPeriodLabel(currentLabel, periodType)}
                                         </p>
-                                        {periodOffset < 0 && (
-                                            <p className="text-[10px] text-muted-foreground">
-                                                {Math.abs(periodOffset)} {Math.abs(periodOffset) === 1 ? (periodType === 'monthly' ? 'месяц' : 'неделю') : (periodType === 'monthly' ? 'месяца' : 'недели')} назад
-                                            </p>
-                                        )}
-                                        {periodOffset === 0 && <p className="text-[10px] text-primary">текущий период</p>}
-                                        {periodOffset > 0 && (
-                                            <p className="text-[10px] text-muted-foreground">
-                                                {periodOffset} {periodType === 'monthly' ? 'мес. вперёд' : 'нед. вперёд'}
-                                            </p>
-                                        )}
+                                        <p className="text-[9px] text-muted-foreground font-semibold leading-none mt-0.5">
+                                            {periodOffset === 0 ? (
+                                                <span className="text-indigo-600 dark:text-indigo-400">текущий период</span>
+                                            ) : (
+                                                <span>{Math.abs(periodOffset)} {periodType === 'monthly' ? 'мес.' : 'нед.'} {periodOffset < 0 ? 'назад' : 'вперёд'}</span>
+                                            )}
+                                        </p>
                                     </div>
                                     <button
                                         onClick={() => setPeriodOffset(o => o + 1)}
-                                        className="p-2 border border-border rounded-lg hover:bg-muted/50 transition-colors"
-                                        id="period-next-btn"
+                                        className="p-1.5 border border-border rounded-lg hover:bg-muted/50 transition-colors"
                                     >
                                         <ChevronRight className="w-4 h-4" />
                                     </button>
                                 </div>
                             </div>
                         )}
+
+                        {/* Search Highlighter */}
+                        {selectedParticipantId && (
+                            <div className="md:col-span-2 bg-card border border-border p-2 rounded-xl shadow-sm flex items-center h-16">
+                                <div className="relative w-full">
+                                    <Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-muted-foreground/60" />
+                                    <Input
+                                        placeholder="Поиск..."
+                                        value={searchFilter}
+                                        onChange={e => setSearchFilter(e.target.value)}
+                                        className="pl-8.5 h-8 text-xs border-border bg-background focus-visible:ring-indigo-500/30 rounded-lg"
+                                    />
+                                    {searchFilter && (
+                                        <button 
+                                            onClick={() => setSearchFilter('')}
+                                            className="absolute right-2.5 top-2 text-muted-foreground/60 hover:text-foreground text-xs"
+                                        >
+                                            <X className="w-3.5 h-3.5" />
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+                        )}
                     </div>
 
-                    {/* ── Main content */}
                     {!selectedParticipantId && !isParticipantMode ? (
-                        <div className="flex flex-col items-center justify-center py-20 gap-4 text-muted-foreground">
-                            <PieChart className="w-16 h-16 opacity-20" />
-                            <p className="text-lg font-medium">Выберите участника</p>
-                            <p className="text-sm">чтобы увидеть или заполнить колесо внимания</p>
+                        <div className="flex flex-col items-center justify-center py-24 gap-4 text-muted-foreground bg-card border border-dashed border-border rounded-2xl shadow-sm">
+                            <div className="p-4 bg-indigo-500/5 rounded-full border border-indigo-500/10 text-indigo-500">
+                                <PieChart className="w-12 h-12" />
+                            </div>
+                            <h3 className="text-lg font-bold text-foreground">Выберите участника</h3>
+                            <p className="text-xs text-center max-w-sm text-muted-foreground mt-0.5 leading-relaxed">
+                                Выберите студента в выпадающем списке, чтобы открыть и заполнить его колесо внимания.
+                            </p>
                         </div>
                     ) : (
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-
-                            {/* ── Left: Table editor */}
-                            <Card className="p-4 sm:p-6 space-y-4 border-border">
-                                <div className="flex items-center justify-between">
+                            
+                            {/* Editor List Side */}
+                            <Card className="p-4 sm:p-5 space-y-4 border-border bg-card/65 backdrop-blur-md rounded-2xl">
+                                <div className="flex items-center justify-between border-b border-border/40 pb-3">
                                     <div>
-                                        <h2 className="font-semibold text-foreground flex items-center gap-2">
-                                            <span>Категории</span>
-                                            <Badge variant="secondary" className="text-xs font-normal">
-                                                Показателей: {categories.length}
+                                        <h2 className="font-extrabold text-sm text-foreground uppercase tracking-wider flex items-center gap-1.5">
+                                            <span>Показатели времени</span>
+                                            <Badge variant="outline" className="text-[10px] font-bold py-0 px-2 border-indigo-500/30 text-indigo-600 dark:text-indigo-400 bg-indigo-500/5">
+                                                Всего: {categories.length}
                                             </Badge>
                                         </h2>
-                                        <p className="text-xs text-muted-foreground mt-0.5">Укажите % времени для каждой сферы жизни</p>
+                                        <p className="text-[10px] text-muted-foreground mt-0.5">Укажите точное количество часов для каждой сферы</p>
                                     </div>
-                                    <div className="flex items-center gap-2">
+                                    <div className="flex items-center gap-1.5">
                                         {isLoading && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />}
                                         <button
                                             onClick={resetToDefault}
-                                            className="p-1.5 rounded-lg hover:bg-muted/50 transition-colors text-muted-foreground hover:text-foreground"
+                                            className="p-2 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-all"
                                             title="Сбросить к стандартным"
                                         >
                                             <RefreshCw className="w-3.5 h-3.5" />
                                         </button>
-                                        <Button size="sm" variant="outline" onClick={addCategory} className="gap-1.5" id="add-category-btn">
+                                        <Button size="sm" variant="outline" onClick={addCategory} className="gap-1 text-[10px] font-bold h-8 border-indigo-600/30 text-indigo-600 dark:text-indigo-400">
                                             <Plus className="w-3.5 h-3.5" /> Добавить
                                         </Button>
                                     </div>
                                 </div>
 
-                                {/* Total progress bar */}
-                                <div className="space-y-1.5">
-                                    <div className="flex justify-between text-xs">
-                                        <span className="text-muted-foreground">Итого часов</span>
-                                        <span className={`font-semibold ${isOverLimit ? 'text-red-500' : 'text-foreground'}`}>
-                                            {Number.isInteger(total) ? total : total.toFixed(1)} ч. {isOverLimit && <span className="text-red-500">(⚠️ превышает {maxHours} ч.)</span>}
+                                {/* Total Hour Progress limit */}
+                                <div className="space-y-1.5 bg-muted/30 p-3 rounded-xl border border-border/50">
+                                    <div className="flex justify-between text-xs font-bold">
+                                        <span className="text-muted-foreground">Итого распределено часов:</span>
+                                        <span className={`font-extrabold ${isOverLimit ? 'text-red-500 animate-pulse' : 'text-foreground'}`}>
+                                            {Number.isInteger(total) ? total : total.toFixed(1)} / {maxHours} ч.
                                         </span>
                                     </div>
-                                    <div className="h-2 bg-muted rounded-full overflow-hidden">
+                                    <div className="h-2.5 bg-background rounded-full overflow-hidden border border-border/30">
                                         <div
-                                            className={`h-full rounded-full transition-all duration-500 ${isOverLimit ? 'bg-red-500' : 'bg-primary'}`}
+                                            className={`h-full rounded-full transition-all duration-500 ${
+                                                isOverLimit ? 'bg-red-500' : 'bg-gradient-to-r from-indigo-500 to-violet-500'
+                                            }`}
                                             style={{ width: `${Math.min((total / maxHours) * 100, 100)}%` }}
                                         />
                                     </div>
+                                    {isOverLimit && (
+                                        <p className="text-[10px] text-red-500 font-bold flex items-center gap-1">
+                                            ⚠️ Лимит превышен на {(total - maxHours).toFixed(1)} ч! Для сохранения сумма должна быть ровно {maxHours} ч.
+                                        </p>
+                                    )}
                                 </div>
 
-                                {/* Category rows */}
-                                <div className="space-y-2">
-                                    {categories.map((cat, index) => (
-                                        <div key={cat.id} className="flex items-center gap-2 group">
-                                            <span className="text-xs font-semibold text-muted-foreground w-5 text-center select-none">
-                                                 {index + 1}
-                                            </span>
-                                            {/* Color picker */}
-                                            <div className="relative flex-shrink-0">
-                                                <input
-                                                    type="color"
-                                                    value={cat.color}
-                                                    onChange={e => updateCategory(cat.id, 'color', e.target.value)}
-                                                    className="w-7 h-7 rounded-[4px] border-2 border-border cursor-pointer p-0 bg-transparent"
-                                                    title="Выберите цвет"
-                                                />
-                                            </div>
+                                {/* Category Rows */}
+                                <div className="space-y-2 max-h-[500px] overflow-y-auto pr-1">
+                                    {categories.map((cat, index) => {
+                                        const isHighlighted = searchFilter
+                                            ? cat.name.toLowerCase().includes(searchFilter.toLowerCase()) || (cat.group || '').toLowerCase().includes(searchFilter.toLowerCase())
+                                            : false
+                                        const isDimmed = searchFilter && !isHighlighted
 
-                                            {/* Group & Name Split */}
-                                            <div className="flex flex-1 -space-x-px">
-                                                 <Input
-                                                     placeholder="Сфера (Блок)"
-                                                     value={cat.group || ''}
-                                                     title="Укажите сферу, в которую входит категория (напр. 'Работа' или 'Семья')"
-                                                     onChange={e => updateCategory(cat.id, 'group', e.target.value)}
-                                                     className="w-1/2 h-9 text-xs font-medium rounded-r-none focus-visible:z-10 bg-muted/30 placeholder:text-muted-foreground/50"
-                                                 />
-                                                 <Input
-                                                     placeholder="Категория"
-                                                     value={cat.name}
-                                                     onChange={e => updateCategory(cat.id, 'name', e.target.value)}
-                                                     className="w-1/2 h-9 text-sm font-medium rounded-l-none focus-visible:z-10"
-                                                 />
-                                            </div>
-
-                                             {/* Value */}
-                                             <div className="relative flex-shrink-0 w-[70px]">
-                                                 <Input
-                                                     type="number"
-                                                     min={0}
-                                                     step="0.1"
-                                                     value={cat.value || ''}
-                                                     onChange={e => updateCategory(cat.id, 'value', Math.max(0, Number(e.target.value)))}
-                                                     className="h-9 text-sm pr-2 text-right font-medium"
-                                                 />
-                                             </div>
-                                             <div className="w-[38px] text-right text-xs font-semibold text-muted-foreground flex-shrink-0">
-                                                 {total > 0 ? Math.round((cat.value / total) * 100) : 0}%
-                                             </div>
-
-                                            {/* Delete */}
-                                            <button
-                                                onClick={() => removeCategory(cat.id, cat.name)}
-                                                className="opacity-0 group-hover:opacity-100 p-1.5 text-muted-foreground hover:text-red-500 transition-all rounded-lg hover:bg-red-50 flex-shrink-0"
-                                                title="Удалить категорию"
+                                        return (
+                                            <div 
+                                                key={cat.id} 
+                                                className={`flex items-center gap-2.5 group p-2 rounded-xl transition-all border-l-3 hover:bg-muted/15 border-border ${
+                                                    isDimmed ? 'opacity-35 scale-98' : 'opacity-100'
+                                                } ${isHighlighted ? 'ring-2 ring-indigo-500/30' : ''}`}
+                                                style={{ borderLeftColor: cat.color }}
                                             >
-                                                <Trash2 className="w-4 h-4" />
-                                            </button>
-                                        </div>
-                                    ))}
+                                                <span 
+                                                    className="text-[9px] font-extrabold text-white w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 select-none shadow-sm"
+                                                    style={{ backgroundColor: cat.color }}
+                                                >
+                                                     {index + 1}
+                                                </span>
+                                                
+                                                {/* Color picker */}
+                                                <div className="relative flex-shrink-0">
+                                                    <input
+                                                        type="color"
+                                                        value={cat.color}
+                                                        onChange={e => updateCategory(cat.id, 'color', e.target.value)}
+                                                        className="w-6 h-6 rounded-[5px] border-2 border-border cursor-pointer p-0 bg-transparent"
+                                                        title="Изменить цвет"
+                                                    />
+                                                </div>
+
+                                                {/* Group & Name Split Inputs */}
+                                                <div className="flex flex-1 -space-x-px">
+                                                     <Input
+                                                         placeholder="Сфера (Блок)"
+                                                         value={cat.group || ''}
+                                                         onChange={e => updateCategory(cat.id, 'group', e.target.value)}
+                                                         className="w-1/2 h-8 text-[11px] font-bold rounded-r-none focus-visible:z-10 bg-muted/40 border-border placeholder:text-muted-foreground/45"
+                                                     />
+                                                     <Input
+                                                         placeholder="Категория"
+                                                         value={cat.name}
+                                                         onChange={e => updateCategory(cat.id, 'name', e.target.value)}
+                                                         className="w-1/2 h-8 text-[11.5px] font-extrabold rounded-l-none focus-visible:z-10 border-border"
+                                                     />
+                                                </div>
+
+                                                {/* Value (Hours) */}
+                                                <div className="relative flex-shrink-0 w-[68px]">
+                                                     <Input
+                                                         type="number"
+                                                         min={0}
+                                                         step="0.1"
+                                                         value={cat.value || ''}
+                                                         onChange={e => updateCategory(cat.id, 'value', Math.max(0, Number(e.target.value)))}
+                                                         className="h-8 text-xs pr-1.5 text-right font-extrabold border-border"
+                                                     />
+                                                </div>
+                                                <div className="w-[38px] text-right text-[10.5px] font-extrabold text-muted-foreground flex-shrink-0">
+                                                     {total > 0 ? Math.round((cat.value / total) * 100) : 0}%
+                                                </div>
+
+                                                {/* Delete button */}
+                                                <button
+                                                    onClick={() => removeCategory(cat.id, cat.name)}
+                                                    className="opacity-0 group-hover:opacity-100 p-1.5 text-muted-foreground hover:text-red-500 transition-all rounded-lg hover:bg-red-500/5 flex-shrink-0"
+                                                    title="Удалить категорию"
+                                                >
+                                                    <Trash2 className="w-3.5 h-3.5" />
+                                                </button>
+                                            </div>
+                                        )
+                                    })}
 
                                     {categories.length === 0 && (
-                                        <div className="py-8 text-center text-muted-foreground">
-                                            <p className="text-sm">Нет категорий. Добавьте первую!</p>
+                                        <div className="py-10 text-center text-muted-foreground">
+                                            <p className="text-xs italic">Категории не найдены. Создайте первую!</p>
                                         </div>
                                     )}
                                 </div>
                             </Card>
 
-                            {/* ── Right: Chart */}
-                            <div className="space-y-4">
-                                <Card className="p-4 sm:p-6 border-border flex flex-col items-center overflow-hidden">
-                                    <h2 className="font-semibold text-foreground mb-4 self-start">Диаграмма</h2>
+                            {/* Chart Display Side */}
+                            <div className="space-y-6">
+                                <Card className="p-4 sm:p-5 border-border flex flex-col items-center overflow-hidden bg-card/75 backdrop-blur-md rounded-2xl shadow-md">
+                                    <h2 className="font-extrabold text-sm text-foreground mb-3 self-start flex items-center gap-1.5">
+                                        <Sparkles className="w-4 h-4 text-amber-500 animate-spin" style={{ animationDuration: '7s' }} />
+                                        Диаграмма баланса времени
+                                    </h2>
                                     <div className="w-full max-w-[800px]">
-                                        <SunburstChartSVG categories={categories} />
+                                        <SunburstChartSVG categories={categories} periodType={periodType} />
                                     </div>
                                 </Card>
 
-                                {/* History */}
-                                <Card className="p-4 sm:p-5 border-border">
-                                    <h3 className="text-sm font-semibold text-foreground mb-3">История сохраненных периодов</h3>
+                                {/* Saved periods history */}
+                                <Card className="p-4 sm:p-5 border-border rounded-2xl shadow-sm bg-card/60">
+                                    <h3 className="text-xs font-extrabold text-foreground mb-3 uppercase tracking-wider">История сохраненных периодов</h3>
                                     {history.length > 0 ? (
                                         <div className="flex flex-wrap gap-2">
-                                            {history.slice(0, 8).map((h, i) => (
+                                            {history.slice(0, 10).map((h, i) => (
                                                 <button
                                                     key={i}
                                                     onClick={() => {
@@ -893,61 +962,54 @@ export function LifeWheelPage({ participantId: fixedParticipantId, participantNa
                                                             setPeriodType('monthly')
                                                             setPeriodOffset(diff)
                                                         } else {
-                                                            setPeriodType('weekly')
                                                             const [y, w] = h.label.replace('W', '').split('-').map(Number)
                                                             const nowWeek = Math.ceil((((now.getTime() - new Date(now.getFullYear(), 0, 1).getTime()) / 86400000) + new Date(now.getFullYear(), 0, 1).getDay() + 1) / 7)
                                                             const diff = (y - now.getFullYear()) * 52 + (w - nowWeek)
                                                             setPeriodOffset(diff)
                                                         }
                                                     }}
-                                                    className={`px-2.5 py-1 rounded-lg text-sm border transition-colors
-                                                        ${h.label === currentLabel && h.period_type === periodType
-                                                            ? 'bg-primary text-primary-foreground border-primary'
-                                                            : 'border-border hover:bg-muted/50 text-muted-foreground hover:text-foreground'
-                                                        }`}
+                                                    className="px-2.5 py-1 text-[10px] font-bold rounded-lg border border-border bg-background hover:bg-muted text-foreground transition-all shadow-sm"
                                                 >
-                                                    {h.label}
+                                                    {formatPeriodLabel(h.label, h.period_type as any)}
                                                 </button>
                                             ))}
                                         </div>
                                     ) : (
-                                        <p className="text-sm text-muted-foreground">Участник пока не сохранял результаты.</p>
+                                        <p className="text-xs text-muted-foreground italic">История записей за текущий год отсутствует</p>
                                     )}
                                 </Card>
                             </div>
                         </div>
                     )}
-                </>
+                </div>
             ) : (
-                /* ── Report view */
-                <Card className="p-4 sm:p-6 border-border space-y-6">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                /* Report View (Admin Only) */
+                <Card className="p-5 border-border shadow-md space-y-6 bg-card rounded-2xl">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border/50 pb-4">
                         <div>
-                            <h2 className="text-xl font-bold text-foreground">Отчет по заполнению</h2>
-                            <p className="text-xs text-muted-foreground mt-0.5">
-                                История заполнения колеса внимания участниками
+                            <h2 className="text-lg font-extrabold text-foreground">Сводный отчет по заполнению</h2>
+                            <p className="text-[11px] text-muted-foreground mt-0.5">
+                                Количество сохраненных периодов внимания у каждого участника
                             </p>
                         </div>
-                        <div className="flex flex-col sm:flex-row gap-3">
-                            {/* Search input */}
+                        <div className="flex flex-col sm:flex-row gap-2.5">
                             <div className="relative">
-                                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                                <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground/60" />
                                 <Input
-                                    placeholder="Поиск по имени..."
+                                    placeholder="Поиск..."
                                     value={searchTerm}
                                     onChange={e => setSearchTerm(e.target.value)}
-                                    className="pl-9 w-full sm:w-[200px] h-9"
+                                    className="pl-8.5 w-full sm:w-[200px] h-9 text-xs border-border bg-background focus-visible:ring-indigo-500/30 rounded-lg"
                                 />
                             </div>
-                            {/* Program filter */}
                             <select
                                 value={programFilter}
                                 onChange={e => setProgramFilter(e.target.value)}
-                                className="px-3 py-1.5 bg-background border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 h-9"
+                                className="px-3 py-1 bg-background border border-border rounded-lg text-foreground text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/30 h-9 font-semibold shadow-sm"
                             >
                                 <option value="all">Все программы</option>
-                                {uniquePrograms.map(prog => (
-                                    <option key={prog} value={prog}>{prog}</option>
+                                {uniquePrograms.map(p => (
+                                    <option key={p} value={p}>{p}</option>
                                 ))}
                             </select>
                         </div>
@@ -955,83 +1017,80 @@ export function LifeWheelPage({ participantId: fixedParticipantId, participantNa
 
                     {isReportLoading ? (
                         <div className="flex flex-col items-center justify-center py-20 gap-2 text-muted-foreground">
-                            <Loader2 className="w-8 h-8 animate-spin text-primary" />
-                            <p className="text-sm">Загрузка данных отчета...</p>
+                            <Loader2 className="w-6 h-6 animate-spin text-indigo-600" />
+                            <p className="text-xs">Загрузка данных отчета...</p>
                         </div>
                     ) : (
                         <div className="overflow-x-auto">
                             <table className="w-full text-left border-collapse">
                                 <thead>
-                                    <tr className="border-b border-border text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                                        <th className="py-3 px-4">ФИО</th>
-                                        <th className="py-3 px-4 text-center">Всего заполнений</th>
-                                        <th className="py-3 px-4">Периоды заполнения</th>
-                                        <th className="py-3 px-4 text-right">Действие</th>
+                                    <tr className="border-b border-border text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                                        <th className="py-3 px-4">Участник</th>
+                                        <th className="py-3 px-4 text-center w-[180px]">Всего записей</th>
+                                        <th className="py-3 px-4">Месяцы/Недели заполнения</th>
+                                        <th className="py-3 px-4 text-right w-[100px]">Действие</th>
                                     </tr>
                                 </thead>
-                                <tbody className="divide-y divide-border text-sm">
+                                <tbody className="divide-y divide-border/60 text-xs">
                                     {filteredParticipants.map(p => {
-                                        const userEntries = allEntries.filter(e => e.participant_id === p.id && e.participant_id !== TEMPLATE_ID)
-                                        const count = userEntries.length
-                                        const sortedPeriods = [...userEntries].sort((a, b) => b.period_label.localeCompare(a.period_label))
-
+                                        const pEntries = allEntries.filter(e => e.participant_id === p.id && e.participant_id !== TEMPLATE_ID)
+                                        const count = pEntries.length
                                         return (
                                             <tr key={p.id} className="hover:bg-muted/30 transition-colors">
-                                                <td className="py-3 px-4">
-                                                    <div className="font-semibold text-foreground">{p.name}</div>
+                                                <td className="py-3.5 px-4">
+                                                    <div className="font-bold text-foreground">{p.name}</div>
                                                     {p.program?.name && (
-                                                        <Badge variant="secondary" className="mt-1 text-[10px] px-1.5 py-0.5">
+                                                        <Badge variant="secondary" className="mt-0.5 text-[9px] px-1.5 py-0 border-none font-medium">
                                                             {p.program.name}
                                                         </Badge>
                                                     )}
                                                 </td>
-                                                <td className="py-3 px-4 text-center">
-                                                    <span className={`inline-flex items-center justify-center px-2.5 py-1 rounded-full text-xs font-bold ${
-                                                        count > 0 ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'
+                                                <td className="py-3.5 px-4 text-center">
+                                                    <span className={`inline-flex items-center justify-center px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                                        count > 0 ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400' : 'bg-muted text-muted-foreground'
                                                     }`}>
                                                         {formatTimes(count)}
                                                     </span>
                                                 </td>
-                                                <td className="py-3 px-4">
+                                                <td className="py-3.5 px-4">
                                                     {count > 0 ? (
-                                                        <div className="flex flex-wrap gap-1.5 max-w-[400px]">
-                                                            {sortedPeriods.map((e, idx) => (
+                                                        <div className="flex flex-wrap gap-1">
+                                                            {pEntries.slice(0, 10).map((e, idx) => (
                                                                 <Badge
                                                                     key={idx}
                                                                     variant="outline"
-                                                                    className={`text-xs px-2 py-0.5 border ${
-                                                                        e.period_type === 'monthly'
-                                                                            ? 'bg-blue-50/50 text-blue-700 border-blue-200 dark:bg-blue-950/20 dark:text-blue-400 dark:border-blue-800'
-                                                                            : 'bg-purple-50/50 text-purple-700 border-purple-200 dark:bg-purple-950/20 dark:text-purple-400 dark:border-purple-800'
-                                                                    }`}
+                                                                    className="text-[9px] px-1.5 py-0 font-bold bg-indigo-500/5 text-indigo-600 border-indigo-500/20"
                                                                 >
                                                                     {formatPeriodLabel(e.period_label, e.period_type)}
                                                                 </Badge>
                                                             ))}
+                                                            {count > 10 && <span className="text-[10px] text-muted-foreground font-semibold">+{count - 10}</span>}
                                                         </div>
                                                     ) : (
-                                                        <span className="text-xs text-muted-foreground italic">Не заполнено</span>
+                                                        <span className="text-[10px] text-muted-foreground italic">Нет сохраненных периодов</span>
                                                     )}
                                                 </td>
-                                                <td className="py-3 px-4 text-right">
+                                                <td className="py-3.5 px-4 text-right">
                                                     <Button
                                                         variant="ghost"
                                                         size="sm"
-                                                        className="gap-1.5 hover:text-primary animate-in fade-in duration-200"
+                                                        className="gap-1 hover:text-indigo-600 hover:bg-indigo-500/10 text-muted-foreground text-[10.5px] h-7 px-2 font-bold"
                                                         onClick={() => {
                                                             setSelectedParticipantId(p.id)
                                                             setActiveTab('editor')
-                                                            if (sortedPeriods.length > 0) {
-                                                                const latest = sortedPeriods[0]
-                                                                setPeriodType(latest.period_type)
-                                                                
+                                                            if (count > 0) {
+                                                                setPeriodType(pEntries[0].period_type)
+                                                                // Set offset based on the latest entry label
+                                                                const label = pEntries[0].period_label
                                                                 const now = new Date()
-                                                                if (latest.period_type === 'monthly') {
-                                                                    const [y, m] = latest.period_label.split('-').map(Number)
-                                                                    const diff = (y - now.getFullYear()) * 12 + (m - (now.getMonth() + 1))
+                                                                if (pEntries[0].period_type === 'monthly') {
+                                                                    const [y, m] = label.split('-').map(Number)
+                                                                    const nowY = now.getFullYear()
+                                                                    const nowM = now.getMonth() + 1
+                                                                    const diff = (y - nowY) * 12 + (m - nowM)
                                                                     setPeriodOffset(diff)
                                                                 } else {
-                                                                    const [y, w] = latest.period_label.replace('W', '').split('-').map(Number)
+                                                                    const [y, w] = label.replace('W', '').split('-').map(Number)
                                                                     const nowWeek = Math.ceil((((now.getTime() - new Date(now.getFullYear(), 0, 1).getTime()) / 86400000) + new Date(now.getFullYear(), 0, 1).getDay() + 1) / 7)
                                                                     const diff = (y - now.getFullYear()) * 52 + (w - nowWeek)
                                                                     setPeriodOffset(diff)
@@ -1039,7 +1098,7 @@ export function LifeWheelPage({ participantId: fixedParticipantId, participantNa
                                                             }
                                                         }}
                                                     >
-                                                        <Eye className="w-4 h-4" /> Посмотреть
+                                                        <Eye className="w-3.5 h-3.5" /> Посмотреть
                                                     </Button>
                                                 </td>
                                             </tr>
@@ -1048,7 +1107,7 @@ export function LifeWheelPage({ participantId: fixedParticipantId, participantNa
 
                                     {filteredParticipants.length === 0 && (
                                         <tr>
-                                            <td colSpan={4} className="py-10 text-center text-muted-foreground">
+                                            <td colSpan={4} className="py-10 text-center text-muted-foreground italic text-xs">
                                                 Участники не найдены
                                             </td>
                                         </tr>

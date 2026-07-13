@@ -1,11 +1,11 @@
 'use client'
 
 import { useEffect, useState, useCallback, useMemo } from 'react'
-import { Plus, Trash2, Save, Loader2, CheckCircle2, AlertCircle, RefreshCw, Search, Eye, BarChart3, HelpCircle } from 'lucide-react'
+import { Save, Loader2, CheckCircle2, AlertCircle, Plus, Trash2, Search, Eye, BarChart3, X, Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Input } from '@/components/ui/input'
 import {
     Radar,
     RadarChart,
@@ -63,34 +63,57 @@ const MONTH_COLORS: Record<string, string> = {
     'Май': '#eab308',     // Yellow
     'Июнь': '#f97316',     // Orange
     'Июль': '#ef4444',     // Red
-    'Август': '#ec4899',    // Pink
-    'Сентябрь': '#d946ef',  // Fuchsia
-    'Октябрь': '#8b5cf6',   // Violet
+    'Август': '#ec4899',   // Pink
+    'Сентябрь': '#8b5cf6',  // Purple
+    'Октябрь': '#a855f7',  // Violet
     'Ноябрь': '#6366f1',   // Indigo
-    'Декабрь': '#6b7280',   // Gray
+    'Декабрь': '#14b8a6'   // Teal
 }
 
-// ─────────────────────────── Main Component ───────────────────────────
-interface LifeBalancePageProps {
-    participantId?: string
-    participantName?: string
+const CATEGORY_COLORS: Record<string, string> = {
+    'финансы': '#3b82f6',        // Blue
+    'спорт/тело': '#10b981',     // Emerald
+    'духовность': '#8b5cf6',     // Purple
+    'личностный рост': '#ec4899',// Pink
+    'навыки': '#0ea5e9',         // Sky
+    'душа': '#6366f1',           // Indigo
+    'личный бренд': '#f59e0b',   // Amber
+    'семья': '#f87171',          // Red
+    'здоровье': '#06b6d4',       // Cyan
+    'чтение': '#a855f7',         // Violet
+    'путешествие': '#f97316'     // Orange
 }
 
-export function LifeBalancePage({ participantId: fixedParticipantId, participantName }: LifeBalancePageProps = {}) {
+const PALETTE = [
+    '#6366f1', '#8b5cf6', '#ec4899', '#f43f5e',
+    '#f97316', '#eab308', '#22c55e', '#14b8a6',
+    '#06b6d4', '#3b82f6', '#a855f7'
+]
+
+export function LifeBalancePage({ participantId: fixedParticipantId, participantName }: { participantId?: string, participantName?: string } = {}) {
     const isParticipantMode = !!fixedParticipantId
 
     const [participants, setParticipants] = useState<Participant[]>([])
     const [selectedParticipantId, setSelectedParticipantId] = useState<string>(fixedParticipantId || '')
     const [year, setYear] = useState<number>(() => new Date().getFullYear())
-    
-    // Editor States
+
+    // Category lists & values
     const [categories, setCategories] = useState<string[]>(DEFAULT_CATEGORY_NAMES)
     const [idealValues, setIdealValues] = useState<Record<string, number>>({})
     const [monthlyValues, setMonthlyValues] = useState<Record<string, Record<string, number>>>({})
-    const [selectedMonths, setSelectedMonths] = useState<Record<string, boolean>>({
-        'Январь': true // default check January
+
+    // Filter query for category row highlighting
+    const [catFilter, setCatFilter] = useState('')
+
+    // Which months are selected to render in Recharts radar
+    const [selectedMonths, setSelectedMonths] = useState<Record<string, boolean>>(() => {
+        const curM = MONTHS[new Date().getMonth()]
+        return MONTHS.reduce((acc, m) => {
+            acc[m] = m === curM
+            return acc
+        }, {} as Record<string, boolean>)
     })
-    
+
     // UI Feedback States
     const [isSaving, setIsSaving] = useState(false)
     const [isLoading, setIsLoading] = useState(false)
@@ -117,7 +140,7 @@ export function LifeBalancePage({ participantId: fixedParticipantId, participant
             .catch(console.error)
     }, [isParticipantMode])
 
-    // Fetch all entries for report
+    // Fetch report statistics
     const fetchReportData = useCallback(() => {
         if (activeTab !== 'report') return
         setIsReportLoading(true)
@@ -136,7 +159,7 @@ export function LifeBalancePage({ participantId: fixedParticipantId, participant
         fetchReportData()
     }, [fetchReportData])
 
-    // Fetch entry details for editor
+    // Fetch single entry for editor
     const fetchEntry = useCallback(async () => {
         const pid = fixedParticipantId || selectedParticipantId
         if (!pid) return
@@ -151,37 +174,34 @@ export function LifeBalancePage({ participantId: fixedParticipantId, participant
             const { data } = await res.json()
 
             if (data && data.length > 0) {
-                const entry: LifeBalanceEntry = data[0]
-                const ideals = entry.ideal_values || {}
-                const monthly = entry.monthly_values || {}
-
-                // Merge categories list dynamically based on loaded data
-                const loadedCats = [...DEFAULT_CATEGORY_NAMES]
-                Object.keys(ideals).forEach(k => {
-                    if (!loadedCats.includes(k)) loadedCats.push(k)
-                })
-                Object.values(monthly).forEach((scores: any) => {
-                    Object.keys(scores || {}).forEach(k => {
-                        if (!loadedCats.includes(k)) loadedCats.push(k)
-                    })
-                })
-
-                setCategories(loadedCats)
-                setIdealValues(ideals)
-                setMonthlyValues(monthly)
-            } else {
-                // Not found - reset to defaults
-                setCategories(DEFAULT_CATEGORY_NAMES)
+                const entry = data[0] as LifeBalanceEntry
                 
-                const defaultIdeals: Record<string, number> = {}
-                DEFAULT_CATEGORY_NAMES.forEach(c => {
-                    defaultIdeals[c] = 10
+                // Merge default categories with whatever custom exists in entry
+                const entryCats = new Set<string>()
+                Object.keys(entry.ideal_values || {}).forEach(k => entryCats.add(k))
+                Object.keys(entry.monthly_values || {}).forEach(m => {
+                    Object.keys(entry.monthly_values[m] || {}).forEach(k => entryCats.add(k))
                 })
-                setIdealValues(defaultIdeals)
+
+                // Keep standard categories sorted first
+                const mergedCats = Array.from(new Set([
+                    ...DEFAULT_CATEGORY_NAMES,
+                    ...Array.from(entryCats)
+                ]))
+
+                setCategories(mergedCats)
+                setIdealValues(entry.ideal_values || {})
+                setMonthlyValues(entry.monthly_values || {})
+            } else {
+                setCategories(DEFAULT_CATEGORY_NAMES)
+                setIdealValues({})
                 setMonthlyValues({})
             }
         } catch (e) {
-            console.error('Error fetching life balance entry:', e)
+            console.error('Error fetching life balance:', e)
+            setCategories(DEFAULT_CATEGORY_NAMES)
+            setIdealValues({})
+            setMonthlyValues({})
         } finally {
             setIsLoading(false)
             setHasUnsavedChanges(false)
@@ -192,7 +212,7 @@ export function LifeBalancePage({ participantId: fixedParticipantId, participant
         fetchEntry()
     }, [fetchEntry])
 
-    // Save handler
+    // Save
     const handleSave = async () => {
         const pid = fixedParticipantId || selectedParticipantId
         if (!pid) {
@@ -204,20 +224,6 @@ export function LifeBalancePage({ participantId: fixedParticipantId, participant
         setSaveStatus('idle')
 
         try {
-            // Prune monthly values with empty rows
-            const prunedMonthly: Record<string, Record<string, number>> = {}
-            Object.entries(monthlyValues).forEach(([m, scores]) => {
-                const prunes: Record<string, number> = {}
-                Object.entries(scores).forEach(([cat, val]) => {
-                    if (val !== undefined && val !== null && String(val) !== '') {
-                        prunes[cat] = Number(val)
-                    }
-                })
-                if (Object.keys(prunes).length > 0) {
-                    prunedMonthly[m] = prunes
-                }
-            })
-
             const res = await fetch('/api/life-balance', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -225,7 +231,7 @@ export function LifeBalancePage({ participantId: fixedParticipantId, participant
                     participant_id: pid,
                     year,
                     ideal_values: idealValues,
-                    monthly_values: prunedMonthly
+                    monthly_values: monthlyValues
                 })
             })
 
@@ -237,10 +243,14 @@ export function LifeBalancePage({ participantId: fixedParticipantId, participant
             setSaveStatus('success')
             setTimeout(() => setSaveStatus('idle'), 3000)
             setHasUnsavedChanges(false)
-            fetchReportData() // reload report in case it saved successfully
+            fetchReportData()
         } catch (e: any) {
             setSaveStatus('error')
-            alert('Ошибка при сохранении: ' + (e.message || 'Неизвестная ошибка'))
+            let userMsg = e.message || 'Неизвестная ошибка'
+            if (userMsg.includes('violates foreign key constraint')) {
+                userMsg = 'Ваш аккаунт персонала не связан с записью участника в базе данных. Пожалуйста, обратитесь к администратору или примените SQL-миграцию.'
+            }
+            alert('Ошибка при сохранении: ' + userMsg)
         } finally {
             setIsSaving(false)
         }
@@ -264,31 +274,20 @@ export function LifeBalancePage({ participantId: fixedParticipantId, participant
             } else {
                 monthScores[cat] = finalVal
             }
-            
-            const next = { ...prev }
-            if (Object.keys(monthScores).length === 0) {
-                delete next[month]
-            } else {
-                next[month] = monthScores
-            }
-            return next
+            return { ...prev, [month]: monthScores }
         })
         setHasUnsavedChanges(true)
     }
 
     const handleCustomCategoryChange = (index: number, newName: string) => {
         const oldName = categories[index]
-        if (categories.includes(newName) && newName !== oldName) {
-            return // prevent duplicates
-        }
-
         setCategories(prev => {
             const next = [...prev]
             next[index] = newName
             return next
         })
 
-        // Rename keys in values if they exist
+        // Rename keys in values
         setIdealValues(prev => {
             const next = { ...prev }
             if (next[oldName] !== undefined) {
@@ -300,7 +299,7 @@ export function LifeBalancePage({ participantId: fixedParticipantId, participant
 
         setMonthlyValues(prev => {
             const next = { ...prev }
-            Object.keys(next).forEach(m => {
+            MONTHS.forEach(m => {
                 const monthScores = { ...next[m] }
                 if (monthScores[oldName] !== undefined) {
                     monthScores[newName] = monthScores[oldName]
@@ -314,30 +313,32 @@ export function LifeBalancePage({ participantId: fixedParticipantId, participant
     }
 
     const addCustomCategory = () => {
-        let nameIdx = 1
-        let customName = `Кастомная ${nameIdx}`
-        while (categories.includes(customName)) {
-            nameIdx++
-            customName = `Кастомная ${nameIdx}`
+        const baseName = 'Новая категория'
+        let name = baseName
+        let counter = 1
+        while (categories.includes(name)) {
+            name = `${baseName} ${counter++}`
         }
 
-        setCategories(prev => [...prev, customName])
-        setIdealValues(prev => ({ ...prev, [customName]: 10 }))
+        setCategories(prev => [...prev, name])
         setHasUnsavedChanges(true)
     }
 
-    const deleteCustomCategory = (name: string) => {
-        if (!window.confirm(`Удалить категорию "${name}"?`)) return
+    const removeCategory = (index: number) => {
+        const name = categories[index]
+        if (!confirm(`Удалить категорию "${name}"? Все сохраненные оценки по ней будут стерты.`)) return
 
-        setCategories(prev => prev.filter(c => c !== name))
+        setCategories(prev => prev.filter((_, i) => i !== index))
+
         setIdealValues(prev => {
             const next = { ...prev }
             delete next[name]
             return next
         })
+
         setMonthlyValues(prev => {
             const next = { ...prev }
-            Object.keys(next).forEach(m => {
+            MONTHS.forEach(m => {
                 const monthScores = { ...next[m] }
                 delete monthScores[name]
                 next[m] = monthScores
@@ -347,7 +348,24 @@ export function LifeBalancePage({ participantId: fixedParticipantId, participant
         setHasUnsavedChanges(true)
     }
 
-    // Toggle month visualization
+    // Recharts Data formatter
+    const chartData = useMemo(() => {
+        return categories.map(cat => {
+            const row: Record<string, any> = {
+                category: cat
+            }
+            row.ideal = idealValues[cat] !== undefined ? idealValues[cat] : 10
+
+            MONTHS.forEach(m => {
+                if (selectedMonths[m]) {
+                    row[m] = monthlyValues[m]?.[cat] !== undefined ? monthlyValues[m][cat] : 0
+                }
+            })
+            return row
+        })
+    }, [categories, idealValues, monthlyValues, selectedMonths])
+
+    // Toggle months in chart
     const toggleMonthSelected = (m: string) => {
         setSelectedMonths(prev => ({
             ...prev,
@@ -356,35 +374,21 @@ export function LifeBalancePage({ participantId: fixedParticipantId, participant
     }
 
     const selectAllMonths = () => {
-        const next: Record<string, boolean> = {}
-        MONTHS.forEach(m => {
-            next[m] = true
-        })
+        const next = MONTHS.reduce((acc, m) => {
+            acc[m] = true
+            return acc
+        }, {} as Record<string, boolean>)
         setSelectedMonths(next)
     }
 
     const clearAllMonths = () => {
-        setSelectedMonths({})
+        setSelectedMonths(MONTHS.reduce((acc, m) => {
+            acc[m] = false
+            return acc
+        }, {} as Record<string, boolean>))
     }
 
-    // Radar Chart Data Prep
-    const chartData = useMemo(() => {
-        return categories.map(cat => {
-            const item: any = {
-                category: cat,
-                ideal: idealValues[cat] !== undefined ? idealValues[cat] : 10
-            }
-            MONTHS.forEach(m => {
-                if (selectedMonths[m]) {
-                    const val = monthlyValues[m]?.[cat]
-                    item[m] = val !== undefined ? val : 0
-                }
-            })
-            return item
-        })
-    }, [categories, idealValues, monthlyValues, selectedMonths])
-
-    // Report Processing
+    // Report processing
     const uniquePrograms = Array.from(new Set(participants.map(p => p.program?.name).filter(Boolean)))
 
     const reportRows = useMemo(() => {
@@ -395,62 +399,58 @@ export function LifeBalancePage({ participantId: fixedParticipantId, participant
                 return matchesSearch && matchesProgram
             })
             .map(p => {
-                const entry = allEntries.find(e => e.participant_id === p.id && e.participant_id !== TEMPLATE_ID)
+                const userEntries = allEntries.filter(e => e.participant_id === p.id && e.participant_id !== TEMPLATE_ID)
                 const filledMonths = MONTHS.filter(m => {
-                    const scores = entry?.monthly_values?.[m] || {}
-                    return Object.values(scores).some(v => v !== undefined && v !== null && v > 0)
+                    const entry = userEntries[0] // Since grouped by year
+                    return entry && entry.monthly_values?.[m] && Object.keys(entry.monthly_values[m]).length > 0
                 })
                 return {
                     participant: p,
-                    entry,
                     filledMonths,
                     count: filledMonths.length
                 }
             })
     }, [participants, allEntries, searchTerm, programFilter])
 
-    const selectedParticipant = participants.find(p => p.id === selectedParticipantId)
-
     return (
-        <div className="p-4 sm:p-6 space-y-6 min-h-full bg-background">
-            {/* Header */}
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-border pb-5">
+        <div className="p-4 sm:p-6 space-y-6 min-h-full bg-background/50">
+            {/* Header Title */}
+            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border-b border-border pb-5">
                 <div>
-                    <h1 className="text-3xl font-extrabold tracking-tight text-foreground flex items-center gap-2">
-                        <span className="text-3xl">☸️</span>
+                    <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground flex items-center gap-2.5">
+                        <span className="text-3xl sm:text-4xl animate-pulse">🎡</span>
                         Колесо жизни
                         {isParticipantMode && participantName && (
-                            <Badge variant="secondary" className="ml-2 text-sm font-normal py-1 px-3">
+                            <Badge variant="outline" className="ml-2 text-xs font-bold py-1 px-2.5 border-indigo-500/30 text-indigo-600 dark:text-indigo-400 bg-indigo-500/5">
                                 {participantName}
                             </Badge>
                         )}
                     </h1>
-                    <p className="text-sm text-muted-foreground mt-1">Оценка сфер жизни от 1 до 10 по месяцам и идеальные ориентиры</p>
+                    <p className="text-xs sm:text-sm text-muted-foreground mt-1 font-medium">Сравнительный анализ и баланс ключевых сфер вашей жизнедеятельности по месяцам</p>
                 </div>
 
-                <div className="flex items-center gap-3">
-                    {/* Year selector */}
-                    <div className="flex items-center gap-2 bg-muted/40 px-3 py-1.5 rounded-lg border border-border">
-                        <span className="text-xs font-semibold text-muted-foreground">ГОД:</span>
+                <div className="flex items-center gap-2.5 flex-wrap w-full md:w-auto justify-end">
+                    {/* Period Pickers */}
+                    <div className="flex items-center gap-2 bg-card px-3 py-1.5 rounded-lg border border-border shadow-sm">
                         <select
                             value={year}
                             onChange={e => { setYear(Number(e.target.value)); setHasUnsavedChanges(true) }}
-                            className="bg-transparent border-none text-sm font-bold text-foreground focus:outline-none cursor-pointer"
+                            className="bg-transparent border-none text-xs font-bold text-foreground focus:outline-none cursor-pointer p-0.5"
                         >
                             {[2025, 2026, 2027, 2028].map(y => (
-                                <option key={y} value={y} className="bg-background">{y}</option>
+                                <option key={y} value={y} className="bg-card text-foreground">{y} год</option>
                             ))}
                         </select>
                     </div>
 
                     {activeTab === 'editor' && saveStatus === 'success' && (
-                        <span className="flex items-center gap-1.5 text-sm text-green-600 bg-green-500/10 border border-green-500/20 px-3 py-1.5 rounded-lg animate-in fade-in duration-300">
-                            <CheckCircle2 className="w-4 h-4" /> Сохранено
+                        <span className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400 bg-green-500/10 border border-green-500/20 px-3 py-1.5 rounded-lg animate-in fade-in zoom-in duration-300 font-semibold">
+                            <CheckCircle2 className="w-4 h-4" /> Изменения сохранены!
                         </span>
                     )}
                     {activeTab === 'editor' && saveStatus === 'error' && (
-                        <span className="flex items-center gap-1.5 text-sm text-red-600 bg-red-500/10 border border-red-500/20 px-3 py-1.5 rounded-lg animate-in fade-in duration-300">
-                            <AlertCircle className="w-4 h-4" /> Ошибка
+                        <span className="flex items-center gap-1 text-xs text-red-600 dark:text-red-400 bg-red-500/10 border border-red-500/20 px-3 py-1.5 rounded-lg animate-in fade-in zoom-in duration-300 font-semibold">
+                            <AlertCircle className="w-4 h-4" /> Ошибка сохранения
                         </span>
                     )}
 
@@ -458,33 +458,34 @@ export function LifeBalancePage({ participantId: fixedParticipantId, participant
                         <Button
                             onClick={handleSave}
                             disabled={isSaving || !selectedParticipantId}
-                            className="gap-2 px-5 font-semibold bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 shadow-md shadow-indigo-500/20 transition-all hover:scale-[1.02]"
+                            size="default"
+                            className="gap-2 font-bold bg-indigo-600 hover:bg-indigo-500 text-xs shadow-md px-5 py-2 transition-all active:scale-95 text-white"
                         >
                             {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                            {isSaving ? 'Сохранение...' : 'Сохранить'}
+                            {isSaving ? 'Сохранение...' : 'Сохранить изменения'}
                         </Button>
                     )}
                 </div>
             </div>
 
-            {/* Tabs Selector (Admin only) */}
+            {/* Tab Links (Admin Only) */}
             {!isParticipantMode && (
-                <div className="flex border-b border-border/80">
+                <div className="flex border-b border-border/80 gap-1">
                     <button
                         onClick={() => setActiveTab('editor')}
-                        className={`px-6 py-3 border-b-2 text-sm font-bold transition-all relative ${activeTab === 'editor'
+                        className={`px-5 py-2.5 border-b-2 text-xs font-bold transition-all relative ${activeTab === 'editor'
                             ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400'
                             : 'border-transparent text-muted-foreground hover:text-foreground'
                         }`}
                     >
-                        Конструктор баланса
+                        Конструктор оценок
                         {hasUnsavedChanges && (
-                            <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-amber-500" title="Несохраненные изменения" />
+                            <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
                         )}
                     </button>
                     <button
                         onClick={() => setActiveTab('report')}
-                        className={`px-6 py-3 border-b-2 text-sm font-bold transition-all ${activeTab === 'report'
+                        className={`px-5 py-2.5 border-b-2 text-xs font-bold transition-all ${activeTab === 'report'
                             ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400'
                             : 'border-transparent text-muted-foreground hover:text-foreground'
                         }`}
@@ -495,105 +496,153 @@ export function LifeBalancePage({ participantId: fixedParticipantId, participant
             )}
 
             {activeTab === 'editor' ? (
-                <div className="space-y-6">
-                    {/* Top bar (Admin participant selector) */}
-                    {!isParticipantMode && (
-                        <div className="bg-card border border-border p-4 rounded-xl shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                            <div className="space-y-1">
-                                <h3 className="text-sm font-bold text-foreground uppercase tracking-wider">Выбор участника для заполнения</h3>
-                                <p className="text-xs text-muted-foreground">Выберите участника из списка активных участников программы</p>
+                <div className="space-y-5">
+                    {/* User Selection & Highlighting (Admin/User Mode) */}
+                    <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-center">
+                        {/* Selector (Admin Only) */}
+                        {!isParticipantMode ? (
+                            <div className="md:col-span-6 bg-card border border-border p-3.5 rounded-xl shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                <div>
+                                    <h3 className="text-xs font-extrabold text-foreground uppercase tracking-wider">Выбор участника</h3>
+                                    <p className="text-[10px] text-muted-foreground mt-0.5">Выберите анкету для заполнения</p>
+                                </div>
+                                <select
+                                    value={selectedParticipantId}
+                                    onChange={e => { setSelectedParticipantId(e.target.value); setHasUnsavedChanges(false) }}
+                                    className="w-full sm:w-[280px] px-3 py-2 bg-background border border-border rounded-lg text-foreground text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/30 font-semibold shadow-sm"
+                                >
+                                    <option value="">— Выберите участника —</option>
+                                    <option value={TEMPLATE_ID}>⚙️ Базовый шаблон (для всех)</option>
+                                    {participants.map(p => (
+                                        <option key={p.id} value={p.id}>
+                                            {p.name} {p.program?.name ? `(${p.program.name})` : ''}
+                                        </option>
+                                    ))}
+                                </select>
                             </div>
-                            <select
-                                value={selectedParticipantId}
-                                onChange={e => { setSelectedParticipantId(e.target.value); setHasUnsavedChanges(false) }}
-                                className="w-full sm:w-[320px] px-3 py-2 bg-background border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/50 font-medium"
-                            >
-                                <option value="">— Выберите участника —</option>
-                                <option value={TEMPLATE_ID}>⚙️ Базовый шаблон (для всех)</option>
-                                {participants.map(p => (
-                                    <option key={p.id} value={p.id}>
-                                        {p.name} {p.program?.name ? `(${p.program.name})` : ''}
-                                    </option>
-                                ))}
-                            </select>
-                        </div>
-                    )}
+                        ) : (
+                            <div className="md:col-span-6" />
+                        )}
+
+                        {/* Search Checkpoints Filter */}
+                        {selectedParticipantId && (
+                            <div className="md:col-span-6 bg-card border border-border p-3.5 rounded-xl shadow-sm flex items-center gap-3">
+                                <div className="relative flex-1">
+                                    <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground/60" />
+                                    <Input
+                                        placeholder="Поиск по сферам (например: здоровье, финансы, чтение)..."
+                                        value={catFilter}
+                                        onChange={e => setCatFilter(e.target.value)}
+                                        className="pl-9 h-9 text-xs border-border bg-background focus-visible:ring-indigo-500/30 rounded-lg"
+                                    />
+                                    {catFilter && (
+                                        <button 
+                                            onClick={() => setCatFilter('')}
+                                            className="absolute right-3 top-2.5 text-muted-foreground/60 hover:text-foreground text-xs"
+                                        >
+                                            <X className="w-4 h-4" />
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+                    </div>
 
                     {!selectedParticipantId && !isParticipantMode ? (
-                        <div className="flex flex-col items-center justify-center py-24 gap-4 text-muted-foreground bg-card border border-dashed border-border rounded-2xl">
-                            <div className="p-4 bg-muted/50 rounded-full">
-                                <BarChart3 className="w-12 h-12 text-muted-foreground/50" />
+                        <div className="flex flex-col items-center justify-center py-24 gap-4 text-muted-foreground bg-card border border-dashed border-border rounded-2xl shadow-sm">
+                            <div className="p-4 bg-indigo-500/5 rounded-full border border-indigo-500/10 text-indigo-500">
+                                <BarChart3 className="w-12 h-12" />
                             </div>
-                            <p className="text-lg font-bold text-foreground">Выберите участника</p>
-                            <p className="text-sm text-center max-w-sm">Выберите участника из списка выше, чтобы открыть и отредактировать его колесо жизни</p>
+                            <h3 className="text-lg font-bold text-foreground">Выберите участника для заполнения</h3>
+                            <p className="text-xs text-center max-w-sm text-muted-foreground mt-0.5 leading-relaxed">
+                                Выберите студента или базовый шаблон в выпадающем списке выше, чтобы открыть интерактивную матрицу оценок его колеса жизни.
+                            </p>
                         </div>
                     ) : (
                         <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
-                            {/* Editor Grid */}
-                            <Card className="xl:col-span-8 p-4 sm:p-6 border-border shadow-md overflow-x-auto">
-                                <div className="flex items-center justify-between mb-6 pb-4 border-b border-border/60">
+                            {/* Matrix Grid Editor */}
+                            <Card className="xl:col-span-8 p-4 sm:p-5 border-border shadow-md overflow-x-auto bg-card/60 backdrop-blur-md rounded-2xl">
+                                <div className="flex items-center justify-between mb-5 pb-3.5 border-b border-border/40">
                                     <div>
-                                        <h2 className="text-lg font-bold text-foreground">Таблица оценок</h2>
-                                        <p className="text-xs text-muted-foreground mt-0.5">
-                                            Укажите идеальный барьер и оценки по месяцам (числа от 1 до 10)
+                                        <h2 className="text-sm font-extrabold text-foreground uppercase tracking-wider">Таблица оценок баланса</h2>
+                                        <p className="text-[10px] text-muted-foreground mt-0.5">
+                                            Укажите идеальный порог и выставьте оценки по 10-балльной шкале
                                         </p>
                                     </div>
                                     <Button
                                         size="sm"
                                         variant="outline"
                                         onClick={addCustomCategory}
-                                        className="gap-1.5 border-indigo-600/30 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500/10 font-bold"
+                                        className="gap-1 text-[10.5px] font-bold border-indigo-600/30 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500/5 transition-all"
                                     >
-                                        <Plus className="w-4 h-4" /> Добавить категорию
+                                        <Plus className="w-3.5 h-3.5" /> Добавить категорию
                                     </Button>
                                 </div>
 
-                                <div className="min-w-[900px]">
+                                <div className="min-w-[850px] overflow-hidden">
                                     <table className="w-full text-left border-collapse">
                                         <thead>
-                                            <tr className="border-b border-border/80 text-xs font-bold text-muted-foreground uppercase tracking-wider">
-                                                <th className="py-3 px-2 w-[180px]">Категория</th>
-                                                <th className="py-3 px-2 text-center w-[85px] bg-slate-500/5 dark:bg-slate-500/10">Мой идеал</th>
+                                            <tr className="border-b border-border/80 text-[10px] font-extrabold text-muted-foreground uppercase tracking-wider">
+                                                <th className="py-3 px-2.5 w-[200px]">Категория</th>
+                                                <th className="py-3 px-2 text-center w-[90px] bg-slate-500/5 dark:bg-slate-500/10 rounded-t-lg">Мой идеал</th>
                                                 {MONTHS.map(m => (
-                                                    <th key={m} className="py-3 px-1 text-center w-[58px]">
+                                                    <th key={m} className="py-3 px-1 text-center w-[54px]">
                                                         {m.substring(0, 3)}
                                                     </th>
                                                 ))}
-                                                <th className="py-3 px-2 text-center w-[40px]"></th>
+                                                <th className="py-3 px-2 w-[40px]"></th>
                                             </tr>
                                         </thead>
-                                        <tbody className="divide-y divide-border/60 text-sm">
+                                        <tbody className="divide-y divide-border/40 text-xs">
                                             {categories.map((cat, idx) => {
                                                 const isDefault = DEFAULT_CATEGORY_NAMES.includes(cat)
                                                 const idealVal = idealValues[cat] !== undefined ? idealValues[cat] : 10
-                                                
+                                                const catLower = cat.toLowerCase()
+                                                const catColor = CATEGORY_COLORS[catLower] || PALETTE[idx % PALETTE.length]
+
+                                                const isHighlighted = catFilter
+                                                    ? cat.toLowerCase().includes(catFilter.toLowerCase())
+                                                    : false
+                                                const isDimmed = catFilter && !isHighlighted
+
                                                 return (
-                                                    <tr key={idx} className="hover:bg-muted/20 transition-colors">
-                                                        <td className="py-2.5 px-2">
+                                                    <tr 
+                                                        key={idx} 
+                                                        className={`hover:bg-muted/20 transition-all border-l-2 ${
+                                                            isDimmed ? 'opacity-30 scale-98' : 'opacity-100'
+                                                        }`}
+                                                        style={{ borderLeftColor: catColor }}
+                                                    >
+                                                        {/* Category Name */}
+                                                        <td className="py-2 px-2.5">
                                                             {isDefault ? (
-                                                                <span className="font-semibold text-foreground">{cat}</span>
+                                                                <span className="font-extrabold text-foreground tracking-tight">{cat}</span>
                                                             ) : (
                                                                 <Input
                                                                     value={cat}
                                                                     onChange={e => handleCustomCategoryChange(idx, e.target.value)}
-                                                                    className="h-8 py-0.5 text-xs font-semibold bg-indigo-500/5 border-indigo-500/20 focus:border-indigo-500 w-full"
+                                                                    className="h-8 py-0.5 text-xs font-bold bg-indigo-500/5 border-indigo-500/20 focus:border-indigo-500 focus:ring-0 w-full rounded-md"
                                                                 />
                                                             )}
                                                         </td>
-                                                        <td className="py-2.5 px-2 bg-slate-500/5 dark:bg-slate-500/10">
+
+                                                        {/* Ideal Target */}
+                                                        <td className="py-2 px-2 bg-slate-500/5 dark:bg-slate-500/10 text-center">
                                                             <Input
                                                                 type="number"
                                                                 min={0}
                                                                 max={10}
                                                                 value={idealVal}
                                                                 onChange={e => handleIdealChange(cat, e.target.value)}
-                                                                className="h-8 py-0.5 px-1 text-center font-bold text-indigo-600 dark:text-indigo-400 bg-background"
+                                                                className="h-8 py-0.5 px-1 text-center font-extrabold text-indigo-600 dark:text-indigo-400 bg-background focus:ring-indigo-500/35 rounded-md"
                                                             />
                                                         </td>
+
+                                                        {/* Monthly inputs */}
                                                         {MONTHS.map(m => {
                                                             const val = monthlyValues[m]?.[cat]
                                                             return (
-                                                                <td key={m} className="py-2.5 px-1">
+                                                                <td key={m} className="py-2 px-1">
                                                                     <Input
                                                                         type="number"
                                                                         min={0}
@@ -601,19 +650,22 @@ export function LifeBalancePage({ participantId: fixedParticipantId, participant
                                                                         value={val !== undefined ? val : ''}
                                                                         onChange={e => handleScoreChange(m, cat, e.target.value)}
                                                                         placeholder="-"
-                                                                        className="h-8 py-0.5 px-1 text-center font-semibold placeholder:text-muted-foreground/30 focus-visible:ring-indigo-500/50"
+                                                                        className="h-8 py-0.5 px-1 text-center font-extrabold placeholder:text-muted-foreground/30 focus-visible:ring-indigo-500/30 rounded-md border-border/85"
+                                                                        style={val !== undefined ? { color: catColor, backgroundColor: `${catColor}07`, borderColor: `${catColor}35` } : {}}
                                                                     />
                                                                 </td>
                                                             )
                                                         })}
-                                                        <td className="py-2.5 px-2 text-center">
+
+                                                        {/* Delete custom category */}
+                                                        <td className="py-2 px-2 text-right">
                                                             {!isDefault && (
                                                                 <button
-                                                                    onClick={() => deleteCustomCategory(cat)}
-                                                                    className="p-1 hover:bg-red-500/10 text-muted-foreground hover:text-red-500 rounded-md transition-colors"
-                                                                    title="Удалить категорию"
+                                                                    onClick={() => removeCategory(idx)}
+                                                                    className="p-1 text-muted-foreground hover:text-red-500 hover:bg-red-500/5 rounded transition-all"
+                                                                    title="Удалить показатель"
                                                                 >
-                                                                    <Trash2 className="w-4 h-4" />
+                                                                    <Trash2 className="w-3.5 h-3.5" />
                                                                 </button>
                                                             )}
                                                         </td>
@@ -625,18 +677,20 @@ export function LifeBalancePage({ participantId: fixedParticipantId, participant
                                 </div>
                             </Card>
 
-                            {/* Sidebar Radar Chart Visualization */}
+                            {/* Radar Visualization Column */}
                             <div className="xl:col-span-4 space-y-6">
-                                <Card className="p-4 sm:p-6 border-border shadow-md">
-                                    <h3 className="font-bold text-foreground mb-4">Легенда и фильтр месяцев</h3>
-                                    
-                                    <div className="flex gap-2 mb-4">
-                                        <Button size="sm" variant="outline" onClick={selectAllMonths} className="text-xs h-7">
-                                            Выбрать все
-                                        </Button>
-                                        <Button size="sm" variant="outline" onClick={clearAllMonths} className="text-xs h-7 text-muted-foreground">
-                                            Сбросить
-                                        </Button>
+                                {/* Months Selector & Filters */}
+                                <Card className="p-4 sm:p-5 border-border shadow-md bg-card/85 backdrop-blur-md rounded-2xl">
+                                    <div className="flex items-center justify-between border-b border-border/50 pb-3 mb-3">
+                                        <h3 className="font-extrabold text-xs text-foreground uppercase tracking-wider">Фильтр месяцев</h3>
+                                        <div className="flex gap-1.5">
+                                            <Button variant="ghost" size="sm" onClick={selectAllMonths} className="text-[10px] font-bold h-6 px-1.5 rounded">
+                                                Все
+                                            </Button>
+                                            <Button variant="ghost" size="sm" onClick={clearAllMonths} className="text-[10px] font-bold h-6 px-1.5 rounded text-muted-foreground">
+                                                Сброс
+                                            </Button>
+                                        </div>
                                     </div>
 
                                     <div className="grid grid-cols-3 sm:grid-cols-4 xl:grid-cols-3 gap-2">
@@ -647,7 +701,7 @@ export function LifeBalancePage({ participantId: fixedParticipantId, participant
                                                 <button
                                                     key={m}
                                                     onClick={() => toggleMonthSelected(m)}
-                                                    className={`px-2 py-1.5 rounded-lg border text-xs font-semibold text-center transition-all flex items-center justify-between gap-1 ${
+                                                    className={`px-2.5 py-1.5 rounded-lg border text-[11px] font-bold text-center transition-all flex items-center justify-between gap-1 ${
                                                         isChecked
                                                             ? 'border-indigo-500 text-indigo-600 bg-indigo-500/10'
                                                             : 'border-border text-muted-foreground hover:bg-muted/40'
@@ -663,29 +717,32 @@ export function LifeBalancePage({ participantId: fixedParticipantId, participant
                                     </div>
                                 </Card>
 
-                                <Card className="p-4 sm:p-6 border-border shadow-md flex flex-col items-center">
-                                    <h3 className="font-bold text-foreground mb-4 self-start">Диаграмма баланса</h3>
+                                {/* Radar chart */}
+                                <Card className="p-5 border-border shadow-md flex flex-col items-center bg-card/75 backdrop-blur-md rounded-2xl">
+                                    <h3 className="font-extrabold text-sm text-foreground mb-3 self-start flex items-center gap-1.5">
+                                        <Sparkles className="w-4 h-4 text-amber-500 animate-spin" style={{ animationDuration: '8s' }} />
+                                        Диаграмма баланса
+                                    </h3>
 
-                                    {/* Responsive Container for Radar Chart */}
-                                    <div className="w-full h-[320px] mt-2">
+                                    <div className="w-full h-[320px]">
                                         <ResponsiveContainer width="100%" height="100%">
                                             <RadarChart cx="50%" cy="50%" outerRadius="80%" data={chartData}>
-                                                <PolarGrid stroke="hsl(var(--muted-foreground) / 0.15)" />
+                                                <PolarGrid stroke="hsl(var(--muted-foreground) / 0.18)" />
                                                 <PolarAngleAxis
                                                     dataKey="category"
-                                                    tick={{ fill: 'currentColor', fontSize: 10, fontWeight: 500 }}
+                                                    tick={{ fill: 'currentColor', fontSize: 9, fontWeight: 600 }}
                                                     className="text-muted-foreground"
                                                 />
-                                                <PolarRadiusAxis angle={30} domain={[0, 10]} tick={{ fontSize: 9 }} />
+                                                <PolarRadiusAxis angle={30} domain={[0, 10]} tick={{ fontSize: 8 }} />
                                                 
                                                 {/* Ideal Base Line */}
                                                 <Radar
                                                     name="Мой идеал"
                                                     dataKey="ideal"
-                                                    stroke="#64748b"
+                                                    stroke="#94a3b8"
                                                     strokeDasharray="4 4"
                                                     fill="none"
-                                                    strokeWidth={2}
+                                                    strokeWidth={1.5}
                                                 />
 
                                                 {/* Selected Months */}
@@ -697,21 +754,33 @@ export function LifeBalancePage({ participantId: fixedParticipantId, participant
                                                             name={m}
                                                             dataKey={m}
                                                             stroke={MONTH_COLORS[m]}
-                                                            fill={MONTH_COLORS[m]}
-                                                            fillOpacity={0.06}
-                                                            strokeWidth={1.5}
+                                                            fill={`url(#gradient-${m})`}
+                                                            fillOpacity={0.2}
+                                                            strokeWidth={2}
                                                         />
                                                     )
                                                 })}
+
+                                                {/* Gradient definitions for glowing charts */}
+                                                <defs>
+                                                    {MONTHS.map(m => (
+                                                        <linearGradient id={`gradient-${m}`} key={m} x1="0" y1="0" x2="0" y2="1">
+                                                            <stop offset="0%" stopColor={MONTH_COLORS[m]} stopOpacity={0.45} />
+                                                            <stop offset="100%" stopColor={MONTH_COLORS[m]} stopOpacity={0.01} />
+                                                        </linearGradient>
+                                                    ))}
+                                                </defs>
+
                                                 <Tooltip
                                                     contentStyle={{
                                                         backgroundColor: 'hsl(var(--background))',
                                                         borderColor: 'hsl(var(--border))',
-                                                        borderRadius: '8px',
-                                                        fontSize: '12px'
+                                                        borderRadius: '12px',
+                                                        fontSize: '11px',
+                                                        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.08)'
                                                     }}
                                                 />
-                                                <Legend wrapperStyle={{ fontSize: '10px', marginTop: '10px' }} />
+                                                <Legend wrapperStyle={{ fontSize: '9px', marginTop: '10px', fontWeight: 600 }} />
                                             </RadarChart>
                                         </ResponsiveContainer>
                                     </div>
@@ -722,28 +791,28 @@ export function LifeBalancePage({ participantId: fixedParticipantId, participant
                 </div>
             ) : (
                 /* Report View (Admin Only) */
-                <Card className="p-4 sm:p-6 border-border shadow-md space-y-6">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border/50 pb-4">
+                <Card className="p-5 border-border shadow-md space-y-6 bg-card rounded-2xl">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border/50 pb-4">
                         <div>
-                            <h2 className="text-xl font-bold text-foreground">История и статистика заполнения</h2>
-                            <p className="text-xs text-muted-foreground mt-0.5">
-                                Участники и месяцы, за которые заполнено колесо жизни в {year} году
+                            <h2 className="text-lg font-extrabold text-foreground">Отчет по заполнению</h2>
+                            <p className="text-[11px] text-muted-foreground mt-0.5">
+                                Участники и месяцы, в которых заполнялся чек-лист колеса жизни в {year} году
                             </p>
                         </div>
-                        <div className="flex flex-col sm:flex-row gap-3">
+                        <div className="flex flex-col sm:flex-row gap-2.5">
                             <div className="relative">
-                                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                                <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground/60" />
                                 <Input
                                     placeholder="Поиск по имени..."
                                     value={searchTerm}
                                     onChange={e => setSearchTerm(e.target.value)}
-                                    className="pl-9 w-full sm:w-[220px] h-9"
+                                    className="pl-8.5 w-full sm:w-[200px] h-9 text-xs border-border bg-background focus-visible:ring-indigo-500/30 rounded-lg"
                                 />
                             </div>
                             <select
                                 value={programFilter}
                                 onChange={e => setProgramFilter(e.target.value)}
-                                className="px-3 py-1.5 bg-background border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/50 h-9 font-medium"
+                                className="px-3 py-1 bg-background border border-border rounded-lg text-foreground text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/30 h-9 font-semibold shadow-sm"
                             >
                                 <option value="all">Все программы</option>
                                 {uniquePrograms.map(p => (
@@ -755,33 +824,33 @@ export function LifeBalancePage({ participantId: fixedParticipantId, participant
 
                     {isReportLoading ? (
                         <div className="flex flex-col items-center justify-center py-20 gap-2 text-muted-foreground">
-                            <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
-                            <p className="text-sm">Загрузка данных отчета...</p>
+                            <Loader2 className="w-6 h-6 animate-spin text-indigo-600" />
+                            <p className="text-xs">Загрузка данных отчета...</p>
                         </div>
                     ) : (
                         <div className="overflow-x-auto">
                             <table className="w-full text-left border-collapse">
                                 <thead>
-                                    <tr className="border-b border-border text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                                    <tr className="border-b border-border text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
                                         <th className="py-3 px-4">Участник</th>
-                                        <th className="py-3 px-4 text-center">Всего заполнено месяцев</th>
+                                        <th className="py-3 px-4 text-center w-[180px]">Всего заполнено месяцев</th>
                                         <th className="py-3 px-4">Месяцы заполнения</th>
-                                        <th className="py-3 px-4 text-right">Действие</th>
+                                        <th className="py-3 px-4 text-right w-[100px]">Действие</th>
                                     </tr>
                                 </thead>
-                                <tbody className="divide-y divide-border text-sm">
+                                <tbody className="divide-y divide-border/60 text-xs">
                                     {reportRows.map(({ participant, filledMonths, count }) => (
                                         <tr key={participant.id} className="hover:bg-muted/30 transition-colors">
                                             <td className="py-3.5 px-4">
                                                 <div className="font-bold text-foreground">{participant.name}</div>
                                                 {participant.program?.name && (
-                                                    <Badge variant="secondary" className="mt-1 text-[10px] px-2 py-0.5">
+                                                    <Badge variant="secondary" className="mt-0.5 text-[9px] px-1.5 py-0 border-none font-medium">
                                                         {participant.program.name}
                                                     </Badge>
                                                 )}
                                             </td>
                                             <td className="py-3.5 px-4 text-center">
-                                                <span className={`inline-flex items-center justify-center px-3 py-1 rounded-full text-xs font-bold ${
+                                                <span className={`inline-flex items-center justify-center px-2 py-0.5 rounded-full text-[10px] font-bold ${
                                                     count > 0 ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400' : 'bg-muted text-muted-foreground'
                                                 }`}>
                                                     {count} из 12
@@ -789,43 +858,36 @@ export function LifeBalancePage({ participantId: fixedParticipantId, participant
                                             </td>
                                             <td className="py-3.5 px-4">
                                                 {count > 0 ? (
-                                                    <div className="flex flex-wrap gap-1.5 max-w-[500px]">
+                                                    <div className="flex flex-wrap gap-1.5">
                                                         {filledMonths.map(m => (
                                                             <Badge
                                                                 key={m}
                                                                 variant="outline"
-                                                                className="text-xs px-2 py-0.5 font-semibold bg-emerald-500/5 text-emerald-600 border-emerald-500/20"
+                                                                className="text-[9px] px-1.5 py-0 font-bold bg-emerald-500/5 text-emerald-600 border-emerald-500/20"
                                                             >
                                                                 {m}
                                                             </Badge>
                                                         ))}
                                                     </div>
                                                 ) : (
-                                                    <span className="text-xs text-muted-foreground italic">Не заполнено</span>
+                                                    <span className="text-[10px] text-muted-foreground italic">Не заполнено</span>
                                                 )}
                                             </td>
                                             <td className="py-3.5 px-4 text-right">
                                                 <Button
                                                     variant="ghost"
                                                     size="sm"
-                                                    className="gap-1.5 hover:text-indigo-600 hover:bg-indigo-500/10 text-muted-foreground transition-all duration-200"
+                                                    className="gap-1 hover:text-indigo-600 hover:bg-indigo-500/10 text-muted-foreground text-[10.5px] h-7 px-2 font-bold"
                                                     onClick={() => {
                                                         setSelectedParticipantId(participant.id)
                                                         setActiveTab('editor')
-                                                        
-                                                        // Toggle months that are filled
-                                                        const monthChecks: Record<string, boolean> = {}
                                                         if (filledMonths.length > 0) {
-                                                            filledMonths.forEach(m => {
-                                                                monthChecks[m] = true
-                                                            })
-                                                        } else {
-                                                            monthChecks['Январь'] = true
+                                                            const lastM = filledMonths[filledMonths.length - 1]
+                                                            setSelectedMonths({ [lastM]: true })
                                                         }
-                                                        setSelectedMonths(monthChecks)
                                                     }}
                                                 >
-                                                    <Eye className="w-4 h-4" /> Посмотреть
+                                                    <Eye className="w-3.5 h-3.5" /> Посмотреть
                                                 </Button>
                                             </td>
                                         </tr>
@@ -833,7 +895,7 @@ export function LifeBalancePage({ participantId: fixedParticipantId, participant
 
                                     {reportRows.length === 0 && (
                                         <tr>
-                                            <td colSpan={4} className="py-12 text-center text-muted-foreground italic">
+                                            <td colSpan={4} className="py-10 text-center text-muted-foreground italic text-xs">
                                                 Участники не найдены
                                             </td>
                                         </tr>
