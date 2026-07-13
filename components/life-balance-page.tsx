@@ -653,7 +653,7 @@ export function LifeBalancePage({ participantId: fixedParticipantId, participant
                                                             : 'border-border text-muted-foreground hover:bg-muted/40'
                                                     }`}
                                                 >
-                                                    <span className="truncate">{m.substring(0, 5)}</span>
+                                                    <span className="truncate">{m}</span>
                                                     {hasData && (
                                                         <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" title="Есть заполнение" />
                                                     )}
