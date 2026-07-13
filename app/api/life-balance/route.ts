@@ -1,22 +1,27 @@
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-client'
 
-// GET - Fetch life wheel entry for a participant/period
+// GET - Fetch life balance entry for a participant/year
 export async function GET(req: Request) {
     try {
         const { searchParams } = new URL(req.url)
         const participant_id = searchParams.get('participant_id')
-        const period_type = searchParams.get('period_type')
-        const period_label = searchParams.get('period_label')
+        const yearStr = searchParams.get('year')
 
         let query = supabaseAdmin
-            .from('life_wheel_entries')
+            .from('life_balance_entries')
             .select('*')
-            .order('period_label', { ascending: false })
+            .order('year', { ascending: false })
 
-        if (participant_id) query = query.eq('participant_id', participant_id)
-        if (period_type) query = query.eq('period_type', period_type)
-        if (period_label) query = query.eq('period_label', period_label)
+        if (participant_id) {
+            query = query.eq('participant_id', participant_id)
+        }
+        if (yearStr) {
+            const year = parseInt(yearStr, 10)
+            if (!isNaN(year)) {
+                query = query.eq('year', year)
+            }
+        }
 
         const { data, error } = await query
 
@@ -24,33 +29,38 @@ export async function GET(req: Request) {
 
         return NextResponse.json({ data }, { status: 200 })
     } catch (error: any) {
-        console.error('Error fetching life wheel:', error)
+        console.error('Error fetching life balance:', error)
         return NextResponse.json({ error: error.message }, { status: 500 })
     }
 }
 
-// POST - Upsert life wheel entry
+// POST - Upsert life balance entry
 export async function POST(req: Request) {
     try {
         const body = await req.json()
-        const { participant_id, period_type, period_label, categories } = body
+        const { participant_id, year, ideal_values, monthly_values } = body
 
-        if (!participant_id || !period_type || !period_label || !categories) {
+        if (!participant_id || year === undefined || !ideal_values || !monthly_values) {
             return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
         }
 
+        const parsedYear = parseInt(year, 10)
+        if (isNaN(parsedYear)) {
+            return NextResponse.json({ error: 'Invalid year' }, { status: 400 })
+        }
+
         const { data, error } = await supabaseAdmin
-            .from('life_wheel_entries')
+            .from('life_balance_entries')
             .upsert(
                 {
                     participant_id,
-                    period_type,
-                    period_label,
-                    categories,
+                    year: parsedYear,
+                    ideal_values,
+                    monthly_values,
                     updated_at: new Date().toISOString(),
                 },
                 {
-                    onConflict: 'participant_id,period_type,period_label',
+                    onConflict: 'participant_id,year',
                 }
             )
             .select()
@@ -62,12 +72,12 @@ export async function POST(req: Request) {
 
         return NextResponse.json({ data }, { status: 200 })
     } catch (error: any) {
-        console.error('API Error saving life wheel:', error)
+        console.error('API Error saving life balance:', error)
         return NextResponse.json({ error: error.message || String(error) }, { status: 500 })
     }
 }
 
-// DELETE - Delete life wheel entry
+// DELETE - Delete life balance entry
 export async function DELETE(req: Request) {
     try {
         const body = await req.json()
@@ -78,7 +88,7 @@ export async function DELETE(req: Request) {
         }
 
         const { error } = await supabaseAdmin
-            .from('life_wheel_entries')
+            .from('life_balance_entries')
             .delete()
             .eq('id', id)
 
@@ -86,7 +96,7 @@ export async function DELETE(req: Request) {
 
         return NextResponse.json({ success: true }, { status: 200 })
     } catch (error: any) {
-        console.error('Error deleting life wheel entry:', error)
+        console.error('Error deleting life balance entry:', error)
         return NextResponse.json({ error: error.message }, { status: 500 })
     }
 }

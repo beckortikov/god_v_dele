@@ -13,6 +13,7 @@ import { ProgramsPage } from '@/components/programs-page'
 import OPiUReportsPage from '@/components/opiu-reports-page'
 import { LoginPage } from '@/components/login'
 import { LifeWheelPage } from '@/components/life-wheel-page'
+import { LifeBalancePage } from '@/components/life-balance-page'
 
 import { HRDashboard } from '@/components/hr/hr-dashboard'
 import { EmployeesPage } from '@/components/hr/employees-page'
@@ -154,6 +155,12 @@ export default function Home() {
           {currentPage === 'balance' && <BalanceForecastPage />}
           {currentPage === 'life-wheel' && (
             <LifeWheelPage
+              participantId={(userRole === 'employee' || userRole === 'manager' || userRole === 'participant') && userParticipantId ? userParticipantId : undefined}
+              participantName={userFullName || undefined}
+            />
+          )}
+          {currentPage === 'life-balance' && (
+            <LifeBalancePage
               participantId={(userRole === 'employee' || userRole === 'manager' || userRole === 'participant') && userParticipantId ? userParticipantId : undefined}
               participantName={userFullName || undefined}
             />

@@ -22,7 +22,8 @@ const pageNames: Record<PageType, string> = {
   offline: 'Оффлайн мероприятия',
   balance: 'Прогноз баланса',
   'opiu-reports': 'Ежемесячные отчеты ОПиУ',
-  'life-wheel': 'Колесо баланса',
+  'life-wheel': 'Колесо внимания',
+  'life-balance': 'Колесо баланса',
   // HR pages
   'hr-dashboard': 'HR Дашборд',
   employees: 'Сотрудники',
