@@ -17,7 +17,7 @@ import {
 import { Button } from '@/components/ui/button'
 
 export type PageType =
-  | 'dashboard' | 'participants' | 'income' | 'plan-fact' | 'offline' | 'balance' | 'programs' | 'opiu-reports' | 'life-wheel' | 'life-balance'
+  | 'dashboard' | 'participants' | 'income' | 'plan-fact' | 'offline' | 'balance' | 'programs' | 'opiu-reports' | 'life-wheel' | 'life-balance' | 'business-wheel'
   | 'hr-dashboard' | 'employees' | 'schedule' | 'payroll' | 'vacations' | 'timesheet'
   | 'users' | 'employee-dashboard' | 'manager-dashboard'
 
@@ -40,7 +40,8 @@ export function Sidebar({ currentPage, onPageChange, isOpen = true, onClose, mod
     { id: 'offline', icon: Calendar, label: 'Оффлайн события', section: 'finance' },
     { id: 'balance', icon: PieChart, label: 'Прогноз баланса', section: 'finance' },
     { id: 'life-wheel', icon: PieChart, label: 'Колесо внимания', section: 'participants' },
-    { id: 'life-balance', icon: PieChart, label: 'Колесо баланса', section: 'participants' },
+    { id: 'life-balance', icon: PieChart, label: 'Колесо жизни', section: 'participants' },
+    { id: 'business-wheel', icon: PieChart, label: 'Колесо бизнеса', section: 'participants' },
     { id: 'opiu-reports', icon: FileText, label: 'Ежемесячные отчеты', section: 'opiu' },
   ]
 
@@ -60,12 +61,14 @@ export function Sidebar({ currentPage, onPageChange, isOpen = true, onClose, mod
   const employeeMenuItems: { id: PageType; icon: any; label: string; section?: string; badge?: any }[] = [
     { id: 'employee-dashboard', icon: User, label: 'Мой кабинет' },
     { id: 'life-wheel', icon: PieChart, label: 'Колесо внимания' },
-    { id: 'life-balance', icon: PieChart, label: 'Колесо баланса' },
+    { id: 'life-balance', icon: PieChart, label: 'Колесо жизни' },
+    { id: 'business-wheel', icon: PieChart, label: 'Колесо бизнеса' },
   ]
 
   const participantMenuItems: { id: PageType; icon: any; label: string; section?: string; badge?: any }[] = [
     { id: 'life-wheel', icon: PieChart, label: 'Колесо внимания' },
-    { id: 'life-balance', icon: PieChart, label: 'Колесо баланса' },
+    { id: 'life-balance', icon: PieChart, label: 'Колесо жизни' },
+    { id: 'business-wheel', icon: PieChart, label: 'Колесо бизнеса' },
   ]
 
   if (userRole === 'manager') {

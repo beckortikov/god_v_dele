@@ -23,7 +23,8 @@ const pageNames: Record<PageType, string> = {
   balance: 'Прогноз баланса',
   'opiu-reports': 'Ежемесячные отчеты ОПиУ',
   'life-wheel': 'Колесо внимания',
-  'life-balance': 'Колесо баланса',
+  'life-balance': 'Колесо жизни',
+  'business-wheel': 'Колесо бизнеса',
   // HR pages
   'hr-dashboard': 'HR Дашборд',
   employees: 'Сотрудники',

@@ -418,7 +418,7 @@ export function LifeBalancePage({ participantId: fixedParticipantId, participant
                 <div>
                     <h1 className="text-3xl font-extrabold tracking-tight text-foreground flex items-center gap-2">
                         <span className="text-3xl">☸️</span>
-                        Колесо баланса жизни
+                        Колесо жизни
                         {isParticipantMode && participantName && (
                             <Badge variant="secondary" className="ml-2 text-sm font-normal py-1 px-3">
                                 {participantName}
@@ -525,7 +525,7 @@ export function LifeBalancePage({ participantId: fixedParticipantId, participant
                                 <BarChart3 className="w-12 h-12 text-muted-foreground/50" />
                             </div>
                             <p className="text-lg font-bold text-foreground">Выберите участника</p>
-                            <p className="text-sm text-center max-w-sm">Выберите участника из списка выше, чтобы открыть и отредактировать его колесо баланса жизни</p>
+                            <p className="text-sm text-center max-w-sm">Выберите участника из списка выше, чтобы открыть и отредактировать его колесо жизни</p>
                         </div>
                     ) : (
                         <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
@@ -727,7 +727,7 @@ export function LifeBalancePage({ participantId: fixedParticipantId, participant
                         <div>
                             <h2 className="text-xl font-bold text-foreground">История и статистика заполнения</h2>
                             <p className="text-xs text-muted-foreground mt-0.5">
-                                Участники и месяцы, за которые заполнено колесо баланса в {year} году
+                                Участники и месяцы, за которые заполнено колесо жизни в {year} году
                             </p>
                         </div>
                         <div className="flex flex-col sm:flex-row gap-3">
