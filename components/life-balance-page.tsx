@@ -248,14 +248,14 @@ export function LifeBalancePage({ participantId: fixedParticipantId, participant
 
     // Grid modifications
     const handleIdealChange = (cat: string, val: string) => {
-        const numVal = val === '' ? 10 : Math.min(10, Math.max(1, parseInt(val, 10) || 1))
+        const numVal = val === '' ? 10 : Math.min(10, Math.max(0, parseInt(val, 10) || 0))
         setIdealValues(prev => ({ ...prev, [cat]: numVal }))
         setHasUnsavedChanges(true)
     }
 
     const handleScoreChange = (month: string, cat: string, val: string) => {
         const parsed = parseInt(val, 10)
-        const finalVal = isNaN(parsed) ? 0 : Math.min(10, Math.max(1, parsed))
+        const finalVal = isNaN(parsed) ? 0 : Math.min(10, Math.max(0, parsed))
         
         setMonthlyValues(prev => {
             const monthScores = { ...(prev[month] || {}) }
@@ -583,7 +583,7 @@ export function LifeBalancePage({ participantId: fixedParticipantId, participant
                                                         <td className="py-2.5 px-2 bg-slate-500/5 dark:bg-slate-500/10">
                                                             <Input
                                                                 type="number"
-                                                                min={1}
+                                                                min={0}
                                                                 max={10}
                                                                 value={idealVal}
                                                                 onChange={e => handleIdealChange(cat, e.target.value)}
@@ -596,7 +596,7 @@ export function LifeBalancePage({ participantId: fixedParticipantId, participant
                                                                 <td key={m} className="py-2.5 px-1">
                                                                     <Input
                                                                         type="number"
-                                                                        min={1}
+                                                                        min={0}
                                                                         max={10}
                                                                         value={val !== undefined ? val : ''}
                                                                         onChange={e => handleScoreChange(m, cat, e.target.value)}
