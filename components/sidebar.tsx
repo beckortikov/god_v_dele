@@ -120,11 +120,11 @@ export function Sidebar({ currentPage, onPageChange, isOpen = true, onClose, mod
             <h1 className="text-xl sm:text-2xl font-bold text-sidebar-primary">Год в деле</h1>
             <p className="text-xs text-sidebar-foreground/60 mt-1">Обучение твой рост</p>
           </div>
-          {/* Close button - mobile only */}
+          {/* Close button */}
           {onClose && (
             <button
               onClick={onClose}
-              className="lg:hidden p-2 hover:bg-sidebar-accent/50 rounded-lg transition-colors"
+              className="p-2 hover:bg-sidebar-accent/50 rounded-lg transition-colors"
             >
               <X className="w-5 h-5" />
             </button>
