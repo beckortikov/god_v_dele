@@ -161,20 +161,20 @@ export default function Home() {
           {currentPage === 'balance' && <BalanceForecastPage />}
           {currentPage === 'life-wheel' && (
             <LifeWheelPage
-              participantId={(userRole === 'employee' || userRole === 'manager' || userRole === 'participant') && userParticipantId ? userParticipantId : undefined}
-              participantName={userFullName || undefined}
+              participantId={userRole === 'participant' && userParticipantId ? userParticipantId : undefined}
+              participantName={userRole === 'participant' ? (userFullName || undefined) : undefined}
             />
           )}
           {currentPage === 'life-balance' && (
             <LifeBalancePage
-              participantId={(userRole === 'employee' || userRole === 'manager' || userRole === 'participant') && userParticipantId ? userParticipantId : undefined}
-              participantName={userFullName || undefined}
+              participantId={userRole === 'participant' && userParticipantId ? userParticipantId : undefined}
+              participantName={userRole === 'participant' ? (userFullName || undefined) : undefined}
             />
           )}
           {currentPage === 'business-wheel' && (
             <BusinessWheelPage
-              participantId={(userRole === 'employee' || userRole === 'manager' || userRole === 'participant') && userParticipantId ? userParticipantId : undefined}
-              participantName={userFullName || undefined}
+              participantId={userRole === 'participant' && userParticipantId ? userParticipantId : undefined}
+              participantName={userRole === 'participant' ? (userFullName || undefined) : undefined}
             />
           )}
 
