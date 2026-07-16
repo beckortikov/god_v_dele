@@ -39,7 +39,7 @@ const pageNames: Record<PageType, string> = {
 
 export function TopNav({ currentPage, onLogout, onMenuClick, mode, onModeChange, userRole = 'admin' }: TopNavProps) {
   return (
-    <header className="bg-card border-b border-border px-3 sm:px-6 py-3 sm:py-4 flex items-center justify-between">
+    <header className="bg-card border-b border-border px-3 sm:px-6 py-2.5 flex items-center justify-between h-14 shrink-0">
       <div className="flex items-center gap-3">
         {/* Hamburger menu - mobile only */}
         {onMenuClick && (
@@ -52,33 +52,28 @@ export function TopNav({ currentPage, onLogout, onMenuClick, mode, onModeChange,
             <Menu className="w-5 h-5" />
           </Button>
         )}
-        <div className="flex flex-col">
-          <div className="flex items-center gap-2 mb-1">
-            {userRole === 'admin' && (
-              <div className="flex bg-muted rounded-lg p-1">
-                <button
-                  onClick={() => onModeChange('finance')}
-                  className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${mode === 'finance'
-                    ? 'bg-background text-foreground shadow-sm'
-                    : 'text-muted-foreground hover:text-foreground'
-                    }`}
-                >
-                  Финансы
-                </button>
-                <button
-                  onClick={() => onModeChange('hr')}
-                  className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${mode === 'hr'
-                    ? 'bg-background text-foreground shadow-sm'
-                    : 'text-muted-foreground hover:text-foreground'
-                    }`}
-                >
-                  HR
-                </button>
-              </div>
-            )}
+        {userRole === 'admin' && (
+          <div className="flex bg-muted rounded-lg p-1">
+            <button
+              onClick={() => onModeChange('finance')}
+              className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${mode === 'finance'
+                ? 'bg-background text-foreground shadow-sm'
+                : 'text-muted-foreground hover:text-foreground'
+                }`}
+            >
+              Финансы
+            </button>
+            <button
+              onClick={() => onModeChange('hr')}
+              className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${mode === 'hr'
+                ? 'bg-background text-foreground shadow-sm'
+                : 'text-muted-foreground hover:text-foreground'
+                }`}
+            >
+              HR
+            </button>
           </div>
-          <h2 className="text-base sm:text-xl font-semibold text-foreground truncate">{pageNames[currentPage]}</h2>
-        </div>
+        )}
       </div>
       <div className="flex items-center gap-1 sm:gap-2 md:gap-4">
         <Button variant="ghost" size="icon" className="text-foreground hover:bg-muted touch-manipulation hidden sm:flex">
