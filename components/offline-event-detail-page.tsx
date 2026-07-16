@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { ArrowLeft, Plus, Trash2, Edit2, Download } from 'lucide-react'
+import { ArrowLeft, Plus, Trash2, Edit2, Download, Search } from 'lucide-react'
 
 // Types
 interface OfflineEvent {
@@ -58,6 +58,19 @@ interface Expense {
     exchange_rate?: number
 }
 
+interface Participant {
+    id: string
+    name: string
+    email?: string
+    phone?: string
+    status?: string
+    program_id?: string
+    program?: {
+        id: string
+        name: string
+    }
+}
+
 interface FinancialSummary {
     total_income: number
     total_expenses: number
@@ -81,14 +94,19 @@ export function EventDetailPage({ eventId, onBack }: EventDetailPageProps) {
     const [expenses, setExpenses] = useState<Expense[]>([])
     const [summary, setSummary] = useState<FinancialSummary | null>(null)
     const [loading, setLoading] = useState(true)
-    const [participantsList, setParticipantsList] = useState<{ id: string, name: string }[]>([])
+    const [participantsList, setParticipantsList] = useState<Participant[]>([])
 
     // Modal states
     const [isAddAttendeeOpen, setIsAddAttendeeOpen] = useState(false)
     const [isAddExpenseOpen, setIsAddExpenseOpen] = useState(false)
 
+    // Filter states for participant dialog
+    const [searchQuery, setSearchQuery] = useState('')
+    const [filterProgramId, setFilterProgramId] = useState('all')
+    const [selectedParticipantIds, setSelectedParticipantIds] = useState<string[]>([])
+
     const [newAttendee, setNewAttendee] = useState<Partial<Attendee>>({
-        attendee_type: 'guest',
+        attendee_type: 'participant',
         payment_received: 0,
         attendance_status: 'registered',
         payment_notes: '',
@@ -175,13 +193,70 @@ export function EventDetailPage({ eventId, onBack }: EventDetailPageProps) {
             setIsAddAttendeeOpen(false)
             fetchData()
             setNewAttendee({
-                attendee_type: 'guest',
+                attendee_type: 'participant',
                 payment_received: 0,
                 attendance_status: 'registered',
                 payment_notes: ''
             })
         } catch (error: any) {
             alert('Ошибка при добавлении участника: ' + error.message)
+        }
+    }
+
+    const handleAddAttendeesBatch = async () => {
+        if (selectedParticipantIds.length === 0) return
+
+        try {
+            let finalAmountUSD = Number(newAttendee.payment_received || 0)
+            let originalAmount = Number(newAttendee.payment_received || 0)
+            let rate = 1
+
+            if (attendeeCurrency === 'TJS') {
+                rate = Number(attendeeExchangeRate)
+                if (!rate || rate <= 0) {
+                    alert('Введите корректный курс обмена')
+                    return
+                }
+                finalAmountUSD = originalAmount / rate
+            }
+
+            const attendeesToInsert = selectedParticipantIds.map(participantId => {
+                return {
+                    attendee_type: 'participant',
+                    participant_id: participantId,
+                    payment_received: finalAmountUSD,
+                    original_amount: originalAmount,
+                    currency: attendeeCurrency,
+                    exchange_rate: rate,
+                    attendance_status: newAttendee.attendance_status || 'registered',
+                    payment_notes: newAttendee.payment_notes || ''
+                }
+            })
+
+            const res = await fetch(`/api/offline-events/${eventId}/attendees`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ attendees: attendeesToInsert })
+            })
+            const result = await res.json()
+            if (result.error) throw new Error(result.error)
+
+            setIsAddAttendeeOpen(false)
+            fetchData()
+            // Reset states
+            setSelectedParticipantIds([])
+            setSearchQuery('')
+            setFilterProgramId('all')
+            setNewAttendee({
+                attendee_type: 'participant',
+                payment_received: 0,
+                attendance_status: 'registered',
+                payment_notes: '',
+                currency: 'TJS',
+                exchange_rate: 10.5
+            })
+        } catch (error: any) {
+            alert('Ошибка при добавлении участников: ' + error.message)
         }
     }
 
@@ -292,6 +367,20 @@ export function EventDetailPage({ eventId, onBack }: EventDetailPageProps) {
         cancelled: 'Отменил',
         no_show: 'Не пришел'
     }
+
+    // Filter available participants for event registration (hide already registered)
+    const existingParticipantIds = new Set(attendees.map(a => a.participant_id).filter(Boolean))
+    const availableParticipants = participantsList.filter(p => !existingParticipantIds.has(p.id))
+
+    const filteredAvailableParticipants = availableParticipants.filter(p => {
+        const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            (p.email && p.email.toLowerCase().includes(searchQuery.toLowerCase())) ||
+            (p.phone && p.phone.toLowerCase().includes(searchQuery.toLowerCase()))
+        
+        const matchesProgram = filterProgramId === 'all' || p.program_id === filterProgramId
+        
+        return matchesSearch && matchesProgram
+    })
 
     return (
         <div className="space-y-6">
@@ -483,115 +572,309 @@ export function EventDetailPage({ eventId, onBack }: EventDetailPageProps) {
             </Tabs>
 
             {/* Modal: Add Attendee */}
-            <Dialog open={isAddAttendeeOpen} onOpenChange={setIsAddAttendeeOpen}>
-                <DialogContent className="max-w-md">
+            <Dialog open={isAddAttendeeOpen} onOpenChange={(open) => {
+                setIsAddAttendeeOpen(open)
+                if (!open) {
+                    setSelectedParticipantIds([])
+                    setSearchQuery('')
+                    setFilterProgramId('all')
+                    setNewAttendee({
+                        attendee_type: 'participant',
+                        payment_received: 0,
+                        attendance_status: 'registered',
+                        payment_notes: '',
+                        currency: 'TJS',
+                        exchange_rate: 10.5
+                    })
+                }
+            }}>
+                <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
                     <DialogHeader>
-                        <DialogTitle>Добавить Участника</DialogTitle>
+                        <DialogTitle>Добавить Участников на Мероприятие</DialogTitle>
                     </DialogHeader>
-                    <div className="space-y-4 py-4">
-                        <div className="space-y-2">
-                            <Label>Тип</Label>
-                            <Select
-                                value={newAttendee.attendee_type}
-                                onValueChange={(v: any) => setNewAttendee({ ...newAttendee, attendee_type: v })}
-                            >
-                                <SelectTrigger>
-                                    <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="participant">Участник программы</SelectItem>
-                                    <SelectItem value="guest">Гость</SelectItem>
-                                </SelectContent>
-                            </Select>
-                        </div>
+                    
+                    <Tabs value={newAttendee.attendee_type} onValueChange={(val: any) => setNewAttendee({ ...newAttendee, attendee_type: val })} className="flex-1 flex flex-col overflow-hidden">
+                        <TabsList className="grid w-full grid-cols-2">
+                            <TabsTrigger value="participant">Участники программ ({availableParticipants.length})</TabsTrigger>
+                            <TabsTrigger value="guest">Гости</TabsTrigger>
+                        </TabsList>
 
-                        {newAttendee.attendee_type === 'participant' ? (
-                            <div className="space-y-2">
-                                <Label>Выберите Участника</Label>
-                                <Select
-                                    value={newAttendee.participant_id}
-                                    onValueChange={(v) => setNewAttendee({ ...newAttendee, participant_id: v })}
-                                >
-                                    <SelectTrigger>
-                                        <SelectValue placeholder="Поиск..." />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {participantsList.map(p => (
-                                            <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                        ) : (
-                            <>
-                                <div className="space-y-2">
-                                    <Label>Имя Гостя</Label>
-                                    <Input
-                                        value={newAttendee.guest_name || ''}
-                                        onChange={e => setNewAttendee({ ...newAttendee, guest_name: e.target.value })}
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <Label>Телефон / Email</Label>
-                                    <Input
-                                        value={newAttendee.guest_phone || ''}
-                                        onChange={e => setNewAttendee({ ...newAttendee, guest_phone: e.target.value })}
-                                    />
-                                </div>
-                            </>
-                        )}
-
-                        <div className="flex gap-4 items-end">
-                            <div className="flex-1 space-y-2">
-                                <Label>Получено Оплаты</Label>
+                        {/* Participant Tab */}
+                        <TabsContent value="participant" className="flex-1 flex flex-col overflow-hidden space-y-4 pt-4 min-h-0">
+                            {/* Search & Program Filter */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                 <div className="relative">
+                                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                                     <Input
-                                        type="number"
-                                        value={newAttendee.payment_received}
-                                        onChange={e => setNewAttendee({ ...newAttendee, payment_received: parseFloat(e.target.value) || 0 })}
+                                        type="text"
+                                        placeholder="Поиск по имени, email, тел..."
+                                        value={searchQuery}
+                                        onChange={(e) => setSearchQuery(e.target.value)}
+                                        className="pl-8"
                                     />
-                                    <div className="absolute right-1 top-1">
-                                        <select
-                                            value={attendeeCurrency}
-                                            onChange={(e) => setAttendeeCurrency(e.target.value as 'USD' | 'TJS')}
-                                            className="h-8 border-none bg-transparent focus:ring-0 text-xs font-semibold text-muted-foreground cursor-pointer"
-                                            style={{ outline: 'none' }}
-                                        >
-                                            <option value="USD">USD</option>
-                                            <option value="TJS">TJS</option>
-                                        </select>
+                                </div>
+                                <div>
+                                    <select
+                                        value={filterProgramId}
+                                        onChange={(e) => setFilterProgramId(e.target.value)}
+                                        className="w-full h-10 px-3 py-2 bg-background border border-input rounded-md text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring"
+                                    >
+                                        <option value="all">Все программы</option>
+                                        {Array.from(new Set(participantsList.map(p => p.program?.id).filter(Boolean))).map(id => {
+                                            const prog = participantsList.find(p => p.program?.id === id)?.program;
+                                            return prog ? <option key={prog.id} value={prog.id}>{prog.name}</option> : null;
+                                        })}
+                                    </select>
+                                </div>
+                            </div>
+
+                            {/* Select all & Count */}
+                            <div className="flex justify-between items-center px-1 text-xs text-muted-foreground">
+                                <div className="flex items-center gap-2">
+                                    <input
+                                        type="checkbox"
+                                        id="selectAll"
+                                        checked={filteredAvailableParticipants.length > 0 && filteredAvailableParticipants.every(p => selectedParticipantIds.includes(p.id))}
+                                        onChange={(e) => {
+                                            if (e.target.checked) {
+                                                const newSelected = [...selectedParticipantIds];
+                                                filteredAvailableParticipants.forEach(p => {
+                                                    if (!newSelected.includes(p.id)) newSelected.push(p.id);
+                                                });
+                                                setSelectedParticipantIds(newSelected);
+                                            } else {
+                                                const filteredIds = new Set(filteredAvailableParticipants.map(p => p.id));
+                                                setSelectedParticipantIds(selectedParticipantIds.filter(id => !filteredIds.has(id)));
+                                            }
+                                        }}
+                                        className="h-4 w-4 rounded border-input text-primary focus:ring-ring cursor-pointer"
+                                    />
+                                    <label htmlFor="selectAll" className="cursor-pointer font-medium select-none text-foreground">
+                                        Выбрать всех отфильтрованных ({filteredAvailableParticipants.length})
+                                    </label>
+                                </div>
+                                <div>
+                                    Выбрано: <span className="font-bold text-foreground">{selectedParticipantIds.length}</span>
+                                </div>
+                            </div>
+
+                            {/* Scrollable list of participants */}
+                            <div className="flex-1 min-h-[150px] overflow-y-auto border border-border rounded-md p-2 space-y-1 bg-muted/10 max-h-[300px]">
+                                {filteredAvailableParticipants.length === 0 ? (
+                                    <div className="text-center py-8 text-sm text-muted-foreground">
+                                        Нет доступных участников
+                                    </div>
+                                ) : (
+                                    filteredAvailableParticipants.map((p) => {
+                                        const isSelected = selectedParticipantIds.includes(p.id);
+                                        return (
+                                            <div
+                                                key={p.id}
+                                                onClick={() => {
+                                                    if (isSelected) {
+                                                        setSelectedParticipantIds(selectedParticipantIds.filter(id => id !== p.id));
+                                                    } else {
+                                                        setSelectedParticipantIds([...selectedParticipantIds, p.id]);
+                                                    }
+                                                }}
+                                                className={`flex items-center gap-3 p-2 hover:bg-muted/50 rounded-md cursor-pointer transition-colors border ${
+                                                    isSelected ? 'border-primary/50 bg-primary/5 hover:bg-primary/10' : 'border-transparent'
+                                                }`}
+                                            >
+                                                <input
+                                                    type="checkbox"
+                                                    checked={isSelected}
+                                                    onChange={() => {}} // handled by row onClick
+                                                    className="h-4 w-4 rounded border-input text-primary focus:ring-ring pointer-events-none"
+                                                />
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="text-sm font-medium text-foreground truncate">{p.name}</p>
+                                                    {p.phone || p.email ? (
+                                                        <p className="text-xs text-muted-foreground truncate">
+                                                            {p.phone} {p.email ? `• ${p.email}` : ''}
+                                                        </p>
+                                                    ) : null}
+                                                </div>
+                                                {p.program?.name && (
+                                                    <Badge variant="outline" className="text-[10px] py-0 px-2 max-w-[150px] truncate">
+                                                        {p.program.name}
+                                                    </Badge>
+                                                )}
+                                                {p.status && (
+                                                    <Badge
+                                                        variant={p.status === 'active' ? 'default' : 'secondary'}
+                                                        className={`text-[9px] py-0 px-1.5 uppercase tracking-wider ${
+                                                            p.status === 'active' ? 'bg-green-100 text-green-800 hover:bg-green-200 border-none' : ''
+                                                        }`}
+                                                    >
+                                                        {p.status === 'active' ? 'актив' : p.status}
+                                                    </Badge>
+                                                )}
+                                            </div>
+                                        );
+                                    })
+                                )}
+                            </div>
+
+                            {/* Payment settings (shown only if at least one selected) */}
+                            {selectedParticipantIds.length > 0 && (
+                                <div className="p-3 border border-border rounded-md bg-card space-y-3">
+                                    <p className="text-xs font-semibold text-foreground uppercase tracking-wider">
+                                        Настройки оплаты для {selectedParticipantIds.length} выбр. участников
+                                    </p>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                        <div className="flex gap-2 items-end">
+                                            <div className="flex-1 space-y-1">
+                                                <Label className="text-xs">Оплата</Label>
+                                                <div className="relative">
+                                                    <Input
+                                                        type="number"
+                                                        value={newAttendee.payment_received}
+                                                        onChange={e => setNewAttendee({ ...newAttendee, payment_received: parseFloat(e.target.value) || 0 })}
+                                                        className="h-9"
+                                                    />
+                                                    <div className="absolute right-1 top-1">
+                                                        <select
+                                                            value={attendeeCurrency}
+                                                            onChange={(e) => setAttendeeCurrency(e.target.value as 'USD' | 'TJS')}
+                                                            className="h-7 border-none bg-transparent focus:ring-0 text-xs font-semibold text-muted-foreground cursor-pointer"
+                                                            style={{ outline: 'none' }}
+                                                        >
+                                                            <option value="USD">USD</option>
+                                                            <option value="TJS">TJS</option>
+                                                        </select>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            {attendeeCurrency === 'TJS' && (
+                                                <div className="w-20 space-y-1">
+                                                    <Label className="text-xs">Курс</Label>
+                                                    <Input
+                                                        type="number"
+                                                        value={attendeeExchangeRate}
+                                                        onChange={(e) => setAttendeeExchangeRate(e.target.value)}
+                                                        className="h-9"
+                                                    />
+                                                </div>
+                                            )}
+                                        </div>
+                                        
+                                        <div className="space-y-1">
+                                            <Label className="text-xs">Статус присутствия</Label>
+                                            <select
+                                                value={newAttendee.attendance_status}
+                                                onChange={(e) => setNewAttendee({ ...newAttendee, attendance_status: e.target.value })}
+                                                className="w-full h-9 px-3 py-1 bg-background border border-input rounded-md text-xs focus:outline-none focus:ring-2 focus:ring-ring"
+                                            >
+                                                <option value="registered">Зарегистрирован</option>
+                                                <option value="confirmed">Подтвержден</option>
+                                                <option value="attended">Присутствовал</option>
+                                                <option value="cancelled">Отменен</option>
+                                                <option value="no_show">Не пришел</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    
+                                    {attendeeCurrency === 'TJS' && newAttendee.payment_received ? (
+                                        <p className="text-[10px] text-muted-foreground text-right">
+                                            ≈ ${(Number(newAttendee.payment_received) / Number(attendeeExchangeRate || 1)).toFixed(2)} USD
+                                        </p>
+                                    ) : null}
+
+                                    <div className="space-y-1">
+                                        <Label className="text-xs">Комментарий к платежу</Label>
+                                        <Input
+                                            value={newAttendee.payment_notes || ''}
+                                            onChange={e => setNewAttendee({ ...newAttendee, payment_notes: e.target.value })}
+                                            placeholder="Например: наличные, перевод..."
+                                            className="h-9"
+                                        />
                                     </div>
                                 </div>
+                            )}
+
+                            <Button
+                                className="w-full mt-2"
+                                onClick={handleAddAttendeesBatch}
+                                disabled={selectedParticipantIds.length === 0}
+                            >
+                                Добавить выбранных ({selectedParticipantIds.length})
+                            </Button>
+                        </TabsContent>
+
+                        {/* Guest Tab */}
+                        <TabsContent value="guest" className="space-y-4 pt-4">
+                            <div className="space-y-2">
+                                <Label>Имя Гостя</Label>
+                                <Input
+                                    value={newAttendee.guest_name || ''}
+                                    onChange={e => setNewAttendee({ ...newAttendee, guest_name: e.target.value })}
+                                    placeholder="Введите ФИО гостя"
+                                />
                             </div>
-                            {attendeeCurrency === 'TJS' && (
-                                <div className="w-24 space-y-2">
-                                    <Label>Курс</Label>
-                                    <Input
-                                        type="number"
-                                        value={attendeeExchangeRate}
-                                        onChange={(e) => setAttendeeExchangeRate(e.target.value)}
-                                    />
+                            <div className="space-y-2">
+                                <Label>Телефон / Email</Label>
+                                <Input
+                                    value={newAttendee.guest_phone || ''}
+                                    onChange={e => setNewAttendee({ ...newAttendee, guest_phone: e.target.value })}
+                                    placeholder="+7 (999) 123-45-67 или guest@example.com"
+                                />
+                            </div>
+
+                            <div className="flex gap-4 items-end">
+                                <div className="flex-1 space-y-2">
+                                    <Label>Получено Оплаты</Label>
+                                    <div className="relative">
+                                        <Input
+                                            type="number"
+                                            value={newAttendee.payment_received}
+                                            onChange={e => setNewAttendee({ ...newAttendee, payment_received: parseFloat(e.target.value) || 0 })}
+                                        />
+                                        <div className="absolute right-1 top-1">
+                                            <select
+                                                value={attendeeCurrency}
+                                                onChange={(e) => setAttendeeCurrency(e.target.value as 'USD' | 'TJS')}
+                                                className="h-8 border-none bg-transparent focus:ring-0 text-xs font-semibold text-muted-foreground cursor-pointer"
+                                                style={{ outline: 'none' }}
+                                            >
+                                                <option value="USD">USD</option>
+                                                <option value="TJS">TJS</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+                                {attendeeCurrency === 'TJS' && (
+                                    <div className="w-24 space-y-2">
+                                        <Label>Курс</Label>
+                                        <Input
+                                            type="number"
+                                            value={attendeeExchangeRate}
+                                            onChange={(e) => setAttendeeExchangeRate(e.target.value)}
+                                        />
+                                    </div>
+                                )}
+                            </div>
+                            {attendeeCurrency === 'TJS' && newAttendee.payment_received && (
+                                <div className="text-right">
+                                    <p className="text-xs text-muted-foreground">
+                                        ≈ ${(Number(newAttendee.payment_received) / Number(attendeeExchangeRate || 1)).toFixed(2)} USD
+                                    </p>
                                 </div>
                             )}
-                        </div>
-                        {attendeeCurrency === 'TJS' && newAttendee.payment_received && (
-                            <div className="text-right">
-                                <p className="text-xs text-muted-foreground">
-                                    ≈ ${(Number(newAttendee.payment_received) / Number(attendeeExchangeRate || 1)).toFixed(2)} USD
-                                </p>
+                            <div className="space-y-2">
+                                <Label>Комментарий к платежу</Label>
+                                <Input
+                                    value={newAttendee.payment_notes || ''}
+                                    onChange={e => setNewAttendee({ ...newAttendee, payment_notes: e.target.value })}
+                                    placeholder="Например: наличные, перевод..."
+                                />
                             </div>
-                        )}
-                        <div className="space-y-2">
-                            <Label>Комментарий</Label>
-                            <Input
-                                value={newAttendee.payment_notes || ''}
-                                onChange={e => setNewAttendee({ ...newAttendee, payment_notes: e.target.value })}
-                                placeholder="Например: наличные, перевод..."
-                            />
-                        </div>
 
-                        <Button className="w-full mt-4" onClick={handleAddAttendee}>Сохранить</Button>
-                    </div>
+                            <Button className="w-full mt-4" onClick={handleAddAttendee}>
+                                Сохранить Гостя
+                            </Button>
+                        </TabsContent>
+                    </Tabs>
                 </DialogContent>
             </Dialog>
 

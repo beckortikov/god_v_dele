@@ -43,26 +43,57 @@ export async function POST(
         const { id } = await params
         const body = await req.json()
 
-        // Validate event exists? (Constraint will handle it)
-        const attendeeData = {
-            event_id: id,
-            attendee_type: body.attendee_type,
-            participant_id: body.participant_id || null,
-            guest_name: body.guest_name || null,
-            guest_email: body.guest_email || null,
-            guest_phone: body.guest_phone || null,
-            payment_received: body.payment_received || 0,
-            currency: body.currency || 'USD',
-            original_amount: body.original_amount,
-            exchange_rate: body.exchange_rate || 1,
-            attendance_status: body.attendance_status || 'registered',
-            payment_notes: body.payment_notes || null
-        }
+        let data, error
 
-        const { data, error } = await supabaseAdmin
-            .from('event_attendees')
-            .insert([attendeeData])
-            .select()
+        // Check if this is a batch insert (array of attendees)
+        if (body.attendees && Array.isArray(body.attendees)) {
+            const attendeesData = body.attendees.map((attendee: any) => ({
+                event_id: id,
+                attendee_type: attendee.attendee_type,
+                participant_id: attendee.participant_id || null,
+                guest_name: attendee.guest_name || null,
+                guest_email: attendee.guest_email || null,
+                guest_phone: attendee.guest_phone || null,
+                payment_received: attendee.payment_received || 0,
+                currency: attendee.currency || 'USD',
+                original_amount: attendee.original_amount,
+                exchange_rate: attendee.exchange_rate || 1,
+                attendance_status: attendee.attendance_status || 'registered',
+                payment_notes: attendee.payment_notes || null
+            }))
+
+            const res = await supabaseAdmin
+                .from('event_attendees')
+                .insert(attendeesData)
+                .select()
+            
+            data = res.data
+            error = res.error
+        } else {
+            // Single attendee insert
+            const attendeeData = {
+                event_id: id,
+                attendee_type: body.attendee_type,
+                participant_id: body.participant_id || null,
+                guest_name: body.guest_name || null,
+                guest_email: body.guest_email || null,
+                guest_phone: body.guest_phone || null,
+                payment_received: body.payment_received || 0,
+                currency: body.currency || 'USD',
+                original_amount: body.original_amount,
+                exchange_rate: body.exchange_rate || 1,
+                attendance_status: body.attendance_status || 'registered',
+                payment_notes: body.payment_notes || null
+            }
+
+            const res = await supabaseAdmin
+                .from('event_attendees')
+                .insert([attendeeData])
+                .select()
+            
+            data = res.data
+            error = res.error
+        }
 
         if (error) throw error
 
