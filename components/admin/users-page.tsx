@@ -38,6 +38,14 @@ export function UsersPage() {
     const [employees, setEmployees] = useState<any[]>([])
     const [participants, setParticipants] = useState<any[]>([])
 
+    // States for searchable selectors
+    const [participantSearchQuery, setParticipantSearchQuery] = useState('')
+    const [participantFilterProgramId, setParticipantFilterProgramId] = useState('all')
+    const [isParticipantSelectOpen, setIsParticipantSelectOpen] = useState(false)
+
+    const [employeeSearchQuery, setEmployeeSearchQuery] = useState('')
+    const [isEmployeeSelectOpen, setIsEmployeeSelectOpen] = useState(false)
+
     // Form state
     const [formData, setFormData] = useState({
         username: '',
@@ -133,7 +141,31 @@ export function UsersPage() {
     const resetForm = () => {
         setEditingUser(null)
         setFormData({ username: '', password: '', role: 'finance', full_name: '', employee_id: 'none', participant_id: 'none' })
+        setParticipantSearchQuery('')
+        setParticipantFilterProgramId('all')
+        setIsParticipantSelectOpen(false)
+        setEmployeeSearchQuery('')
+        setIsEmployeeSelectOpen(false)
     }
+
+    // Filter participants by search and program/group
+    const filteredParticipants = participants.filter(p => {
+        const matchesSearch = p.name.toLowerCase().includes(participantSearchQuery.toLowerCase()) ||
+            (p.email && p.email.toLowerCase().includes(participantSearchQuery.toLowerCase())) ||
+            (p.phone && p.phone.toLowerCase().includes(participantSearchQuery.toLowerCase()))
+        
+        const matchesProgram = participantFilterProgramId === 'all' || p.program_id === participantFilterProgramId
+        
+        return matchesSearch && matchesProgram
+    })
+
+    // Filter employees by search
+    const filteredEmployees = employees.filter(emp => {
+        const fullName = `${emp.first_name} ${emp.last_name}`.toLowerCase()
+        const matchesSearch = fullName.includes(employeeSearchQuery.toLowerCase()) ||
+            (emp.position && emp.position.toLowerCase().includes(employeeSearchQuery.toLowerCase()))
+        return matchesSearch
+    })
 
     return (
         <div className="space-y-6 p-4 sm:p-6">
@@ -220,7 +252,10 @@ export function UsersPage() {
                 </CardContent>
             </Card>
 
-            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+            <Dialog open={isDialogOpen} onOpenChange={(open) => {
+                setIsDialogOpen(open)
+                if (!open) resetForm()
+            }}>
                 <DialogContent>
                     <DialogHeader>
                         <DialogTitle>{editingUser ? 'Редактировать пользователя' : 'Создать пользователя'}</DialogTitle>
@@ -275,58 +310,184 @@ export function UsersPage() {
                         {(formData.role === 'employee' || formData.role === 'finance' || formData.role === 'manager') && (
                             <div className="space-y-2">
                                 <Label>Привязка к сотруднику (Необязательно)</Label>
-                                <Select
-                                    value={formData.employee_id}
-                                    onValueChange={val => {
-                                        const emp = employees.find((x: any) => x.id === val)
-                                        setFormData({ 
-                                            ...formData, 
-                                            employee_id: val,
-                                            full_name: emp ? `${emp.first_name} ${emp.last_name}` : formData.full_name
-                                        })
-                                    }}
-                                >
-                                    <SelectTrigger>
-                                        <SelectValue placeholder="Без привязки" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="none">Без привязки</SelectItem>
-                                        {employees.map(emp => (
-                                            <SelectItem key={emp.id} value={emp.id}>
-                                                {emp.first_name} {emp.last_name} ({emp.position})
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
+                                <div className="relative">
+                                    {/* Trigger button */}
+                                    <div 
+                                        onClick={() => setIsEmployeeSelectOpen(!isEmployeeSelectOpen)}
+                                        className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
+                                    >
+                                        <span className="truncate">
+                                            {formData.employee_id === 'none' || !formData.employee_id
+                                                ? 'Без привязки'
+                                                : (() => {
+                                                    const emp = employees.find(x => x.id === formData.employee_id);
+                                                    return emp ? `${emp.first_name} ${emp.last_name} (${emp.position})` : 'Без привязки';
+                                                  })()
+                                            }
+                                        </span>
+                                        <span className="text-xs text-muted-foreground ml-2 shrink-0">Изменить</span>
+                                    </div>
+
+                                    {/* Dropdown panel */}
+                                    {isEmployeeSelectOpen && (
+                                        <div className="absolute z-50 mt-1 w-full rounded-md border border-border bg-popover p-2 text-popover-foreground shadow-md animate-in fade-in duration-100 space-y-2">
+                                            <Input
+                                                type="text"
+                                                placeholder="Поиск сотрудника..."
+                                                value={employeeSearchQuery}
+                                                onChange={e => setEmployeeSearchQuery(e.target.value)}
+                                                className="h-8 text-xs"
+                                            />
+
+                                            <div className="max-h-40 overflow-y-auto space-y-1 pr-1">
+                                                <div
+                                                    onClick={() => {
+                                                        setFormData({
+                                                            ...formData,
+                                                            employee_id: 'none',
+                                                            full_name: editingUser ? editingUser.full_name : ''
+                                                        })
+                                                        setIsEmployeeSelectOpen(false)
+                                                    }}
+                                                    className="flex items-center justify-between p-2 text-xs rounded hover:bg-muted cursor-pointer transition-colors"
+                                                >
+                                                    <span>Без привязки</span>
+                                                </div>
+                                                {filteredEmployees.map(emp => {
+                                                    const isSelected = formData.employee_id === emp.id;
+                                                    const name = `${emp.first_name} ${emp.last_name}`;
+                                                    return (
+                                                        <div
+                                                            key={emp.id}
+                                                            onClick={() => {
+                                                                setFormData({
+                                                                    ...formData,
+                                                                    employee_id: emp.id,
+                                                                    full_name: name
+                                                                })
+                                                                setIsEmployeeSelectOpen(false)
+                                                            }}
+                                                            className={`flex items-center justify-between p-2 text-xs rounded hover:bg-muted cursor-pointer transition-colors ${
+                                                                isSelected ? 'bg-primary/10 text-primary font-medium' : ''
+                                                            }`}
+                                                        >
+                                                            <span>{name}</span>
+                                                            {emp.position && (
+                                                                <Badge variant="outline" className="text-[9px] py-0 px-1 truncate max-w-[120px]">
+                                                                    {emp.position}
+                                                                </Badge>
+                                                            )}
+                                                        </div>
+                                                    )
+                                                })}
+                                                {filteredEmployees.length === 0 && (
+                                                    <div className="text-center py-4 text-xs text-muted-foreground">
+                                                        Ничего не найдено
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         )}
 
                         {formData.role === 'participant' && (
                             <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
                                 <Label>Привязка к Участнику</Label>
-                                <Select
-                                    value={formData.participant_id}
-                                    onValueChange={val => {
-                                        const p = participants.find((x: any) => x.id === val)
-                                        setFormData({ 
-                                            ...formData, 
-                                            participant_id: val,
-                                            full_name: p ? p.name : formData.full_name
-                                        })
-                                    }}
-                                >
-                                    <SelectTrigger className="border-primary/50 focus:ring-primary">
-                                        <SelectValue placeholder="Выберите участника" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="none">Без привязки</SelectItem>
-                                        {participants.map(p => (
-                                            <SelectItem key={p.id} value={p.id}>
-                                                🎯 {p.name}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
+                                <div className="relative">
+                                    {/* Trigger button */}
+                                    <div 
+                                        onClick={() => setIsParticipantSelectOpen(!isParticipantSelectOpen)}
+                                        className="flex h-10 w-full items-center justify-between rounded-md border border-primary/50 bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
+                                    >
+                                        <span className="truncate">
+                                            {formData.participant_id === 'none' || !formData.participant_id
+                                                ? 'Без привязки'
+                                                : `🎯 ${participants.find(p => p.id === formData.participant_id)?.name || 'Без привязки'}`
+                                            }
+                                        </span>
+                                        <span className="text-xs text-muted-foreground ml-2 shrink-0">Изменить</span>
+                                    </div>
+
+                                    {/* Dropdown panel */}
+                                    {isParticipantSelectOpen && (
+                                        <div className="absolute z-50 mt-1 w-full rounded-md border border-border bg-popover p-2 text-popover-foreground shadow-md animate-in fade-in duration-100 space-y-2">
+                                            {/* Filters */}
+                                            <div className="grid grid-cols-2 gap-2">
+                                                <Input
+                                                    type="text"
+                                                    placeholder="Поиск..."
+                                                    value={participantSearchQuery}
+                                                    onChange={e => setParticipantSearchQuery(e.target.value)}
+                                                    className="h-8 text-xs"
+                                                />
+                                                <select
+                                                    value={participantFilterProgramId}
+                                                    onChange={e => setParticipantFilterProgramId(e.target.value)}
+                                                    className="h-8 px-2 py-1 bg-background border border-input rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-primary text-foreground"
+                                                >
+                                                    <option value="all">Все группы</option>
+                                                    {Array.from(new Set(participants.map(p => p.program?.id).filter(Boolean))).map(id => {
+                                                        const name = participants.find(p => p.program?.id === id)?.program?.name;
+                                                        return <option key={id} value={id}>{name}</option>;
+                                                    })}
+                                                </select>
+                                            </div>
+
+                                            {/* List */}
+                                            <div className="max-h-40 overflow-y-auto space-y-1 pr-1">
+                                                <div
+                                                    onClick={() => {
+                                                        setFormData({
+                                                            ...formData,
+                                                            participant_id: 'none',
+                                                            full_name: editingUser ? editingUser.full_name : ''
+                                                        })
+                                                        setIsParticipantSelectOpen(false)
+                                                    }}
+                                                    className="flex items-center justify-between p-2 text-xs rounded hover:bg-muted cursor-pointer transition-colors"
+                                                >
+                                                    <span>Без привязки</span>
+                                                </div>
+                                                {filteredParticipants.map(p => {
+                                                    const isSelected = formData.participant_id === p.id;
+                                                    return (
+                                                        <div
+                                                            key={p.id}
+                                                            onClick={() => {
+                                                                setFormData({
+                                                                    ...formData,
+                                                                    participant_id: p.id,
+                                                                    full_name: p.name
+                                                                })
+                                                                setIsParticipantSelectOpen(false)
+                                                            }}
+                                                            className={`flex items-center justify-between p-2 text-xs rounded hover:bg-muted cursor-pointer transition-colors ${
+                                                                isSelected ? 'bg-primary/10 text-primary font-medium' : ''
+                                                            }`}
+                                                        >
+                                                            <div className="flex flex-col min-w-0 mr-2">
+                                                                <span className="truncate">{p.name}</span>
+                                                                {p.phone && <span className="text-[10px] text-muted-foreground">{p.phone}</span>}
+                                                            </div>
+                                                            {p.program?.name && (
+                                                                <Badge variant="outline" className="text-[9px] py-0 px-1 truncate max-w-[120px] shrink-0">
+                                                                    {p.program.name}
+                                                                </Badge>
+                                                            )}
+                                                        </div>
+                                                    )
+                                                })}
+                                                {filteredParticipants.length === 0 && (
+                                                    <div className="text-center py-4 text-xs text-muted-foreground">
+                                                        Ничего не найдено
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         )}
 
