@@ -907,18 +907,19 @@ export function LifeWheelPage({ participantId: fixedParticipantId, participantNa
                                                             className="h-8 text-xs pr-1.5 text-right font-extrabold border-border"
                                                         />
                                                     </div>
-                                                <div className="w-[38px] text-right text-[10.5px] font-extrabold text-muted-foreground flex-shrink-0">
-                                                     {total > 0 ? Math.round((cat.value / total) * 100) : 0}%
-                                                </div>
+                                                    <div className="w-[36px] text-right text-[10.5px] font-extrabold text-muted-foreground">
+                                                        {total > 0 ? Math.round((cat.value / total) * 100) : 0}%
+                                                    </div>
 
-                                                {/* Delete button */}
-                                                <button
-                                                    onClick={() => removeCategory(cat.id, cat.name)}
-                                                    className="opacity-0 group-hover:opacity-100 p-1.5 text-muted-foreground hover:text-red-500 transition-all rounded-lg hover:bg-red-500/5 flex-shrink-0"
-                                                    title="Удалить категорию"
-                                                >
-                                                    <Trash2 className="w-3.5 h-3.5" />
-                                                </button>
+                                                    {/* Delete button (visible on mobile touch) */}
+                                                    <button
+                                                        onClick={() => removeCategory(cat.id, cat.name)}
+                                                        className="opacity-70 sm:opacity-0 sm:group-hover:opacity-100 p-1.5 text-muted-foreground hover:text-red-500 transition-all rounded-lg hover:bg-red-500/5 flex-shrink-0 touch-manipulation"
+                                                        title="Удалить категорию"
+                                                    >
+                                                        <Trash2 className="w-3.5 h-3.5" />
+                                                    </button>
+                                                </div>
                                             </div>
                                         )
                                     })}
