@@ -115,6 +115,37 @@ function balanceCategories(cats: WheelCategory[]): WheelCategory[] {
     return cats.map(c => ({ ...c, value: Number(c.value) || 0 }))
 }
 
+function scaleCategoriesToMax(cats: WheelCategory[], targetMax: number): WheelCategory[] {
+    if (!Array.isArray(cats) || cats.length === 0) return []
+    const currentTotal = cats.reduce((s, c) => s + (Number(c.value) || 0), 0)
+    if (currentTotal === 0) return cats.map(c => ({ ...c, value: 0 }))
+    if (Math.abs(currentTotal - targetMax) < 0.05) return cats
+
+    const scale = targetMax / currentTotal
+    const scaled = cats.map(c => ({
+        ...c,
+        value: Number(((Number(c.value) || 0) * scale).toFixed(1))
+    }))
+
+    const newTotal = scaled.reduce((s, c) => s + c.value, 0)
+    const diff = Number((targetMax - newTotal).toFixed(1))
+    if (Math.abs(diff) > 0.001 && scaled.length > 0) {
+        let maxIndex = 0
+        let maxVal = -1
+        scaled.forEach((c, idx) => {
+            if (c.value > maxVal) {
+                maxVal = c.value
+                maxIndex = idx
+            }
+        })
+        scaled[maxIndex] = {
+            ...scaled[maxIndex],
+            value: Number((scaled[maxIndex].value + diff).toFixed(1))
+        }
+    }
+    return scaled
+}
+
 // ─────────────────────────── SVG Sunburst Chart ───────────────────────────
 function SunburstChartSVG({ categories, periodType }: { categories: WheelCategory[], periodType: 'weekly' | 'monthly' }) {
     const width = 800
@@ -459,12 +490,13 @@ export function LifeWheelPage({ participantId: fixedParticipantId, participantNa
         if (!pid) return
         setIsLoading(true)
 
+        const targetMax = periodType === 'weekly' ? 168 : 720
         let pType = periodType
         let pLabel = currentLabel
 
         if (pid === TEMPLATE_ID) {
-            pType = 'monthly'
-            pLabel = 'template'
+            pType = periodType
+            pLabel = periodType === 'weekly' ? 'template_weekly' : 'template'
         }
 
         try {
@@ -476,25 +508,26 @@ export function LifeWheelPage({ participantId: fixedParticipantId, participantNa
             const res = await fetch(`/api/life-wheel?${params}`)
             const { data } = await res.json()
             if (data && data.length > 0 && data[0].categories?.length > 0) {
-                setCategories(balanceCategories(data[0].categories))
+                setCategories(scaleCategoriesToMax(balanceCategories(data[0].categories), targetMax))
             } else {
                 if (pid !== TEMPLATE_ID) {
                     try {
-                        const tempRes = await fetch(`/api/life-wheel?participant_id=${TEMPLATE_ID}&period_type=monthly&period_label=template`)
+                        const tempLabel = periodType === 'weekly' ? 'template_weekly' : 'template'
+                        const tempRes = await fetch(`/api/life-wheel?participant_id=${TEMPLATE_ID}&period_type=${pType}&period_label=${tempLabel}`)
                         const tempJson = await tempRes.json()
                         if (tempJson.data && tempJson.data.length > 0 && tempJson.data[0].categories?.length > 0) {
-                            setCategories(balanceCategories(tempJson.data[0].categories))
+                            setCategories(scaleCategoriesToMax(balanceCategories(tempJson.data[0].categories), targetMax))
                             setIsLoading(false)
                             setHasUnsavedChanges(false)
                             return
                         }
                     } catch (err) { console.error('Failed to fetch template', err) }
                 }
-                setCategories(balanceCategories(DEFAULT_CATEGORIES))
+                setCategories(scaleCategoriesToMax(balanceCategories(DEFAULT_CATEGORIES), targetMax))
             }
         } catch (e) {
             console.error(e)
-            setCategories(balanceCategories(DEFAULT_CATEGORIES))
+            setCategories(scaleCategoriesToMax(balanceCategories(DEFAULT_CATEGORIES), targetMax))
         } finally {
             setIsLoading(false)
             setHasUnsavedChanges(false)
@@ -524,9 +557,18 @@ export function LifeWheelPage({ participantId: fixedParticipantId, participantNa
         const pid = fixedParticipantId || selectedParticipantId
         if (!pid) return
 
-        if (!silent && pid !== TEMPLATE_ID && Math.abs(total - maxHours) > 0.01) {
-            alert(`Итоговая сумма часов должна быть строго равна ${maxHours} ч. (сейчас: ${Number(total.toFixed(1))} ч.)`)
-            return
+        let finalCategories = categories
+        const currentDiff = Math.abs(total - maxHours)
+
+        if (!silent && pid !== TEMPLATE_ID && currentDiff > 0.01) {
+            if (currentDiff <= 2.0) {
+                // Auto-fix tiny rounding discrepancies automatically
+                finalCategories = scaleCategoriesToMax(categories, maxHours)
+                setCategories(finalCategories)
+            } else {
+                alert(`Итоговая сумма часов должна быть строго равна ${maxHours} ч. (сейчас: ${Number(total.toFixed(1))} ч.)\nНажмите "⚡ Авто-баланс" под полосой прогресса для моментального выравнивания.`)
+                return
+            }
         }
 
         if (!silent) setIsSaving(true)
@@ -535,8 +577,8 @@ export function LifeWheelPage({ participantId: fixedParticipantId, participantNa
         let pType = periodType
         let pLabel = currentLabel
         if (pid === TEMPLATE_ID) {
-            pType = 'monthly'
-            pLabel = 'template'
+            pType = periodType
+            pLabel = periodType === 'weekly' ? 'template_weekly' : 'template'
         }
 
         try {
@@ -547,7 +589,7 @@ export function LifeWheelPage({ participantId: fixedParticipantId, participantNa
                     participant_id: pid,
                     period_type: pType,
                     period_label: pLabel,
-                    categories,
+                    categories: finalCategories,
                 }),
             })
             
@@ -838,10 +880,25 @@ export function LifeWheelPage({ participantId: fixedParticipantId, participantNa
                                             style={{ width: `${Math.min((total / maxHours) * 100, 100)}%` }}
                                         />
                                     </div>
-                                    {isOverLimit && (
-                                        <p className="text-[10px] text-red-500 font-bold flex items-center gap-1">
-                                            ⚠️ Лимит превышен на {(total - maxHours).toFixed(1)} ч! Для сохранения сумма должна быть ровно {maxHours} ч.
-                                        </p>
+                                    {Math.abs(total - maxHours) > 0.05 && (
+                                        <div className="pt-1 flex flex-wrap items-center justify-between gap-2">
+                                            <p className="text-[10px] text-amber-500 font-bold">
+                                                {total > maxHours 
+                                                    ? `⚠️ Превышение на ${(total - maxHours).toFixed(1)} ч`
+                                                    : `ℹ️ Осталось распределить ${(maxHours - total).toFixed(1)} ч`}
+                                            </p>
+                                            <Button
+                                                size="sm"
+                                                variant="outline"
+                                                onClick={() => {
+                                                    setCategories(prev => scaleCategoriesToMax(prev, maxHours))
+                                                    setHasUnsavedChanges(true)
+                                                }}
+                                                className="h-6 text-[10px] px-2 font-extrabold border-indigo-500/30 text-indigo-600 dark:text-indigo-400 bg-indigo-500/5 hover:bg-indigo-500/15"
+                                            >
+                                                ⚡ Авто-баланс до {maxHours} ч
+                                            </Button>
+                                        </div>
                                     )}
                                 </div>
 
