@@ -856,20 +856,20 @@ export function LifeWheelPage({ participantId: fixedParticipantId, participantNa
                                         return (
                                             <div 
                                                 key={cat.id} 
-                                                className={`flex items-center gap-2.5 group p-2 rounded-xl transition-all border-l-3 hover:bg-muted/15 border-border ${
+                                                className={`flex flex-wrap sm:flex-nowrap items-center gap-2 sm:gap-2.5 group p-2 rounded-xl transition-all border-l-3 hover:bg-muted/15 border-border ${
                                                     isDimmed ? 'opacity-35 scale-98' : 'opacity-100'
                                                 } ${isHighlighted ? 'ring-2 ring-indigo-500/30' : ''}`}
                                                 style={{ borderLeftColor: cat.color }}
                                             >
-                                                <span 
-                                                    className="text-[9px] font-extrabold text-white w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 select-none shadow-sm"
-                                                    style={{ backgroundColor: cat.color }}
-                                                >
-                                                     {index + 1}
-                                                </span>
-                                                
-                                                {/* Color picker */}
-                                                <div className="relative flex-shrink-0">
+                                                <div className="flex items-center gap-2 flex-shrink-0">
+                                                    <span 
+                                                        className="text-[9px] font-extrabold text-white w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 select-none shadow-sm"
+                                                        style={{ backgroundColor: cat.color }}
+                                                    >
+                                                        {index + 1}
+                                                    </span>
+                                                    
+                                                    {/* Color picker */}
                                                     <input
                                                         type="color"
                                                         value={cat.color}
@@ -880,7 +880,7 @@ export function LifeWheelPage({ participantId: fixedParticipantId, participantNa
                                                 </div>
 
                                                 {/* Group & Name Split Inputs */}
-                                                <div className="flex flex-1 -space-x-px">
+                                                <div className="flex flex-1 min-w-[160px] -space-x-px">
                                                      <Input
                                                          placeholder="Сфера (Блок)"
                                                          value={cat.group || ''}
@@ -896,16 +896,17 @@ export function LifeWheelPage({ participantId: fixedParticipantId, participantNa
                                                 </div>
 
                                                 {/* Value (Hours) */}
-                                                <div className="relative flex-shrink-0 w-[68px]">
-                                                     <Input
-                                                         type="number"
-                                                         min={0}
-                                                         step="0.1"
-                                                         value={cat.value || ''}
-                                                         onChange={e => updateCategory(cat.id, 'value', Math.max(0, Number(e.target.value)))}
-                                                         className="h-8 text-xs pr-1.5 text-right font-extrabold border-border"
-                                                     />
-                                                </div>
+                                                <div className="flex items-center gap-1.5 ml-auto sm:ml-0 flex-shrink-0">
+                                                    <div className="relative w-[65px]">
+                                                        <Input
+                                                            type="number"
+                                                            min={0}
+                                                            step="0.1"
+                                                            value={cat.value || ''}
+                                                            onChange={e => updateCategory(cat.id, 'value', Math.max(0, Number(e.target.value)))}
+                                                            className="h-8 text-xs pr-1.5 text-right font-extrabold border-border"
+                                                        />
+                                                    </div>
                                                 <div className="w-[38px] text-right text-[10.5px] font-extrabold text-muted-foreground flex-shrink-0">
                                                      {total > 0 ? Math.round((cat.value / total) * 100) : 0}%
                                                 </div>

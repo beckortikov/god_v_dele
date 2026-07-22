@@ -577,14 +577,14 @@ export function LifeBalancePage({ participantId: fixedParticipantId, participant
                                     </Button>
                                 </div>
 
-                                <div className="min-w-[850px] overflow-hidden">
+                                <div className="min-w-[800px] overflow-x-auto relative">
                                     <table className="w-full text-left border-collapse">
                                         <thead>
                                             <tr className="border-b border-border/80 text-[10px] font-extrabold text-muted-foreground uppercase tracking-wider">
-                                                <th className="py-3 px-2.5 w-[200px]">Категория</th>
-                                                <th className="py-3 px-2 text-center w-[90px] bg-slate-500/5 dark:bg-slate-500/10 rounded-t-lg">Мой идеал</th>
+                                                <th className="py-3 px-2.5 w-[160px] sm:w-[200px] sticky left-0 bg-card z-20 border-r border-border/60 shadow-sm">Категория</th>
+                                                <th className="py-3 px-2 text-center w-[85px] bg-slate-500/5 dark:bg-slate-500/10 rounded-t-lg">Мой идеал</th>
                                                 {MONTHS.map(m => (
-                                                    <th key={m} className="py-3 px-1 text-center w-[54px]">
+                                                    <th key={m} className="py-3 px-1 text-center w-[52px]">
                                                         {m.substring(0, 3)}
                                                     </th>
                                                 ))}
@@ -611,10 +611,10 @@ export function LifeBalancePage({ participantId: fixedParticipantId, participant
                                                         }`}
                                                         style={{ borderLeftColor: catColor }}
                                                     >
-                                                        {/* Category Name */}
-                                                        <td className="py-2 px-2.5">
+                                                        {/* Sticky Category Name Column for Mobile */}
+                                                        <td className="py-2 px-2.5 sticky left-0 bg-card z-10 border-r border-border/60 shadow-sm">
                                                             {isDefault ? (
-                                                                <span className="font-extrabold text-foreground tracking-tight">{cat}</span>
+                                                                <span className="font-extrabold text-foreground tracking-tight text-xs">{cat}</span>
                                                             ) : (
                                                                 <Input
                                                                     value={cat}

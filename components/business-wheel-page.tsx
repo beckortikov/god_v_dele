@@ -605,7 +605,7 @@ export function BusinessWheelPage({ participantId: fixedParticipantId, participa
                                 ) : (
                                     <div className="space-y-6">
                                         {/* Row 1 (Categories 1-5) */}
-                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3.5">
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
                                             {BUSINESS_CATEGORIES.slice(0, 5).map(cat => {
                                                 const checkedCount = cat.items.filter(item => checkedItems[item.id]).length
                                                 const percentage = Math.round((checkedCount / 7) * 100)
@@ -623,7 +623,7 @@ export function BusinessWheelPage({ participantId: fixedParticipantId, participa
                                                             <div className="flex items-center gap-1">
                                                                 <button
                                                                     onClick={() => toggleCategoryAll(cat.id, checkedCount, cat.items)}
-                                                                    className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-muted text-muted-foreground/60 hover:text-foreground"
+                                                                    className="opacity-70 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-muted text-muted-foreground/60 hover:text-foreground touch-manipulation"
                                                                     title={checkedCount === 7 ? "Сбросить все" : "Выбрать все"}
                                                                 >
                                                                     {checkedCount === 7 ? <X className="w-3 h-3" /> : <Check className="w-3 h-3" />}
@@ -711,7 +711,7 @@ export function BusinessWheelPage({ participantId: fixedParticipantId, participa
                                         </div>
 
                                         {/* Row 2 (Categories 6-10) */}
-                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3.5">
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
                                             {BUSINESS_CATEGORIES.slice(5, 10).map(cat => {
                                                 const checkedCount = cat.items.filter(item => checkedItems[item.id]).length
                                                 const percentage = Math.round((checkedCount / 7) * 100)
@@ -729,7 +729,7 @@ export function BusinessWheelPage({ participantId: fixedParticipantId, participa
                                                             <div className="flex items-center gap-1">
                                                                 <button
                                                                     onClick={() => toggleCategoryAll(cat.id, checkedCount, cat.items)}
-                                                                    className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-muted text-muted-foreground/60 hover:text-foreground"
+                                                                    className="opacity-70 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-muted text-muted-foreground/60 hover:text-foreground touch-manipulation"
                                                                     title={checkedCount === 7 ? "Сбросить все" : "Выбрать все"}
                                                                 >
                                                                     {checkedCount === 7 ? <X className="w-3 h-3" /> : <Check className="w-3 h-3" />}
