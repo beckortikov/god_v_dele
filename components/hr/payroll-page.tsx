@@ -180,12 +180,12 @@ export function PayrollPage() {
     ]
 
     return (
-        <div className="p-4 sm:p-6 space-y-6">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                <h1 className="text-2xl font-bold">Зарплата</h1>
-                <div className="flex items-center gap-2">
+        <div className="p-3 sm:p-6 space-y-4 sm:space-y-6 min-h-full">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 border-b border-border pb-3.5">
+                <h1 className="text-xl sm:text-2xl font-bold">Зарплата</h1>
+                <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-end">
                     <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-                        <SelectTrigger className="w-[140px]">
+                        <SelectTrigger className="w-[130px] text-xs sm:text-sm touch-manipulation">
                             <SelectValue placeholder="Месяц" />
                         </SelectTrigger>
                         <SelectContent>
@@ -193,7 +193,7 @@ export function PayrollPage() {
                         </SelectContent>
                     </Select>
                     <Select value={selectedYear} onValueChange={setSelectedYear}>
-                        <SelectTrigger className="w-[100px]">
+                        <SelectTrigger className="w-[90px] text-xs sm:text-sm touch-manipulation">
                             <SelectValue placeholder="Год" />
                         </SelectTrigger>
                         <SelectContent>
@@ -202,7 +202,7 @@ export function PayrollPage() {
                             <SelectItem value="2026">2026</SelectItem>
                         </SelectContent>
                     </Select>
-                    <Button variant="default" onClick={handleGenerate}>
+                    <Button variant="default" onClick={handleGenerate} className="touch-manipulation">
                         <Plus className="w-4 h-4 mr-2" />
                         Сформировать
                     </Button>

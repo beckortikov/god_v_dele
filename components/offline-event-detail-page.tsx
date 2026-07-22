@@ -588,7 +588,7 @@ export function EventDetailPage({ eventId, onBack }: EventDetailPageProps) {
                     })
                 }
             }}>
-                <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
+                <DialogContent className="max-w-[95vw] sm:max-w-2xl max-h-[90vh] flex flex-col p-3.5 sm:p-6">
                     <DialogHeader>
                         <DialogTitle>Добавить Участников на Мероприятие</DialogTitle>
                     </DialogHeader>
@@ -880,7 +880,7 @@ export function EventDetailPage({ eventId, onBack }: EventDetailPageProps) {
 
             {/* Modal: Add Expense */}
             <Dialog open={isAddExpenseOpen} onOpenChange={setIsAddExpenseOpen}>
-                <DialogContent className="max-w-md">
+                <DialogContent className="max-w-[95vw] sm:max-w-md max-h-[90vh] overflow-y-auto p-4 sm:p-6">
                     <DialogHeader>
                         <DialogTitle>Добавить Расход</DialogTitle>
                     </DialogHeader>

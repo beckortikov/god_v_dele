@@ -209,7 +209,7 @@ export function EmployeeDashboard() {
                             Добавить задачу
                         </Button>
                     </DialogTrigger>
-                    <DialogContent>
+                    <DialogContent className="max-w-[95vw] sm:max-w-md max-h-[90vh] overflow-y-auto p-4 sm:p-6">
                         <DialogHeader>
                             <DialogTitle>Новая задача на сегодня</DialogTitle>
                         </DialogHeader>
@@ -344,7 +344,7 @@ export function EmployeeDashboard() {
 
             {/* View/Update Task Dialog */}
             <Dialog open={isViewDialogOpen} onOpenChange={setIsViewDialogOpen}>
-                <DialogContent>
+                <DialogContent className="max-w-[95vw] sm:max-w-md max-h-[90vh] overflow-y-auto p-4 sm:p-6">
                     <DialogHeader>
                         <DialogTitle>Карточка задачи</DialogTitle>
                     </DialogHeader>

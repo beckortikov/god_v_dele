@@ -613,15 +613,15 @@ export function LifeWheelPage({ participantId: fixedParticipantId, participantNa
     }
 
     return (
-        <div className="p-4 sm:p-6 space-y-6 min-h-full bg-background/50">
+        <div className="p-3 sm:p-6 space-y-4 sm:space-y-6 min-h-full bg-background/50">
             {/* Header Title */}
-            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border-b border-border pb-5">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-border pb-3.5">
                 <div>
-                    <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground flex items-center gap-2.5">
-                        <span className="text-3xl sm:text-4xl animate-pulse">🎯</span>
+                    <h1 className="text-xl sm:text-3xl font-extrabold tracking-tight text-foreground flex items-center gap-2">
+                        <span className="text-2xl sm:text-4xl animate-pulse">🎯</span>
                         Колесо внимания
                         {isParticipantMode && participantName && (
-                            <Badge variant="outline" className="ml-2 text-xs font-bold py-1 px-2.5 border-indigo-500/30 text-indigo-600 dark:text-indigo-400 bg-indigo-500/5">
+                            <Badge variant="outline" className="ml-1.5 text-xs font-bold py-0.5 px-2 border-indigo-500/30 text-indigo-600 dark:text-indigo-400 bg-indigo-500/5">
                                 {participantName}
                             </Badge>
                         )}
@@ -629,14 +629,14 @@ export function LifeWheelPage({ participantId: fixedParticipantId, participantNa
                     <p className="text-xs sm:text-sm text-muted-foreground mt-1 font-medium">Распределение времени по категориям жизни и сферам внимания</p>
                 </div>
 
-                <div className="flex items-center gap-2.5 flex-wrap w-full md:w-auto justify-end">
+                <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto justify-end">
                     {activeTab === 'editor' && saveStatus === 'success' && (
-                        <span className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400 bg-green-500/10 border border-green-500/20 px-3 py-1.5 rounded-lg animate-in fade-in zoom-in duration-300 font-semibold">
+                        <span className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400 bg-green-500/10 border border-green-500/20 px-3 py-1.5 rounded-lg animate-in fade-in zoom-in duration-300 font-semibold w-full sm:w-auto justify-center">
                             <CheckCircle2 className="w-4 h-4" /> Изменения сохранены!
                         </span>
                     )}
                     {activeTab === 'editor' && saveStatus === 'error' && (
-                        <span className="flex items-center gap-1 text-xs text-red-600 dark:text-red-400 bg-red-500/10 border border-red-500/20 px-3 py-1.5 rounded-lg animate-in fade-in zoom-in duration-300 font-semibold">
+                        <span className="flex items-center gap-1 text-xs text-red-600 dark:text-red-400 bg-red-500/10 border border-red-500/20 px-3 py-1.5 rounded-lg animate-in fade-in zoom-in duration-300 font-semibold w-full sm:w-auto justify-center">
                             <AlertCircle className="w-4 h-4" /> Ошибка сохранения
                         </span>
                     )}
@@ -646,7 +646,7 @@ export function LifeWheelPage({ participantId: fixedParticipantId, participantNa
                             onClick={() => handleSave(false)}
                             disabled={isSaving || !selectedParticipantId}
                             size="default"
-                            className="gap-2 font-bold bg-indigo-600 hover:bg-indigo-500 text-xs shadow-md px-5 py-2 transition-all active:scale-95 text-white"
+                            className="gap-2 font-bold bg-indigo-600 hover:bg-indigo-500 text-xs shadow-md px-5 py-2.5 transition-all active:scale-95 text-white w-full sm:w-auto justify-center touch-manipulation"
                         >
                             {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                             {isSaving ? 'Сохранение...' : 'Сохранить изменения'}
@@ -683,17 +683,17 @@ export function LifeWheelPage({ participantId: fixedParticipantId, participantNa
             )}
 
             {activeTab === 'editor' ? (
-                <div className="space-y-5">
+                <div className="space-y-4 sm:space-y-5">
                     {/* Controls: Participant + Period */}
-                    <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-12 gap-3 items-end">
                         {/* Participant selector (admin only) */}
                         {!isParticipantMode ? (
-                            <div className="md:col-span-4 bg-card border border-border p-3 rounded-xl shadow-sm space-y-1.5">
+                            <div className="sm:col-span-2 md:col-span-4 bg-card border border-border p-3 rounded-xl shadow-sm space-y-1.5">
                                 <label className="text-[10px] font-extrabold text-muted-foreground uppercase tracking-wider">Участник</label>
                                 <select
                                     value={selectedParticipantId}
                                     onChange={e => { setSelectedParticipantId(e.target.value); setPeriodOffset(0) }}
-                                    className="w-full px-3 py-1.5 bg-background border border-border rounded-lg text-foreground text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/30 font-semibold"
+                                    className="w-full px-3 py-1.5 bg-background border border-border rounded-lg text-foreground text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/30 font-semibold touch-manipulation"
                                 >
                                     <option value="">— Выберите участника —</option>
                                     <option value={TEMPLATE_ID}>⚙️ Базовый шаблон (для всех)</option>
@@ -702,20 +702,18 @@ export function LifeWheelPage({ participantId: fixedParticipantId, participantNa
                                     ))}
                                 </select>
                             </div>
-                        ) : (
-                            <div className="md:col-span-4" />
-                        )}
+                        ) : null}
 
                         {/* Period type */}
                         {selectedParticipantId && selectedParticipantId !== TEMPLATE_ID && (
-                            <div className="md:col-span-3 bg-card border border-border p-3 rounded-xl shadow-sm space-y-1.5">
+                            <div className="sm:col-span-1 md:col-span-3 bg-card border border-border p-3 rounded-xl shadow-sm space-y-1.5">
                                 <label className="text-[10px] font-extrabold text-muted-foreground uppercase tracking-wider">Масштаб периода</label>
                                 <div className="flex rounded-lg border border-border overflow-hidden p-0.5 bg-background">
                                     {(['monthly', 'weekly'] as const).map(t => (
                                         <button
                                             key={t}
                                             onClick={() => { setPeriodType(t); setPeriodOffset(0) }}
-                                            className={`flex-1 py-1 text-xs font-bold rounded-md transition-all ${periodType === t
+                                            className={`flex-1 py-1 text-xs font-bold rounded-md transition-all touch-manipulation ${periodType === t
                                                 ? 'bg-indigo-600 text-white shadow-sm'
                                                 : 'text-muted-foreground hover:bg-muted/40 hover:text-foreground'
                                                 }`}
@@ -729,12 +727,12 @@ export function LifeWheelPage({ participantId: fixedParticipantId, participantNa
 
                         {/* Period navigation */}
                         {selectedParticipantId && selectedParticipantId !== TEMPLATE_ID && (
-                            <div className="md:col-span-3 bg-card border border-border p-3 rounded-xl shadow-sm space-y-1.5">
+                            <div className="sm:col-span-1 md:col-span-3 bg-card border border-border p-3 rounded-xl shadow-sm space-y-1.5">
                                 <label className="text-[10px] font-extrabold text-muted-foreground uppercase tracking-wider">Текущий период</label>
                                 <div className="flex items-center gap-1">
                                     <button
                                         onClick={() => setPeriodOffset(o => o - 1)}
-                                        className="p-1.5 border border-border rounded-lg hover:bg-muted/50 transition-colors"
+                                        className="p-1.5 border border-border rounded-lg hover:bg-muted/50 transition-colors touch-manipulation"
                                     >
                                         <ChevronLeft className="w-4 h-4" />
                                     </button>
@@ -752,7 +750,7 @@ export function LifeWheelPage({ participantId: fixedParticipantId, participantNa
                                     </div>
                                     <button
                                         onClick={() => setPeriodOffset(o => o + 1)}
-                                        className="p-1.5 border border-border rounded-lg hover:bg-muted/50 transition-colors"
+                                        className="p-1.5 border border-border rounded-lg hover:bg-muted/50 transition-colors touch-manipulation"
                                     >
                                         <ChevronRight className="w-4 h-4" />
                                     </button>

@@ -431,21 +431,21 @@ export default function OPiUReportsPage() {
     ]
 
     return (
-        <div className="p-4 sm:p-6 space-y-6">
+        <div className="p-3 sm:p-6 space-y-4 sm:space-y-6 min-h-full">
             {/* Header */}
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4 border-b border-border pb-3">
                 <div>
-                    <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Ежемесячный отчет ОПиУ</h1>
-                    <p className="text-sm text-muted-foreground mt-1">
+                    <h1 className="text-xl sm:text-2xl font-bold text-foreground">Ежемесячный отчет ОПиУ</h1>
+                    <p className="text-xs sm:text-sm text-muted-foreground mt-1">
                         Отчет по работе с участниками за {reportData.period.month_name} {reportData.period.year}
                     </p>
                 </div>
-                <div className="flex gap-2">
-                    <Button onClick={exportToPDF} variant="outline" size="sm">
+                <div className="flex items-center gap-2 w-full sm:w-auto">
+                    <Button onClick={exportToPDF} variant="outline" size="sm" className="flex-1 sm:flex-initial touch-manipulation">
                         <FileText className="h-4 w-4 mr-2" />
                         PDF
                     </Button>
-                    <Button onClick={exportToExcel} variant="outline" size="sm">
+                    <Button onClick={exportToExcel} variant="outline" size="sm" className="flex-1 sm:flex-initial touch-manipulation">
                         <Download className="h-4 w-4 mr-2" />
                         Excel
                     </Button>

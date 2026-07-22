@@ -180,7 +180,7 @@ export function ManagerDashboard() {
                                     Поставить задачу
                                 </Button>
                             </DialogTrigger>
-                            <DialogContent>
+                            <DialogContent className="max-w-[95vw] sm:max-w-md max-h-[90vh] overflow-y-auto p-4 sm:p-6">
                                 <DialogHeader>
                                     <DialogTitle>Новая задача для сотрудника</DialogTitle>
                                 </DialogHeader>

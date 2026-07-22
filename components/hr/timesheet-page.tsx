@@ -35,16 +35,16 @@ export function TimesheetPage() {
     const years = ['2025', '2026', '2027']
 
     return (
-        <div className="p-4 sm:p-6 space-y-6 bg-background">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div className="p-3 sm:p-6 space-y-4 sm:space-y-6 bg-background min-h-full">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-border pb-3.5">
                 <div>
-                    <h1 className="text-2xl font-bold text-foreground">Табель учета времени</h1>
-                    <p className="text-sm text-muted-foreground">Детальный отчет по отработанным часам сотрудников</p>
+                    <h1 className="text-xl sm:text-2xl font-bold text-foreground">Табель учета времени</h1>
+                    <p className="text-xs sm:text-sm text-muted-foreground mt-1">Детальный отчет по отработанным часам сотрудников</p>
                 </div>
 
-                <div className="flex gap-2">
+                <div className="flex gap-2 w-full sm:w-auto justify-end">
                     <Select value={month} onValueChange={setMonth}>
-                        <SelectTrigger className="w-[140px]">
+                        <SelectTrigger className="w-[130px] text-xs sm:text-sm touch-manipulation">
                             <SelectValue placeholder="Месяц" />
                         </SelectTrigger>
                         <SelectContent>
@@ -55,7 +55,7 @@ export function TimesheetPage() {
                     </Select>
 
                     <Select value={year} onValueChange={setYear}>
-                        <SelectTrigger className="w-[100px]">
+                        <SelectTrigger className="w-[90px] text-xs sm:text-sm touch-manipulation">
                             <SelectValue placeholder="Год" />
                         </SelectTrigger>
                         <SelectContent>

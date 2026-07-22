@@ -488,18 +488,18 @@ export function IncomeExpensesPage() {
   }
 
   return (
-    <div className="p-6 space-y-6 bg-background">
+    <div className="p-3 sm:p-6 space-y-4 sm:space-y-6 bg-background min-h-full">
       {/* Header */}
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-foreground">Доходы и Расходы</h2>
-          <p className="text-sm text-muted-foreground mt-1">Управление финансовыми потоками</p>
+          <h2 className="text-xl sm:text-2xl font-bold text-foreground">Доходы и Расходы</h2>
+          <p className="text-xs sm:text-sm text-muted-foreground mt-1">Управление финансовыми потоками</p>
         </div>
-        <div className="w-64">
+        <div className="w-full sm:w-64">
           <select
             value={filterProgram}
             onChange={(e) => setFilterProgram(e.target.value)}
-            className="w-full px-3 py-2 bg-background border border-border rounded-md text-foreground text-sm"
+            className="w-full px-3 py-2 bg-background border border-border rounded-md text-foreground text-xs sm:text-sm touch-manipulation"
           >
             <option value="all">Все программы</option>
             {programs.map(prog => (
@@ -510,34 +510,34 @@ export function IncomeExpensesPage() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card className="p-4 bg-card border-border">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+        <Card className="p-3.5 sm:p-4 bg-card border-border">
           <div className="flex justify-between items-start">
             <div>
               <p className="text-xs text-muted-foreground">Общий доход</p>
-              <h3 className="text-2xl font-bold text-foreground mt-1">${totalIncome.toLocaleString()}</h3>
+              <h3 className="text-xl sm:text-2xl font-bold text-foreground mt-1">${totalIncome.toLocaleString()}</h3>
             </div>
             <div className="p-2 bg-green-100 rounded-full">
               <ArrowUpRight className="w-4 h-4 text-green-600" />
             </div>
           </div>
         </Card>
-        <Card className="p-4 bg-card border-border">
+        <Card className="p-3.5 sm:p-4 bg-card border-border">
           <div className="flex justify-between items-start">
             <div>
               <p className="text-xs text-muted-foreground">Общие расходы</p>
-              <h3 className="text-2xl font-bold text-foreground mt-1">${totalExpenses.toLocaleString()}</h3>
+              <h3 className="text-xl sm:text-2xl font-bold text-foreground mt-1">${totalExpenses.toLocaleString()}</h3>
             </div>
             <div className="p-2 bg-red-100 rounded-full">
               <ArrowDownRight className="w-4 h-4 text-red-600" />
             </div>
           </div>
         </Card>
-        <Card className="p-4 bg-card border-border">
+        <Card className="p-3.5 sm:p-4 bg-card border-border">
           <div className="flex justify-between items-start">
             <div>
               <p className="text-xs text-muted-foreground">Чистый баланс</p>
-              <h3 className={`text-2xl font-bold mt-1 ${balance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+              <h3 className={`text-xl sm:text-2xl font-bold mt-1 ${balance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                 ${balance.toLocaleString()}
               </h3>
             </div>
@@ -549,11 +549,11 @@ export function IncomeExpensesPage() {
       </div>
 
       <Tabs defaultValue="income" className="w-full">
-        <TabsList className="grid w-full grid-cols-4 lg:w-[800px]">
-          <TabsTrigger value="income">Поступления (Доходы)</TabsTrigger>
-          <TabsTrigger value="expenses">Расходы</TabsTrigger>
-          <TabsTrigger value="analysis">Аналитика</TabsTrigger>
-          <TabsTrigger value="accounts">Счета</TabsTrigger>
+        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 h-auto p-1 gap-1">
+          <TabsTrigger value="income" className="text-xs py-2">Доходы</TabsTrigger>
+          <TabsTrigger value="expenses" className="text-xs py-2">Расходы</TabsTrigger>
+          <TabsTrigger value="analysis" className="text-xs py-2">Аналитика</TabsTrigger>
+          <TabsTrigger value="accounts" className="text-xs py-2">Счета</TabsTrigger>
         </TabsList>
 
         <TabsContent value="income" className="space-y-6 mt-6">

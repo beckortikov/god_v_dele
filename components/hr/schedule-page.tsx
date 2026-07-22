@@ -209,17 +209,17 @@ export function SchedulePage() {
     }
 
     return (
-        <div className="p-4 sm:p-6 space-y-6">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                <h1 className="text-2xl font-bold">График работы</h1>
-                <div className="flex items-center gap-2">
-                    <Button variant="outline" size="icon" onClick={handlePrevDay}>
+        <div className="p-3 sm:p-6 space-y-4 sm:space-y-6 min-h-full">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-border pb-3.5">
+                <h1 className="text-xl sm:text-2xl font-bold">График работы</h1>
+                <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                    <Button variant="outline" size="icon" onClick={handlePrevDay} className="touch-manipulation">
                         <ChevronLeft className="w-4 h-4" />
                     </Button>
-                    <div className="font-medium min-w-[150px] text-center">
+                    <div className="font-medium text-xs sm:text-sm min-w-[130px] sm:min-w-[150px] text-center">
                         {currentDate.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })}
                     </div>
-                    <Button variant="outline" size="icon" onClick={handleNextDay}>
+                    <Button variant="outline" size="icon" onClick={handleNextDay} className="touch-manipulation">
                         <ChevronRight className="w-4 h-4" />
                     </Button>
                 </div>
@@ -227,15 +227,15 @@ export function SchedulePage() {
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <div className="lg:col-span-2 space-y-6">
-                    <div className="flex justify-between items-center">
-                        <h2 className="text-lg font-semibold">Расписание на сегодня</h2>
+                    <div className="flex justify-between items-center flex-wrap gap-2">
+                        <h2 className="text-base sm:text-lg font-semibold">Расписание на сегодня</h2>
                         <Dialog open={isAssignOpen} onOpenChange={setIsAssignOpen}>
                             <DialogTrigger asChild>
-                                <Button size="sm" onClick={handleAddNew}>
+                                <Button size="sm" onClick={handleAddNew} className="touch-manipulation">
                                     <Plus className="w-4 h-4 mr-2" /> Назначить смену
                                 </Button>
                             </DialogTrigger>
-                            <DialogContent>
+                            <DialogContent className="max-w-[95vw] sm:max-w-md max-h-[90vh] overflow-y-auto p-4 sm:p-6">
                                 <DialogHeader>
                                     <DialogTitle>{editingSchedule ? 'Редактировать смену' : 'Назначение смены'}</DialogTitle>
                                 </DialogHeader>

@@ -39,7 +39,7 @@ const pageNames: Record<PageType, string> = {
 
 export function TopNav({ currentPage, onLogout, onMenuClick, mode, onModeChange, userRole = 'admin' }: TopNavProps) {
   return (
-    <header className="bg-card border-b border-border px-3 sm:px-6 py-2.5 flex items-center justify-between h-14 shrink-0">
+    <header className="bg-card border-b border-border px-3 sm:px-6 py-1.5 flex items-center justify-between h-12 shrink-0">
       <div className="flex items-center gap-3">
         {/* Hamburger menu - mobile only */}
         {onMenuClick && (

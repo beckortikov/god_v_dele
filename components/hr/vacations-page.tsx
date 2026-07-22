@@ -185,9 +185,9 @@ export function VacationsPage() {
     }
 
     return (
-        <div className="space-y-6 p-6">
-            <div className="flex items-center justify-between">
-                <h1 className="text-2xl font-bold">Отпуска и Отгулы</h1>
+        <div className="p-3 sm:p-6 space-y-4 sm:space-y-6 min-h-full">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-border pb-3.5">
+                <h1 className="text-xl sm:text-2xl font-bold">Отпуска и Отгулы</h1>
                 <Dialog open={isAddOpen} onOpenChange={(open) => {
                     setIsAddOpen(open);
                     if (!open) {
@@ -201,13 +201,13 @@ export function VacationsPage() {
                     }
                 }}>
                     <DialogTrigger asChild>
-                        <Button><Plus className="w-4 h-4 mr-2" /> Добавить</Button>
+                        <Button className="w-full sm:w-auto touch-manipulation"><Plus className="w-4 h-4 mr-2" /> Добавить</Button>
                     </DialogTrigger>
-                    <DialogContent>
+                    <DialogContent className="max-w-[95vw] sm:max-w-md max-h-[90vh] overflow-y-auto p-4 sm:p-6">
                         <DialogHeader>
                             <DialogTitle>{editingId ? 'Редактирование записи' : 'Регистрация отсутствия'}</DialogTitle>
                         </DialogHeader>
-                        <form onSubmit={handleSubmit} className="space-y-4 py-4">
+                        <form onSubmit={handleSubmit} className="space-y-4 py-2">
                             <div className="space-y-2">
                                 <Label>Сотрудник</Label>
                                 <Select

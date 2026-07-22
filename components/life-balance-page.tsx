@@ -413,9 +413,9 @@ export function LifeBalancePage({ participantId: fixedParticipantId, participant
     }, [participants, allEntries, searchTerm, programFilter])
 
     return (
-        <div className="p-4 sm:p-6 space-y-6 min-h-full bg-background/50">
+        <div className="p-4 sm:p-5 space-y-4 min-h-full bg-background/50">
             {/* Header Title */}
-            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border-b border-border pb-5">
+            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3 border-b border-border pb-3">
                 <div>
                     <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground flex items-center gap-2.5">
                         <span className="text-3xl sm:text-4xl animate-pulse">🎡</span>
@@ -498,10 +498,10 @@ export function LifeBalancePage({ participantId: fixedParticipantId, participant
             {activeTab === 'editor' ? (
                 <div className="space-y-5">
                     {/* User Selection & Highlighting (Admin/User Mode) */}
-                    <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-center">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-12 gap-3 items-center">
                         {/* Selector (Admin Only) */}
                         {!isParticipantMode ? (
-                            <div className="md:col-span-6 bg-card border border-border p-3.5 rounded-xl shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                            <div className="sm:col-span-2 md:col-span-6 bg-card border border-border p-3.5 rounded-xl shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                                 <div>
                                     <h3 className="text-xs font-extrabold text-foreground uppercase tracking-wider">Выбор участника</h3>
                                     <p className="text-[10px] text-muted-foreground mt-0.5">Выберите анкету для заполнения</p>
@@ -509,7 +509,7 @@ export function LifeBalancePage({ participantId: fixedParticipantId, participant
                                 <select
                                     value={selectedParticipantId}
                                     onChange={e => { setSelectedParticipantId(e.target.value); setHasUnsavedChanges(false) }}
-                                    className="w-full sm:w-[280px] px-3 py-2 bg-background border border-border rounded-lg text-foreground text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/30 font-semibold shadow-sm"
+                                    className="w-full sm:w-[280px] px-3 py-2 bg-background border border-border rounded-lg text-foreground text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/30 font-semibold shadow-sm touch-manipulation"
                                 >
                                     <option value="">— Выберите участника —</option>
                                     <option value={TEMPLATE_ID}>⚙️ Базовый шаблон (для всех)</option>
@@ -520,13 +520,11 @@ export function LifeBalancePage({ participantId: fixedParticipantId, participant
                                     ))}
                                 </select>
                             </div>
-                        ) : (
-                            <div className="md:col-span-6" />
-                        )}
+                        ) : null}
 
                         {/* Search Checkpoints Filter */}
                         {selectedParticipantId && (
-                            <div className="md:col-span-6 bg-card border border-border p-3.5 rounded-xl shadow-sm flex items-center gap-3">
+                            <div className="sm:col-span-2 md:col-span-6 bg-card border border-border p-3.5 rounded-xl shadow-sm flex items-center gap-3">
                                 <div className="relative flex-1">
                                     <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground/60" />
                                     <Input

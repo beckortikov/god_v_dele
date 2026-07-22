@@ -438,15 +438,15 @@ export function BusinessWheelPage({ participantId: fixedParticipantId, participa
     const overallStrokeDashoffset = 201.06 - (201.06 * overallPercentage) / 100
 
     return (
-        <div className="p-4 sm:p-6 space-y-6 min-h-full bg-background/50">
+        <div className="p-3 sm:p-6 space-y-4 sm:space-y-6 min-h-full bg-background/50">
             {/* Header Title */}
-            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border-b border-border pb-5">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-border pb-3.5">
                 <div>
-                    <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground flex items-center gap-2.5">
-                        <span className="text-3xl sm:text-4xl animate-pulse">🏢</span>
+                    <h1 className="text-xl sm:text-3xl font-extrabold tracking-tight text-foreground flex items-center gap-2">
+                        <span className="text-2xl sm:text-4xl animate-pulse">🏢</span>
                         Колесо бизнеса
                         {isParticipantMode && participantName && (
-                            <Badge variant="outline" className="ml-2 text-xs font-bold py-1 px-2.5 border-indigo-500/30 text-indigo-600 dark:text-indigo-400 bg-indigo-500/5">
+                            <Badge variant="outline" className="ml-1.5 text-xs font-bold py-0.5 px-2 border-indigo-500/30 text-indigo-600 dark:text-indigo-400 bg-indigo-500/5">
                                 {participantName}
                             </Badge>
                         )}
@@ -454,7 +454,7 @@ export function BusinessWheelPage({ participantId: fixedParticipantId, participa
                     <p className="text-xs sm:text-sm text-muted-foreground mt-1 font-medium">Интерактивный аудит 10 ключевых сфер вашего бизнеса по 7 чек-поинтам в каждой</p>
                 </div>
 
-                <div className="flex items-center gap-2.5 flex-wrap w-full md:w-auto justify-end">
+                <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto justify-end">
                     {/* Period Pickers */}
                     <div className="flex items-center gap-2 bg-card px-3 py-1.5 rounded-lg border border-border shadow-sm">
                         <select

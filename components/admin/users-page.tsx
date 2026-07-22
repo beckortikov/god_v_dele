@@ -169,12 +169,12 @@ export function UsersPage() {
     })
 
     return (
-        <div className="space-y-6 p-4 sm:p-6">
+        <div className="p-3 sm:p-6 space-y-4 sm:space-y-6 min-h-full">
             {/* Header */}
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 border-b border-border pb-3.5">
                 <div>
-                    <h1 className="text-2xl font-bold">Управление пользователями</h1>
-                    <p className="text-sm text-muted-foreground mt-1">
+                    <h1 className="text-xl sm:text-2xl font-bold">Управление пользователями</h1>
+                    <p className="text-xs sm:text-sm text-muted-foreground mt-1">
                         {isFormOpen 
                             ? (editingUser ? 'Изменение учетной записи и привязок' : 'Создание нового пользователя')
                             : 'Управление учетными записями, ролями и привязками к сотрудникам/участникам'
@@ -182,11 +182,11 @@ export function UsersPage() {
                     </p>
                 </div>
                 {!isFormOpen ? (
-                    <Button onClick={() => { resetForm(); setIsFormOpen(true) }}>
+                    <Button onClick={() => { resetForm(); setIsFormOpen(true) }} className="w-full sm:w-auto touch-manipulation">
                         <Plus className="w-4 h-4 mr-2" /> Добавить пользователя
                     </Button>
                 ) : (
-                    <Button variant="outline" onClick={resetForm} className="gap-2">
+                    <Button variant="outline" onClick={resetForm} className="gap-2 w-full sm:w-auto touch-manipulation">
                         <ArrowLeft className="w-4 h-4" /> Назад к списку
                     </Button>
                 )}
