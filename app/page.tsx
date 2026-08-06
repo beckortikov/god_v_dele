@@ -32,20 +32,23 @@ export default function Home() {
   const [currentPage, setCurrentPage] = useState<PageType>('dashboard')
   const [mode, setMode] = useState<'finance' | 'hr' | 'employee'>('finance')
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
-  const [userRole, setUserRole] = useState<'admin' | 'finance' | 'employee' | 'manager' | 'participant'>('admin')
+  const [userRole, setUserRole] = useState<'admin' | 'finance' | 'employee' | 'manager' | 'wheels_manager' | 'participant'>('admin')
   const [userParticipantId, setUserParticipantId] = useState<string | null>(null)
   const [userFullName, setUserFullName] = useState<string | null>(null)
 
   useEffect(() => {
     // Check if user is already authenticated
     const auth = localStorage.getItem('isAuthenticated')
-    const role = localStorage.getItem('userRole') as 'admin' | 'finance' | 'employee' | 'manager' | 'participant' || 'admin'
+    const role = localStorage.getItem('userRole') as 'admin' | 'finance' | 'employee' | 'manager' | 'wheels_manager' | 'participant' || 'admin'
     setIsAuthenticated(auth === 'true')
     setUserRole(role as any)
     setIsLoading(false)
 
     if (role === 'finance') {
       setMode('finance')
+    } else if (role === 'wheels_manager') {
+      setMode('employee')
+      setCurrentPage('life-wheel')
     } else if (role === 'manager') {
       setMode('employee')
       setCurrentPage('manager-dashboard')
@@ -106,7 +109,7 @@ export default function Home() {
   if (!isAuthenticated) {
     return <LoginPage onLoginSuccess={() => {
       setIsAuthenticated(true)
-      const role = localStorage.getItem('userRole') as 'admin' | 'finance' | 'employee' | 'manager' | 'participant' || 'admin'
+      const role = localStorage.getItem('userRole') as 'admin' | 'finance' | 'employee' | 'manager' | 'wheels_manager' | 'participant' || 'admin'
       setUserRole(role as any)
 
       try {
@@ -121,6 +124,9 @@ export default function Home() {
       if (role === 'finance') {
         setMode('finance')
         setCurrentPage('dashboard')
+      } else if (role === 'wheels_manager') {
+        setMode('employee')
+        setCurrentPage('life-wheel')
       } else if (role === 'manager') {
         setMode('employee')
         setCurrentPage('manager-dashboard')
@@ -130,6 +136,8 @@ export default function Home() {
       }
     }} />
   }
+
+  const isWheelsAdmin = userRole === 'admin' || userRole === 'wheels_manager'
 
   return (
     <div className="flex h-screen bg-background text-foreground">
@@ -161,20 +169,20 @@ export default function Home() {
           {currentPage === 'balance' && <BalanceForecastPage />}
           {currentPage === 'life-wheel' && (
             <LifeWheelPage
-              participantId={userRole !== 'admin' && userParticipantId ? userParticipantId : undefined}
-              participantName={userRole !== 'admin' ? (userFullName || undefined) : undefined}
+              participantId={!isWheelsAdmin && userParticipantId ? userParticipantId : undefined}
+              participantName={!isWheelsAdmin ? (userFullName || undefined) : undefined}
             />
           )}
           {currentPage === 'life-balance' && (
             <LifeBalancePage
-              participantId={userRole !== 'admin' && userParticipantId ? userParticipantId : undefined}
-              participantName={userRole !== 'admin' ? (userFullName || undefined) : undefined}
+              participantId={!isWheelsAdmin && userParticipantId ? userParticipantId : undefined}
+              participantName={!isWheelsAdmin ? (userFullName || undefined) : undefined}
             />
           )}
           {currentPage === 'business-wheel' && (
             <BusinessWheelPage
-              participantId={userRole !== 'admin' && userParticipantId ? userParticipantId : undefined}
-              participantName={userRole !== 'admin' ? (userFullName || undefined) : undefined}
+              participantId={!isWheelsAdmin && userParticipantId ? userParticipantId : undefined}
+              participantName={!isWheelsAdmin ? (userFullName || undefined) : undefined}
             />
           )}
 

@@ -508,7 +508,9 @@ export function LifeWheelPage({ participantId: fixedParticipantId, participantNa
             const res = await fetch(`/api/life-wheel?${params}`)
             const { data } = await res.json()
             if (data && data.length > 0 && data[0].categories?.length > 0) {
-                setCategories(scaleCategoriesToMax(balanceCategories(data[0].categories), targetMax))
+                // Own saved entry: show exactly what the user saved, without
+                // force-scaling up to the period max (720/168h).
+                setCategories(balanceCategories(data[0].categories))
             } else {
                 if (pid !== TEMPLATE_ID) {
                     try {
@@ -557,19 +559,10 @@ export function LifeWheelPage({ participantId: fixedParticipantId, participantNa
         const pid = fixedParticipantId || selectedParticipantId
         if (!pid) return
 
-        let finalCategories = categories
-        const currentDiff = Math.abs(total - maxHours)
-
-        if (!silent && pid !== TEMPLATE_ID && currentDiff > 0.01) {
-            if (currentDiff <= 2.0) {
-                // Auto-fix tiny rounding discrepancies automatically
-                finalCategories = scaleCategoriesToMax(categories, maxHours)
-                setCategories(finalCategories)
-            } else {
-                alert(`Итоговая сумма часов должна быть строго равна ${maxHours} ч. (сейчас: ${Number(total.toFixed(1))} ч.)\nНажмите "⚡ Авто-баланс" под полосой прогресса для моментального выравнивания.`)
-                return
-            }
-        }
+        // Save exactly what the user entered. Filling the full 720/168h is
+        // encouraged (progress bar + "⚡ Авто-баланс" button) but NOT required —
+        // partial / under-allocated distributions are saved as-is.
+        const finalCategories = categories
 
         if (!silent) setIsSaving(true)
         if (!silent) setSaveStatus('idle')

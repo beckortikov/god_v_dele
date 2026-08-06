@@ -14,7 +14,7 @@ import { Plus, Trash2, Edit2, Shield, User, X, ArrowLeft } from 'lucide-react'
 type AppUser = {
     id: string
     username: string
-    role: 'admin' | 'finance' | 'participant' | 'employee' | 'manager'
+    role: 'admin' | 'finance' | 'participant' | 'employee' | 'manager' | 'wheels_manager'
     full_name: string
     employee_id?: string
     employee?: {
@@ -239,10 +239,29 @@ export function UsersPage() {
                                                 </TableCell>
                                                 <TableCell>{user.username}</TableCell>
                                                 <TableCell>
-                                                    <Badge variant={user.role === 'admin' ? 'default' : 'secondary'}>
-                                                        {user.role === 'admin' ? <Shield className="w-3 h-3 mr-1" /> : null}
-                                                        {user.role}
-                                                    </Badge>
+                                                    {user.role === 'admin' && (
+                                                        <Badge variant="default">
+                                                            <Shield className="w-3 h-3 mr-1" />
+                                                            Администратор
+                                                        </Badge>
+                                                    )}
+                                                    {user.role === 'wheels_manager' && (
+                                                        <Badge className="bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 border border-indigo-500/30 font-semibold">
+                                                            🎯 Менеджер колес
+                                                        </Badge>
+                                                    )}
+                                                    {user.role === 'manager' && (
+                                                        <Badge variant="secondary">Руководитель</Badge>
+                                                    )}
+                                                    {user.role === 'finance' && (
+                                                        <Badge variant="secondary">Финансист</Badge>
+                                                    )}
+                                                    {user.role === 'employee' && (
+                                                        <Badge variant="secondary">Сотрудник</Badge>
+                                                    )}
+                                                    {user.role === 'participant' && (
+                                                        <Badge variant="secondary">Участник</Badge>
+                                                    )}
                                                     {user.employee && (
                                                         <Badge variant="outline" className="ml-2">
                                                             HR: {user.employee.first_name} {user.employee.last_name}
@@ -332,7 +351,8 @@ export function UsersPage() {
                                                 <SelectValue />
                                             </SelectTrigger>
                                             <SelectContent>
-                                                <SelectItem value="admin">Admin</SelectItem>
+                                                <SelectItem value="admin">Администратор (Admin)</SelectItem>
+                                                <SelectItem value="wheels_manager">🎯 Менеджер колес (Контроль колес)</SelectItem>
                                                 <SelectItem value="manager">Руководитель (Manager)</SelectItem>
                                                 <SelectItem value="finance">Финансист (Finance)</SelectItem>
                                                 <SelectItem value="employee">Сотрудник (Employee)</SelectItem>

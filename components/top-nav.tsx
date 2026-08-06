@@ -10,7 +10,7 @@ interface TopNavProps {
   onMenuClick?: () => void
   mode: 'finance' | 'hr' | 'employee'
   onModeChange: (mode: 'finance' | 'hr' | 'employee') => void
-  userRole?: 'admin' | 'finance' | 'employee' | 'manager' | 'participant'
+  userRole?: 'admin' | 'finance' | 'employee' | 'manager' | 'wheels_manager' | 'participant'
 }
 
 const pageNames: Record<PageType, string> = {
@@ -72,6 +72,11 @@ export function TopNav({ currentPage, onLogout, onMenuClick, mode, onModeChange,
             >
               HR
             </button>
+          </div>
+        )}
+        {userRole === 'wheels_manager' && (
+          <div className="flex items-center gap-2 px-3 py-1 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded-lg border border-indigo-500/20 text-xs font-bold">
+            🎯 Менеджер колес (Контроль заполнения)
           </div>
         )}
       </div>

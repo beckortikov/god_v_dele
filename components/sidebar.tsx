@@ -27,7 +27,7 @@ interface SidebarProps {
   isOpen?: boolean
   onClose?: () => void
   mode: 'finance' | 'hr' | 'employee'
-  userRole?: 'admin' | 'finance' | 'employee' | 'manager' | 'participant'
+  userRole?: 'admin' | 'finance' | 'employee' | 'manager' | 'wheels_manager' | 'participant'
 }
 
 export function Sidebar({ currentPage, onPageChange, isOpen = true, onClose, mode, userRole = 'admin' }: SidebarProps) {
@@ -71,11 +71,20 @@ export function Sidebar({ currentPage, onPageChange, isOpen = true, onClose, mod
     { id: 'business-wheel', icon: PieChart, label: 'Колесо бизнеса' },
   ]
 
+  const wheelsManagerMenuItems: { id: PageType; icon: any; label: string; section?: string; badge?: any }[] = [
+    { id: 'life-wheel', icon: PieChart, label: 'Колесо внимания', section: 'wheels' },
+    { id: 'life-balance', icon: PieChart, label: 'Колесо жизни', section: 'wheels' },
+    { id: 'business-wheel', icon: PieChart, label: 'Колесо бизнеса', section: 'wheels' },
+    { id: 'participants', icon: Users, label: 'Участники' },
+  ]
+
   if (userRole === 'manager') {
     employeeMenuItems.push({ id: 'manager-dashboard', icon: Users, label: 'Задачи сотрудников' })
   }
 
-  let menuItems = mode === 'finance' ? financeMenuItems : mode === 'hr' ? hrMenuItems : userRole === 'participant' ? participantMenuItems : employeeMenuItems
+  let menuItems = userRole === 'wheels_manager'
+    ? wheelsManagerMenuItems
+    : mode === 'finance' ? financeMenuItems : mode === 'hr' ? hrMenuItems : userRole === 'participant' ? participantMenuItems : employeeMenuItems
 
   if (userRole === 'admin' && (mode === 'finance' || mode === 'hr')) {
     menuItems = [...menuItems, ...adminMenuItems]
@@ -144,7 +153,7 @@ export function Sidebar({ currentPage, onPageChange, isOpen = true, onClose, mod
                 {showSectionHeader && (
                   <div className="px-3 py-2 mt-4 first:mt-0">
                     <p className="text-xs font-semibold text-sidebar-foreground/60 uppercase tracking-wider">
-                      {item.section === 'opiu' ? 'ОПиУ' : item.section === 'admin' ? 'Пользователи' : item.section === 'participants' ? 'Участники' : 'Финансы'}
+                      {item.section === 'opiu' ? 'ОПиУ' : item.section === 'admin' ? 'Пользователи' : item.section === 'wheels' ? 'Колеса баланса' : item.section === 'participants' ? 'Участники' : 'Финансы'}
                     </p>
                   </div>
                 )}
