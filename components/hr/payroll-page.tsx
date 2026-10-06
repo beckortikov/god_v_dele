@@ -21,6 +21,9 @@ import { StatStrip } from '@/components/erp/stat-strip'
 import { EmptyState } from '@/components/erp/empty-state'
 import { TotalsBar, TableSkeleton } from '@/components/erp/table-parts'
 import { useConfirm } from '@/components/erp/confirm'
+import { ExportButton } from '@/components/erp/export-button'
+import { exportToExcel } from '@/components/erp/export'
+import { BulkBar, SelectCell, SelectHeadCell, requestOk, useBulkRunner, useRowSelection } from '@/components/erp/bulk'
 import { Avatar, DetailRow, MonthSwitcher, currentYearMonth, fullName, monthLabel, type YearMonth } from '@/components/hr/shared'
 
 interface PayrollRecord {
@@ -242,6 +245,63 @@ export function PayrollPage() {
   const pendingAmount = pendingRows.reduce((sum, item) => sum + Number(item.total_amount || 0), 0)
   const sum = (k: 'base_salary' | 'bonus_amount' | 'deduction_amount') => payrollData.reduce((s, r) => s + Number(r[k] || 0), 0)
 
+  // ----- Selection (only «К выплате» rows), bulk pay, export -----
+  const pendingIds = React.useMemo(() => payrollData.filter(r => r.status === 'pending').map(r => r.id), [payrollData])
+  const selection = useRowSelection(pendingIds, `${ym.year}-${ym.month}`)
+  const bulk = useBulkRunner()
+  const selectedRows = payrollData.filter(r => r.status === 'pending' && selection.isSelected(r.id))
+  const selectedSum = selectedRows.reduce((s, r) => s + Number(r.total_amount || 0), 0)
+
+  const handleBulkPay = async () => {
+    const rows = selectedRows
+    if (!rows.length) return
+    const n = rows.length
+    const ok = await confirm({
+      title: `Выплатить ${formatNumber(n)} ${plural(n, ['сотруднику', 'сотрудникам', 'сотрудникам'])}?`,
+      description: (
+        <>
+          Начисления за {period.toLowerCase()} на сумму <span className="num font-medium text-foreground">{tjs(selectedSum)}</span> будут отмечены
+          выплаченными, дата выплаты — сегодня. Списание со счёта при этом не создаётся: чтобы деньги ушли из кассы, проведите расходы «Зарплаты» в
+          разделе «Доходы и расходы».
+        </>
+      ),
+      confirmText: `Выплатить ${tjs(selectedSum)}`,
+    })
+    if (!ok) return
+    const today = todayISO()
+    await bulk.run(
+      rows,
+      r =>
+        requestOk(`/api/hr/payroll/${r.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: 'paid', payment_date: today }),
+        }),
+      { done: 'Выплаты отмечены', noun: ['начисление', 'начисления', 'начислений'], label: r => fullName(r.employees) || 'Сотрудник' }
+    )
+    selection.clear()
+    fetchPayroll()
+  }
+
+  const runExport = () =>
+    exportToExcel({
+      filename: `Зарплата ${period}`,
+      sheetName: period,
+      rows: payrollData,
+      totals: true,
+      columns: [
+        { header: 'Сотрудник', value: r => fullName(r.employees) || 'Сотрудник удалён' },
+        { header: 'Должность', value: r => r.employees?.position },
+        { header: 'Период', value: () => period },
+        { header: 'Оклад, TJS', value: r => r.base_salary, type: 'money' },
+        { header: 'Премии, TJS', value: r => r.bonus_amount, type: 'money' },
+        { header: 'Удержания, TJS', value: r => r.deduction_amount, type: 'money' },
+        { header: 'К выплате, TJS', value: r => r.total_amount, type: 'money' },
+        { header: 'Статус', value: r => (STATUS[r.status] ?? STATUS.pending).label },
+        { header: 'Дата выплаты', value: r => (r.status === 'paid' ? r.payment_date : null), type: 'date' },
+      ],
+    })
+
   const detail = payrollData.find(r => r.id === detailId) ?? null
   const actions = { onPay: handlePay, onCancel: handleCancel, onRestore: (r: PayrollRecord) => handleStatusChange(r, 'pending'), onDelete: handleDelete }
 
@@ -253,6 +313,7 @@ export function PayrollPage() {
         actions={
           <>
             <MonthSwitcher value={ym} onChange={setYm} />
+            <ExportButton empty={isLoading || !payrollData.length} onExport={runExport} />
             {(isLoading || payrollData.length > 0) && (
               <Button size="sm" variant="outline" onClick={handleGenerate} disabled={generating || isLoading}>
                 <FilePlus2 /> {generating ? 'Формируем…' : 'Дополнить ведомость'}
@@ -312,6 +373,7 @@ export function PayrollPage() {
                 <Table>
                   <TableHeader>
                     <TableRow className="hover:bg-transparent">
+                      <SelectHeadCell selection={selection} label="Выбрать все начисления к выплате" disabled={!pendingIds.length} />
                       <TableHead>Сотрудник</TableHead>
                       <TableHead className="text-right max-md:hidden">Оклад</TableHead>
                       <TableHead className="text-right max-lg:hidden">Премии</TableHead>
@@ -326,7 +388,18 @@ export function PayrollPage() {
                       const st = STATUS[record.status] ?? STATUS.pending
                       const busy = busyId === record.id
                       return (
-                        <TableRow key={record.id} className="group cursor-pointer" onClick={() => setDetailId(record.id)}>
+                        <TableRow
+                          key={record.id}
+                          className="group cursor-pointer"
+                          data-state={selection.isSelected(record.id) ? 'selected' : undefined}
+                          onClick={() => setDetailId(record.id)}
+                        >
+                          <SelectCell
+                            selection={selection}
+                            id={record.id}
+                            disabled={record.status !== 'pending'}
+                            label={`Выбрать: ${fullName(record.employees) || 'сотрудник'}`}
+                          />
                           <TableCell>
                             <div className="flex items-center gap-3">
                               <Avatar person={record.employees} className="max-sm:hidden" />
@@ -396,6 +469,12 @@ export function PayrollPage() {
           </Panel>
         )}
       </div>
+
+      <BulkBar count={selection.count} onClear={selection.clear} progress={bulk.progress} summary={`· ${tjs(selectedSum)}`}>
+        <Button size="sm" onClick={handleBulkPay}>
+          <Check /> Выплатить выбранные
+        </Button>
+      </BulkBar>
 
       <PayrollSheet record={detail} period={period} busy={!!detail && busyId === detail.id} onClose={() => setDetailId(null)} {...actions} />
     </PageContainer>

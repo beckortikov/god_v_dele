@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { fetchRow, logAudit } from '@/lib/audit'
 import { isMissingTable } from '@/app/api/account-transfers/shared'
+import { ledgerEnabled, loadTransactions } from '@/lib/payments-ledger'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -33,7 +34,17 @@ export async function GET(request: Request) {
         }
         
         // Fetch incomes and expenses to calculate balances
-        const { data: payments } = await supabaseAdmin.from('monthly_payments').select('account_id, original_amount, fact_amount, currency').not('account_id', 'is', null)
+        // Partial payments on (migration 014): every receipt counts on its own
+        // account. Otherwise one row per month, exactly as before.
+        let payments: { account_id: string | null; original_amount: number | null; fact_amount: number | null; currency: string | null }[] | null
+        if (await ledgerEnabled(request)) {
+            payments = (await loadTransactions(request))
+                .filter(t => t.account_id)
+                .map(t => ({ account_id: t.account_id, original_amount: t.original_amount, fact_amount: t.amount_usd, currency: t.currency }))
+        } else {
+            const { data } = await supabaseAdmin.from('monthly_payments').select('account_id, original_amount, fact_amount, currency').not('account_id', 'is', null)
+            payments = data
+        }
         const { data: expenses } = await supabaseAdmin.from('expenses').select('account_id, amount, original_amount, currency').not('account_id', 'is', null)
 
         // Transfers between accounts (migration 012). If the table is not there yet,

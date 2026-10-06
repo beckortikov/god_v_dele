@@ -4,6 +4,8 @@ import { fetchRow, logAudit } from '@/lib/audit'
 import { changeSuffix, monthLabel, rowMoney, roundMoneyFields } from '@/lib/audit-labels'
 import { fetchRowsWhere, logDeletedRows } from '@/app/api/audit/_server'
 import { plural } from '@/lib/format'
+import { LEDGER_TABLE, ledgerEnabled, ledgerMock } from '@/lib/payments-ledger'
+import { receiptsOfMonths, receiptSummary } from '@/app/api/payments/_server'
 
 // GET - Fetch all participants with their program details (optionally one by ?id=)
 export async function GET(req: Request) {
@@ -116,6 +118,11 @@ export async function DELETE(req: Request) {
         const before = await fetchRow('participants', id)
         // monthly_payments are removed by ON DELETE CASCADE — keep them in the корзина too
         const payments = before ? await fetchRowsWhere('monthly_payments', 'participant_id', id) : []
+        // …and so are their receipts (migration 014)
+        const receipts =
+            payments.length && !ledgerMock(req) && (await ledgerEnabled(req).catch(() => false))
+                ? await receiptsOfMonths(payments.map(p => p.id))
+                : []
 
         const { error } = await supabaseAdmin
             .from('participants')
@@ -135,6 +142,11 @@ export async function DELETE(req: Request) {
             await logDeletedRows(req, 'monthly_payments', payments, p =>
                 `Платёж: ${before.name}, ${monthLabel(p.month_number, p.year)} — ${rowMoney(p, 'fact_amount')} (вместе с участником)`
             )
+            const monthOf = new Map(payments.map(p => [p.id, p]))
+            await logDeletedRows(req, LEDGER_TABLE, receipts, tx => {
+                const m = monthOf.get(tx.monthly_payment_id)
+                return `${receiptSummary(before.name, tx, m?.month_number, m?.year)} (вместе с участником)`
+            })
         }
 
         return NextResponse.json({ success: true }, { status: 200 })

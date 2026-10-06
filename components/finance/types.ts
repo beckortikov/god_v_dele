@@ -6,13 +6,15 @@ export interface IncomeItem {
   programId: string | null
   programName: string | null
   amount: number
-  status: 'paid' | 'overdue' | 'pending'
+  status: 'paid' | 'partial' | 'overdue' | 'pending'
   currency?: string
   original_amount?: number
   notes?: string
   account_id?: string
   month: number
   year: number
+  /** Ledger mode: this item is one receipt (payment_transactions), not a whole month. */
+  receipt?: boolean
 }
 
 export interface ExpenseItem {

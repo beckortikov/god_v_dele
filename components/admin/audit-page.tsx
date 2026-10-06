@@ -19,6 +19,9 @@ import { EmptyState } from '@/components/erp/empty-state'
 import { TablePagination } from '@/components/erp/pagination'
 import { TableSkeleton } from '@/components/erp/table-parts'
 import { useConfirm } from '@/components/erp/confirm'
+import { ExportButton } from '@/components/erp/export-button'
+import { exportToExcel } from '@/components/erp/export'
+import { BulkBar, SelectCell, SelectHeadCell, requestOk, useBulkRunner, useRowSelection } from '@/components/erp/bulk'
 import { readPref, writePref } from '@/components/finance/types'
 import { AuditDetailSheet } from '@/components/admin/audit/audit-detail-sheet'
 import { ACTION_BADGE, fullWhen, whenLabel } from '@/components/admin/audit/format'
@@ -28,6 +31,9 @@ type Tab = 'all' | 'trash'
 type Period = 'today' | 'week' | 'month30' | 'month' | 'all'
 
 const PAGE_SIZE = 50
+/** Export fetches every matching row page by page (the API allows ≤ 200 per page). */
+const EXPORT_PAGE_SIZE = 200
+const EXPORT_LIMIT = 10000
 const PREFS_KEY = 'audit-page-prefs'
 
 const PERIODS: { value: Period; label: string }[] = [
@@ -236,6 +242,64 @@ export function AuditPage() {
     }
   }
 
+  // ----- Trash: selection and bulk restore -----
+  const restorableIds = React.useMemo(
+    () => (tab === 'trash' ? rows.filter(e => RESTORABLE_TABLES.has(e.table_name) && !e.restored_at).map(e => e.id) : []),
+    [rows, tab]
+  )
+  const selection = useRowSelection(restorableIds, `${tab}|${period}|${table}|${action}|${actor}|${debouncedQuery}|${page}`)
+  const bulk = useBulkRunner()
+
+  const restoreSelected = async () => {
+    // Oldest deletion first: a parent (employee, event) comes back before rows that depend on it
+    const chosen = rows.filter(e => selection.isSelected(e.id)).sort((a, b) => a.created_at.localeCompare(b.created_at))
+    if (!chosen.length) return
+    const n = chosen.length
+    const ok = await confirm({
+      title: `Восстановить ${formatNumber(n)} ${plural(n, ['запись', 'записи', 'записей'])}?`,
+      description:
+        'Записи вернутся в свои разделы с данными на момент удаления. Восстанавливаем по одной, от более ранних удалений к поздним; если какая-то не вернётся, остальные всё равно будут восстановлены.',
+      confirmText: 'Восстановить',
+    })
+    if (!ok) return
+    await bulk.run(
+      chosen,
+      e =>
+        requestOk('/api/audit/restore', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: e.id }),
+        }),
+      { done: 'Записи восстановлены', noun: ['запись', 'записи', 'записей'], label: e => e.summary || tableLabel(e.table_name) }
+    )
+    selection.clear()
+    reload()
+  }
+
+  // ----- Export: every row that matches the current tab and filters -----
+  const runExport = async () => {
+    const all: AuditEntry[] = []
+    for (let p = 1; all.length < EXPORT_LIMIT; p++) {
+      const res = await fetchAudit(buildParams(filters, tab, p, EXPORT_PAGE_SIZE))
+      if (res === 'migration') throw new Error('Журнал ещё не включён')
+      all.push(...res.data)
+      if (res.data.length < EXPORT_PAGE_SIZE || all.length >= res.total) break
+    }
+    const trash = tab === 'trash'
+    return exportToExcel({
+      filename: trash ? 'Корзина' : 'Журнал изменений',
+      rows: all.slice(0, EXPORT_LIMIT),
+      columns: [
+        { header: trash ? 'Удалено' : 'Время', value: e => e.created_at, type: 'datetime' },
+        { header: 'Пользователь', value: e => e.actor_name || 'Не указан' },
+        { header: 'Действие', value: e => ACTION_LABELS[e.action] ?? e.action },
+        { header: 'Раздел', value: e => tableLabel(e.table_name) },
+        { header: 'Описание', value: e => e.summary, width: 80 },
+        { header: 'Восстановлено', value: e => e.restored_at, type: 'datetime' },
+      ],
+    })
+  }
+
   const copySql = async () => {
     if (await copyText(AUDIT_MIGRATION_SQL)) toast.success('SQL скопирован', { description: 'Вставьте его в SQL Editor в Supabase и нажмите Run' })
     else toast.error('Не удалось скопировать', { description: 'Откройте файл migrations/011_audit_log.sql и скопируйте его вручную' })
@@ -271,6 +335,7 @@ export function AuditPage() {
             <Button size="sm" variant="outline" onClick={reload} disabled={refreshing}>
               <RefreshCw className={cn(refreshing && 'animate-spin')} /> Обновить
             </Button>
+            <ExportButton empty={state !== 'ready' || total === 0} onExport={runExport} />
           </>
         )
       }
@@ -427,6 +492,7 @@ export function AuditPage() {
               <Table>
                 <TableHeader>
                   <TableRow className="hover:bg-transparent">
+                    {isTrash && <SelectHeadCell selection={selection} label="Выбрать все восстанавливаемые записи" disabled={!restorableIds.length} />}
                     <TableHead className="w-36 max-sm:w-24">{isTrash ? 'Удалено' : 'Время'}</TableHead>
                     <TableHead className="w-44 max-sm:hidden">Пользователь</TableHead>
                     {!isTrash && <TableHead className="w-32 max-sm:hidden">Действие</TableHead>}
@@ -439,7 +505,20 @@ export function AuditPage() {
                   {rows.map(e => {
                     const restorable = RESTORABLE_TABLES.has(e.table_name)
                     return (
-                      <TableRow key={e.id} className="group cursor-pointer" onClick={() => openEntry(e)}>
+                      <TableRow
+                        key={e.id}
+                        className="group cursor-pointer"
+                        data-state={selection.isSelected(e.id) ? 'selected' : undefined}
+                        onClick={() => openEntry(e)}
+                      >
+                        {isTrash && (
+                          <SelectCell
+                            selection={selection}
+                            id={e.id}
+                            disabled={!restorable || !!e.restored_at}
+                            label={`Выбрать: ${e.summary || tableLabel(e.table_name)}`}
+                          />
+                        )}
                         <TableCell className="num text-muted-foreground">
                           <Tooltip>
                             <TooltipTrigger asChild>
@@ -493,7 +572,7 @@ export function AuditPage() {
                               <Button
                                 size="sm"
                                 variant="ghost"
-                                disabled={restoringId === e.id}
+                                disabled={restoringId === e.id || bulk.running}
                                 onClick={ev => {
                                   ev.stopPropagation()
                                   restore(e)
@@ -525,6 +604,12 @@ export function AuditPage() {
           )}
         </Panel>
       )}
+
+      <BulkBar count={isTrash ? selection.count : 0} onClear={selection.clear} progress={bulk.progress}>
+        <Button size="sm" onClick={restoreSelected}>
+          <RotateCcw /> Восстановить выбранные
+        </Button>
+      </BulkBar>
 
       <AuditDetailSheet
         entry={selected}

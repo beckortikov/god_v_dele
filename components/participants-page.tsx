@@ -2,7 +2,7 @@
 
 import * as React from 'react'
 import { toast } from 'sonner'
-import { Archive, Inbox, MoreHorizontal, Pencil, Plus, Trash2, Users } from 'lucide-react'
+import { Archive, CalendarPlus, Inbox, MoreHorizontal, Pencil, Plus, Trash2, Users } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 import { formatMoney, formatNumber, plural } from '@/lib/format'
@@ -18,6 +18,8 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { PageContainer, PageHeader, Panel, PanelToolbar } from '@/components/erp/page-header'
+import { ExportButton } from '@/components/erp/export-button'
+import { exportToExcel } from '@/components/erp/export'
 import { StatStrip } from '@/components/erp/stat-strip'
 import { SearchInput } from '@/components/erp/search-input'
 import { EmptyState } from '@/components/erp/empty-state'
@@ -27,6 +29,9 @@ import { useConfirm } from '@/components/erp/confirm'
 import { useNavAction } from '@/components/app-shell/nav-context'
 import { ParticipantFormSheet } from '@/components/participants/participant-form-sheet'
 import { ParticipantDetailSheet } from '@/components/participants/participant-detail-sheet'
+import { PaymentSheet, type PaymentPreset } from '@/components/finance/payment-sheet'
+import type { Account } from '@/components/finance/types'
+import { buildSchedule } from '@/lib/payment-schedule'
 import {
   PARTICIPANT_STATUS,
   monthlyTariff,
@@ -72,6 +77,11 @@ export function ParticipantsPage() {
   const [detailOpen, setDetailOpen] = React.useState(false)
   const [formOpen, setFormOpen] = React.useState(false)
   const [editing, setEditing] = React.useState<Participant | null>(null)
+  // «Внести оплату» from the participant card
+  const [payOpen, setPayOpen] = React.useState(false)
+  const [payPreset, setPayPreset] = React.useState<PaymentPreset | null>(null)
+  const [accounts, setAccounts] = React.useState<Account[] | null>(null)
+  const [scheduling, setScheduling] = React.useState(false)
 
   const fetchData = React.useCallback(async () => {
     try {
@@ -162,6 +172,16 @@ export function ParticipantsPage() {
     return map
   }, [participants, paymentsBy])
 
+  // Paid months out of the expected schedule (start date × program duration)
+  const progress = React.useMemo(() => {
+    const map = new Map<string, { paid: number; scheduled: number }>()
+    for (const p of participants) {
+      const s = buildSchedule(p, paymentsBy.get(p.id) ?? NO_PAYMENTS)
+      map.set(p.id, { paid: s.paidCount, scheduled: s.scheduledCount })
+    }
+    return map
+  }, [participants, paymentsBy])
+
   const q = query.trim().toLowerCase()
   const filteredParticipants = participants.filter(p => {
     const s = summaries.get(p.id)
@@ -196,6 +216,59 @@ export function ParticipantsPage() {
   const detail = participants.find(p => p.id === detailId) ?? null
 
   // ---------- Actions ----------
+  const openPayment = async (participant: Participant, month: number, year: number) => {
+    setPayPreset({ participantId: participant.id, month, year })
+    if (!accounts) {
+      try {
+        const res = await fetch('/api/accounts').then(r => r.json())
+        setAccounts(Array.isArray(res) ? res : [])
+      } catch {
+        setAccounts([])
+      }
+    }
+    setPayOpen(true)
+  }
+
+  /** Bulk: create the missing schedule months of every active participant. */
+  const generateSchedules = async () => {
+    setScheduling(true)
+    try {
+      const preview = await fetch('/api/payments/schedule').then(r => r.json())
+      if (preview.error) throw new Error(preview.error)
+      const todo = (preview.participants as any[]).filter(p => p.created > 0)
+      const noData = (preview.participants as any[]).filter(p => p.reason)
+      if (!todo.length) {
+        toast.success('Графики уже полные', {
+          description: noData.length
+            ? `Без даты начала, длительности или тарифа: ${noData.length} ${participantsWord(noData.length)}`
+            : 'У всех активных участников есть все месяцы программы',
+        })
+        return
+      }
+      const ok = await confirm({
+        title: 'Сформировать графики оплат?',
+        description: `Будет создано ${formatNumber(preview.created)} ${plural(preview.created, ['строка', 'строки', 'строк'])} графика для ${formatNumber(todo.length)} ${participantsWord(todo.length)}: недостающие месяцы от даты начала на срок программы, план — тариф участника. Уже внесённые месяцы и оплаты не изменятся.${
+          noData.length ? ` Пропустим ${noData.length} ${participantsWord(noData.length)} без даты начала, длительности или тарифа.` : ''
+        }`,
+        confirmText: `Создать ${formatNumber(preview.created)}`,
+      })
+      if (!ok) return
+      const res = await fetch('/api/payments/schedule', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ participant_ids: todo.map(p => p.id) }),
+      }).then(r => r.json())
+      if (res.error) throw new Error(res.error)
+      if (res.failed) toast.error('Графики сформированы не для всех', { description: `Создано ${res.created}, с ошибкой ${res.failed} ${participantsWord(res.failed)}` })
+      else toast.success('Графики сформированы', { description: `Создано ${formatNumber(res.created)} ${plural(res.created, ['строка', 'строки', 'строк'])}` })
+      fetchData()
+    } catch (err: any) {
+      toast.error('Не удалось сформировать графики', { description: err.message })
+    } finally {
+      setScheduling(false)
+    }
+  }
+
   const handleSaved = (saved: Participant, mode: 'create' | 'update') => {
     if (mode === 'create') setParticipants(list => [saved, ...list])
     else setParticipants(list => list.map(p => (p.id === saved.id ? saved : p)))
@@ -289,9 +362,14 @@ export function ParticipantsPage() {
         title="Участники"
         description="Кто учится, по какому тарифу и как платит"
         actions={
-          <Button size="sm" onClick={openCreate}>
-            <Plus /> Новый участник
-          </Button>
+          <>
+            <Button size="sm" variant="outline" onClick={generateSchedules} disabled={scheduling || loading}>
+              <CalendarPlus /> {scheduling ? 'Считаем…' : 'Сформировать графики'}
+            </Button>
+            <Button size="sm" onClick={openCreate}>
+              <Plus /> Новый участник
+            </Button>
+          </>
         }
       />
 
@@ -362,6 +440,30 @@ export function ParticipantsPage() {
                 Сбросить
               </Button>
             )}
+            <div className="ml-auto">
+              <ExportButton
+                empty={filteredParticipants.length === 0}
+                onExport={() =>
+                  exportToExcel({
+                    filename: 'Участники',
+                    rows: filteredParticipants,
+                    totals: { sum: ['Собрано, USD', 'Долг, USD'] },
+                    columns: [
+                      { header: 'Участник', value: p => p.name },
+                      { header: 'Программа', value: p => p.program?.name ?? '' },
+                      { header: 'Телефон', value: p => p.phone ?? '' },
+                      { header: 'Email', value: p => p.email ?? '' },
+                      { header: 'Дата начала', value: p => p.start_date ?? '', type: 'date' },
+                      { header: 'Статус', value: p => p.status ?? '' },
+                      { header: 'Тариф, USD', value: p => p.tariff ?? p.program?.price_per_month ?? 0, type: 'money' },
+                      { header: 'Оплачено месяцев', value: p => summaries.get(p.id)?.paidCount ?? 0, type: 'number' },
+                      { header: 'Собрано, USD', value: p => summaries.get(p.id)?.collected ?? 0, type: 'money' },
+                      { header: 'Долг, USD', value: p => summaries.get(p.id)?.overdueDebt ?? 0, type: 'money' },
+                    ],
+                  })
+                }
+              />
+            </div>
           </PanelToolbar>
 
           {filteredParticipants.length === 0 ? (
@@ -425,7 +527,7 @@ export function ParticipantsPage() {
                         <TableCell className="text-right max-md:hidden">
                           <span className="num">{formatMoney(monthlyTariff(p))}</span>
                         </TableCell>
-                        <TableCell className="max-sm:hidden">{s && <PaymentsProgress summary={s} />}</TableCell>
+                        <TableCell className="max-sm:hidden">{progress.get(p.id) && <PaymentsProgress {...progress.get(p.id)!} />}</TableCell>
                         <TableCell className="num text-right font-medium">{formatMoney(s?.collected ?? 0)}</TableCell>
                         <TableCell className="max-sm:hidden">
                           {s && <PaymentBadges summary={s} empty={<span className="text-muted-foreground">—</span>} />}
@@ -486,6 +588,17 @@ export function ParticipantsPage() {
         onEdit={openEdit}
         onArchive={handleArchive}
         onDelete={handleDelete}
+        onAddPayment={openPayment}
+        onChanged={fetchData}
+      />
+
+      <PaymentSheet
+        open={payOpen}
+        onOpenChange={setPayOpen}
+        participants={participants}
+        accounts={accounts ?? []}
+        preset={payPreset}
+        onSaved={fetchData}
       />
 
       <ParticipantFormSheet
@@ -518,9 +631,8 @@ function PaymentBadges({
   )
 }
 
-function PaymentsProgress({ summary }: { summary: ParticipantSummary }) {
-  const { paidCount, totalCount } = summary
-  if (!totalCount) return <span className="text-xs text-muted-foreground">Нет платежей</span>
+function PaymentsProgress({ paid: paidCount, scheduled: totalCount }: { paid: number; scheduled: number }) {
+  if (!totalCount) return <span className="text-xs text-muted-foreground">Нет графика</span>
   const pct = Math.min(100, Math.round((paidCount / totalCount) * 100))
   return (
     <div className="flex items-center gap-2.5">

@@ -14,6 +14,8 @@ import { PageContainer, PageHeader, Panel } from '@/components/erp/page-header'
 import { StatStrip } from '@/components/erp/stat-strip'
 import { EmptyState } from '@/components/erp/empty-state'
 import { TotalsBar } from '@/components/erp/table-parts'
+import type { Receipt } from '@/components/finance/use-ledger'
+import { SCHEDULE_STATUS, buildSchedule, type ScheduleMonth } from '@/lib/payment-schedule'
 
 // ---------- Data ----------
 
@@ -51,105 +53,58 @@ interface PaymentRow {
   program?: ProgramInfo | null
 }
 
-type MonthStatus = 'paid' | 'overdue' | 'partial' | 'due' | 'upcoming'
-
-const STATUS: Record<MonthStatus, { label: string; variant: 'success' | 'destructive' | 'warning' | 'info' | 'secondary' }> = {
-  paid: { label: 'Оплачено', variant: 'success' },
-  overdue: { label: 'Просрочено', variant: 'destructive' },
-  partial: { label: 'Частично', variant: 'warning' },
-  due: { label: 'К оплате', variant: 'info' },
-  upcoming: { label: 'Ожидается', variant: 'secondary' },
-}
-
-interface ScheduleMonth {
-  idx: number
-  month: number
-  year: number
-  plan: number
-  fact: number
-  status: MonthStatus
+interface MonthView extends ScheduleMonth<PaymentRow> {
   paidDate: string | null
   notes: string | null
   original: { amount: number; currency: string } | null
-  isCurrent: boolean
+  /** Ledger mode: the individual receipts of this month, oldest first. */
+  receipts: Receipt[]
 }
 
-const EPS = 0.01
-const monthIdx = (year: number, month: number) => year * 12 + (month - 1)
 const monthName = (m: number, y: number) => `${MONTHS_RU[m - 1]} ${y}`
 
-function buildSchedule(participant: ParticipantInfo, program: ProgramInfo | null, payments: PaymentRow[]) {
-  const now = new Date()
-  const currentIdx = monthIdx(now.getFullYear(), now.getMonth() + 1)
-  const tariff = Number(participant.tariff) || Number(program?.price_per_month) || 0
-  const duration = Number(program?.duration_months) || 0
-
-  const byIdx = new Map<number, PaymentRow>()
-  for (const p of payments) byIdx.set(monthIdx(p.year, p.month_number), p)
-
-  const start = participant.start_date ? new Date(participant.start_date) : null
-  const startIdx =
-    start && !Number.isNaN(start.getTime())
-      ? monthIdx(start.getFullYear(), start.getMonth() + 1)
-      : payments.length
-        ? Math.min(...byIdx.keys())
-        : currentIdx
-  const endIdx = duration > 0 ? startIdx + duration - 1 : Math.max(currentIdx, ...byIdx.keys())
-
-  // Program months, plus any recorded payment outside them
-  const indices = new Set<number>()
-  for (let i = startIdx; i <= endIdx; i++) indices.add(i)
-  for (const i of byIdx.keys()) indices.add(i)
-
-  const months: ScheduleMonth[] = [...indices]
-    .sort((a, b) => a - b)
-    .map(idx => {
-      const pay = byIdx.get(idx)
-      const inProgram = idx >= startIdx && idx <= endIdx
-      const plan = Number(pay?.plan_amount) || Number(pay?.amount) || (inProgram ? tariff : 0)
-      const fact = Number(pay?.fact_amount) || 0
-      let status: MonthStatus
-      if (plan > 0 ? fact >= plan - EPS : fact > 0) status = 'paid'
-      else if (idx < currentIdx) status = fact > 0 ? 'partial' : 'overdue'
-      else if (idx === currentIdx) status = fact > 0 ? 'partial' : 'due'
-      else status = fact > 0 ? 'partial' : 'upcoming'
-      const original =
+/**
+ * The same schedule as the participant card (lib/payment-schedule.ts): program
+ * months from the start date for the program duration, plus any month with a
+ * payment; overdue by the same rule as the participants page.
+ */
+function buildView(participant: ParticipantInfo, program: ProgramInfo | null, payments: PaymentRow[], receipts: Receipt[]) {
+  const s = buildSchedule({ ...participant, program }, payments)
+  const byMonth = new Map<string, Receipt[]>()
+  for (const t of receipts) {
+    const list = byMonth.get(t.monthly_payment_id) ?? []
+    list.push(t)
+    byMonth.set(t.monthly_payment_id, list)
+  }
+  const months: MonthView[] = s.months.map(m => {
+    const pay = m.row
+    const own = (pay?.id ? byMonth.get(pay.id) : null) ?? []
+    own.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
+    return {
+      ...m,
+      paidDate: pay?.paid_date ?? null,
+      notes: pay?.notes?.trim() || null,
+      original:
         pay?.currency && pay.currency !== 'USD' && Number(pay.original_amount) > 0
           ? { amount: Number(pay.original_amount), currency: pay.currency }
-          : null
-      return {
-        idx,
-        month: (idx % 12) + 1,
-        year: Math.floor(idx / 12),
-        plan,
-        fact,
-        status,
-        paidDate: pay?.paid_date ?? null,
-        notes: pay?.notes?.trim() || null,
-        original,
-        isCurrent: idx === currentIdx,
-      }
-    })
-
-  const totalPaid = months.reduce((s, m) => s + m.fact, 0)
-  const totalPlan = months.reduce((s, m) => s + m.plan, 0)
-  const debt = months
-    .filter(m => m.idx < currentIdx)
-    .reduce((s, m) => s + Math.max(0, m.plan - m.fact), 0)
-  const debtMonths = months.filter(m => m.idx < currentIdx && m.plan - m.fact > EPS).length
-  const next = months.find(m => m.idx >= currentIdx && m.plan - m.fact > EPS) ?? null
-
+          : null,
+      receipts: own,
+    }
+  })
+  const startIdx = s.startIdx ?? months[0]?.idx ?? 0
+  const endIdx = s.endIdx ?? months[months.length - 1]?.idx ?? startIdx
   return {
     months,
-    tariff,
-    duration,
+    tariff: s.tariff,
+    duration: s.duration,
     startIdx,
     endIdx,
-    totalPaid,
-    totalPlan,
-    debt: debt > EPS ? debt : 0,
-    debtMonths,
-    next,
+    totalPaid: s.totalPaid,
+    totalPlan: s.totalPlan,
+    debt: s.overdueDebt,
+    debtMonths: s.overdueMonths.length,
+    paidMonths: s.paidCount,
+    next: (s.next as MonthView | null) ? months.find(m => m.idx === s.next!.idx) ?? null : null,
   }
 }
 
@@ -167,7 +122,8 @@ function useMyPayments(participantId: string | null) {
     participant: ParticipantInfo | null
     program: ProgramInfo | null
     payments: PaymentRow[]
-  }>({ loading: !!participantId, error: null, participant: null, program: null, payments: [] })
+    receipts: Receipt[]
+  }>({ loading: !!participantId, error: null, participant: null, program: null, payments: [], receipts: [] })
   const [attempt, setAttempt] = React.useState(0)
 
   React.useEffect(() => {
@@ -177,7 +133,12 @@ function useMyPayments(participantId: string | null) {
     ;(async () => {
       try {
         const id = encodeURIComponent(participantId)
-        const pays = await getJSON(`/api/monthly-payments?participant_id=${id}`, ctrl.signal)
+        const [pays, tx] = await Promise.all([
+          getJSON(`/api/monthly-payments?participant_id=${id}`, ctrl.signal),
+          // Individual receipts when partial payments are on (migration 014)
+          getJSON(`/api/payments/transactions?participant_id=${id}`, ctrl.signal).catch(() => ({ ledger: false, data: [] })),
+        ])
+        const receipts: Receipt[] = tx.ledger ? (tx.data ?? []).filter((t: Receipt) => t.participant_id === participantId) : []
         const payments: PaymentRow[] = (pays.data ?? []).filter((p: PaymentRow) => p.participant_id === participantId)
 
         // The payments already carry the participant and program; the full
@@ -193,7 +154,7 @@ function useMyPayments(participantId: string | null) {
           participant = found
           program = found?.program ?? null
         }
-        setState({ loading: false, error: null, participant, program, payments })
+        setState({ loading: false, error: null, participant, program, payments, receipts })
       } catch (err: any) {
         if (err?.name === 'AbortError') return
         setState(s => ({ ...s, loading: false, error: err.message || 'Не удалось загрузить данные' }))
@@ -208,7 +169,7 @@ function useMyPayments(participantId: string | null) {
 // ---------- Page ----------
 
 export function MyPaymentsPage({ participantId, participantName }: { participantId: string | null; participantName: string | null }) {
-  const { loading, error, participant, program, payments, retry } = useMyPayments(participantId)
+  const { loading, error, participant, program, payments, receipts, retry } = useMyPayments(participantId)
   const firstName = (participant?.name || participantName || '').trim().split(/\s+/)[0]
   const greeting = firstName ? `${firstName}, здесь ваш график платежей и всё, что уже оплачено` : 'Ваш график платежей и всё, что уже оплачено'
 
@@ -285,26 +246,28 @@ export function MyPaymentsPage({ participantId, participantName }: { participant
     )
   }
 
-  return <MyPaymentsView participant={participant} program={program} payments={payments} greeting={greeting} />
+  return <MyPaymentsView participant={participant} program={program} payments={payments} receipts={receipts} greeting={greeting} />
 }
 
 function MyPaymentsView({
   participant,
   program,
   payments,
+  receipts,
   greeting,
 }: {
   participant: ParticipantInfo
   program: ProgramInfo | null
   payments: PaymentRow[]
+  receipts: Receipt[]
   greeting: string
 }) {
-  const s = React.useMemo(() => buildSchedule(participant, program, payments), [participant, program, payments])
+  const s = React.useMemo(() => buildView(participant, program, payments, receipts), [participant, program, payments, receipts])
   const pct = s.totalPlan > 0 ? Math.min(100, Math.round((s.totalPaid / s.totalPlan) * 100)) : 0
-  const paidMonths = s.months.filter(m => m.status === 'paid').length
+  const paidMonths = s.paidMonths
   const finished = participant.status === 'completed' || participant.status === 'archived'
 
-  const nextRemaining = s.next ? s.next.plan - s.next.fact : 0
+  const nextRemaining = s.next ? s.next.remaining : 0
 
   return (
     <PageContainer className="max-w-3xl">
@@ -408,23 +371,25 @@ function MyPaymentsView({
           {/* Phones: a simple list */}
           <ul className="divide-y sm:hidden">
             {s.months.map(m => (
-              <li key={m.idx} className={cn('px-4 py-3', m.isCurrent && 'bg-primary-soft/40')}>
+              <li key={m.idx} className={cn('px-4 py-3', m.isCurrent && 'bg-primary-soft/40', m.status === 'future' && 'text-muted-foreground')}>
                 <div className="flex items-center gap-2">
-                  <p className="min-w-0 flex-1 font-medium">
-                    {monthName(m.month, m.year)}
-                    {m.isCurrent && <span className="ml-1.5 text-xs font-normal text-muted-foreground">сейчас</span>}
-                  </p>
-                  <Badge variant={STATUS[m.status].variant}>{STATUS[m.status].label}</Badge>
+                  <p className="min-w-0 flex-1 font-medium">{monthName(m.month, m.year)}</p>
+                  <Badge variant={SCHEDULE_STATUS[m.status].variant}>{SCHEDULE_STATUS[m.status].label}</Badge>
                 </div>
                 <p className="num mt-1 text-sm text-muted-foreground">
-                  <span className={cn('font-medium', m.fact > 0 ? 'text-foreground' : '')}>{formatMoney(m.fact)}</span> из{' '}
-                  {formatMoney(m.plan)}
-                  {m.paidDate && m.fact > 0 && <span> · {formatDate(m.paidDate)}</span>}
+                  {m.row || m.fact > 0 ? (
+                    <span className={cn('font-medium', m.fact > 0 ? 'text-foreground' : '')}>{formatMoney(m.fact)}</span>
+                  ) : (
+                    <span className={cn(m.overdue ? 'font-medium text-destructive' : '')}>Нет оплаты</span>
+                  )}{' '}
+                  из {formatMoney(m.plan)}
+                  {!m.receipts.length && m.paidDate && m.fact > 0 && <span> · {formatDate(m.paidDate)}</span>}
                 </p>
-                {m.status !== 'paid' && m.fact > 0 && (
-                  <p className="num mt-0.5 text-xs text-muted-foreground">Осталось {formatMoney(m.plan - m.fact)}</p>
+                {m.remaining > 0 && m.fact > 0 && (
+                  <p className="num mt-0.5 text-xs text-muted-foreground">Осталось {formatMoney(m.remaining)}</p>
                 )}
-                {m.notes && <p className="mt-1 text-xs text-muted-foreground">{m.notes}</p>}
+                <ReceiptList receipts={m.receipts} className="mt-1.5" />
+                {m.notes && !m.receipts.length && <p className="mt-1 text-xs text-muted-foreground">{m.notes}</p>}
               </li>
             ))}
           </ul>
@@ -436,21 +401,32 @@ function MyPaymentsView({
                 <TableHead>Месяц</TableHead>
                 <TableHead className="text-right">План</TableHead>
                 <TableHead className="text-right">Оплачено</TableHead>
+                <TableHead className="text-right">Осталось</TableHead>
                 <TableHead>Статус</TableHead>
                 <TableHead className="max-md:hidden">Комментарий</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {s.months.map(m => (
-                <TableRow key={m.idx} className={cn('hover:bg-transparent', m.isCurrent && 'bg-primary-soft/40 hover:bg-primary-soft/40')}>
-                  <TableCell className="font-medium">
-                    {monthName(m.month, m.year)}
-                    {m.isCurrent && <span className="ml-1.5 text-xs font-normal text-muted-foreground">сейчас</span>}
-                  </TableCell>
+                <TableRow
+                  key={m.idx}
+                  className={cn(
+                    'align-top hover:bg-transparent',
+                    m.isCurrent && 'bg-primary-soft/40 hover:bg-primary-soft/40',
+                    m.status === 'future' && 'text-muted-foreground'
+                  )}
+                >
+                  <TableCell className="font-medium">{monthName(m.month, m.year)}</TableCell>
                   <TableCell className="num text-right">{formatMoney(m.plan)}</TableCell>
                   <TableCell className="text-right">
-                    <span className={cn('num', m.fact > 0 ? 'font-medium' : 'text-muted-foreground')}>{formatMoney(m.fact)}</span>
-                    {(m.paidDate && m.fact > 0) || m.original ? (
+                    {m.row || m.fact > 0 ? (
+                      <span className={cn('num', m.fact > 0 ? 'font-medium text-foreground' : 'text-muted-foreground')}>{formatMoney(m.fact)}</span>
+                    ) : (
+                      <span className={cn('text-xs', m.overdue ? 'font-medium text-destructive' : 'text-muted-foreground')}>Нет оплаты</span>
+                    )}
+                    {m.receipts.length > 0 ? (
+                      <ReceiptList receipts={m.receipts} className="mt-1 items-end" />
+                    ) : (m.paidDate && m.fact > 0) || m.original ? (
                       <span className="num block text-xs text-muted-foreground">
                         {[m.original && formatMoney(m.original.amount, m.original.currency), m.paidDate && m.fact > 0 && formatDate(m.paidDate)]
                           .filter(Boolean)
@@ -458,14 +434,14 @@ function MyPaymentsView({
                       </span>
                     ) : null}
                   </TableCell>
+                  <TableCell className={cn('num text-right', m.overdue ? 'font-medium text-destructive' : m.remaining > 0 ? '' : 'text-muted-foreground')}>
+                    {m.remaining > 0 ? formatMoney(m.remaining) : '—'}
+                  </TableCell>
                   <TableCell>
-                    <Badge variant={STATUS[m.status].variant}>{STATUS[m.status].label}</Badge>
-                    {m.status !== 'paid' && m.fact > 0 && (
-                      <span className="num mt-0.5 block text-xs text-muted-foreground">осталось {formatMoney(m.plan - m.fact)}</span>
-                    )}
+                    <Badge variant={SCHEDULE_STATUS[m.status].variant}>{SCHEDULE_STATUS[m.status].label}</Badge>
                   </TableCell>
                   <TableCell className="max-w-56 text-sm text-muted-foreground max-md:hidden">
-                    <span className="line-clamp-2">{m.notes || '—'}</span>
+                    <span className="line-clamp-2">{m.notes || m.receipts.find(t => t.notes)?.notes || '—'}</span>
                   </TableCell>
                 </TableRow>
               ))}
@@ -479,5 +455,20 @@ function MyPaymentsView({
         Суммы указаны в долларах. Если что-то не сходится, напишите менеджеру программы.
       </p>
     </PageContainer>
+  )
+}
+
+/** «12 сен · $300 · 2 790 TJS», one line per receipt (only with partial payments on). */
+function ReceiptList({ receipts, className }: { receipts: Receipt[]; className?: string }) {
+  if (receipts.length === 0) return null
+  return (
+    <ul className={cn('flex flex-col gap-0.5 text-xs text-muted-foreground', className)} aria-label="Поступления за месяц">
+      {receipts.map(t => (
+        <li key={t.id} className="num">
+          {formatDate(t.date)} · <span className="text-foreground">{formatMoney(t.amount_usd)}</span>
+          {t.currency !== 'USD' && t.original_amount ? ` · ${formatMoney(t.original_amount, t.currency)}` : ''}
+        </li>
+      ))}
+    </ul>
   )
 }

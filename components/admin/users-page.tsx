@@ -20,6 +20,8 @@ import { TableSkeleton, rowActionsCls, dangerIconCls } from '@/components/erp/ta
 import { Field, FieldGroup } from '@/components/erp/field'
 import { Combobox, type ComboOption } from '@/components/erp/combobox'
 import { useConfirm } from '@/components/erp/confirm'
+import { ExportButton } from '@/components/erp/export-button'
+import { exportToExcel } from '@/components/erp/export'
 
 type Role = 'admin' | 'finance' | 'participant' | 'employee' | 'manager' | 'wheels_manager'
 
@@ -303,6 +305,30 @@ export function UsersPage() {
 
     const staffCount = users.filter(u => u.role !== 'participant').length
 
+    // Export: explicit whitelist of columns. Passwords (and their hashes) are never exported.
+    const runExport = () =>
+        exportToExcel({
+            filename: 'Пользователи',
+            rows: visible,
+            columns: [
+                { header: 'Имя', value: u => u.full_name || u.username },
+                { header: 'Логин', value: u => u.username },
+                { header: 'Роль', value: u => ROLES[u.role]?.label ?? u.role },
+                {
+                    header: 'Привязка',
+                    value: u =>
+                        u.employee
+                            ? `Сотрудник: ${u.employee.first_name} ${u.employee.last_name}`
+                            : u.participant
+                              ? `Участник: ${u.participant.name}`
+                              : '',
+                },
+                { header: 'Должность', value: u => u.employee?.position },
+                { header: 'Последний вход', value: u => u.last_login_at, type: 'datetime' },
+                { header: 'Создан', value: u => u.created_at, type: 'datetime' },
+            ],
+        })
+
     const role = formData.role as Role
     const showEmployeeLink = EMPLOYEE_ROLES.includes(role)
     const showParticipantLink = role === 'participant'
@@ -318,9 +344,12 @@ export function UsersPage() {
                         : `${formatNumber(users.length)} ${plural(users.length, ['учётная запись', 'учётные записи', 'учётных записей'])}: ${staffCount} в команде, ${users.length - staffCount} ${plural(users.length - staffCount, ['участник', 'участника', 'участников'])}`
                 }
                 actions={
-                    <Button size="sm" onClick={openNew}>
-                        <Plus /> Новый пользователь
-                    </Button>
+                    <>
+                        <ExportButton empty={isLoading || !visible.length} onExport={runExport} />
+                        <Button size="sm" onClick={openNew}>
+                            <Plus /> Новый пользователь
+                        </Button>
+                    </>
                 }
             />
 

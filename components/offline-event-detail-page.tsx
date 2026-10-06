@@ -5,6 +5,7 @@ import { toast } from 'sonner'
 import {
   ArrowLeft,
   CalendarDays,
+  ChevronDown,
   FileSpreadsheet,
   MapPin,
   MoreHorizontal,
@@ -24,7 +25,14 @@ import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { PageContainer, Panel, PanelToolbar } from '@/components/erp/page-header'
 import { StatStrip } from '@/components/erp/stat-strip'
 import { Segmented } from '@/components/erp/segmented'
@@ -32,6 +40,7 @@ import { SearchInput } from '@/components/erp/search-input'
 import { EmptyState } from '@/components/erp/empty-state'
 import { TableSkeleton, TotalsBar, dangerIconCls, rowActionsCls } from '@/components/erp/table-parts'
 import { useConfirm } from '@/components/erp/confirm'
+import { BulkBar, SelectCell, SelectHeadCell, requestOk, useBulkRunner, useRowSelection } from '@/components/erp/bulk'
 import { EventSheet } from '@/components/events/event-sheet'
 import { AddAttendeesSheet, EditAttendeeSheet } from '@/components/events/attendee-sheets'
 import { EventExpenseSheet } from '@/components/events/event-expense-sheet'
@@ -375,6 +384,8 @@ export function EventDetailPage({ eventId, onBack }: EventDetailPageProps) {
 
       {tab === 'attendees' ? (
         <AttendeesPanel
+          eventId={eventId}
+          onChanged={fetchData}
           attendees={attendees}
           query={query}
           setQuery={setQuery}
@@ -386,7 +397,7 @@ export function EventDetailPage({ eventId, onBack }: EventDetailPageProps) {
           onAttendance={handleAttendanceChange}
         />
       ) : tab === 'expenses' ? (
-        <ExpensesPanel expenses={expenses} onAdd={() => openExpense(null)} onEdit={openExpense} onDelete={handleDeleteExpense} />
+        <ExpensesPanel eventId={eventId} onChanged={fetchData} expenses={expenses} onAdd={() => openExpense(null)} onEdit={openExpense} onDelete={handleDeleteExpense} />
       ) : (
         <FinancePanel summary={summary} attendees={attendees} expenses={expenses} income={totalIncome} spent={totalExpenses} balance={balance} roi={roi} />
       )}
@@ -444,6 +455,8 @@ function Money({ usd, currency, original, className }: { usd: number; currency?:
 // ---------- Attendees ----------
 
 function AttendeesPanel({
+  eventId,
+  onChanged,
   attendees,
   query,
   setQuery,
@@ -463,7 +476,10 @@ function AttendeesPanel({
   onEdit: (a: Attendee) => void
   onDelete: (a: Attendee) => void
   onAttendance: (a: Attendee, status: string) => void
+  eventId: string
+  onChanged: () => void
 }) {
+  const confirm = useConfirm()
   const q = query.trim().toLowerCase()
   const visible = attendees.filter(a => {
     if (typeFilter !== 'all' && a.attendee_type !== typeFilter) return false
@@ -473,194 +489,308 @@ function AttendeesPanel({
   const paid = visible.reduce((s, a) => s + num(a.payment_received), 0)
   const participantsCount = attendees.filter(a => a.attendee_type === 'participant').length
 
+  // ----- Selection and bulk attendance -----
+  const visibleIds = visible.map(a => a.id)
+  const selection = useRowSelection(visibleIds, `${typeFilter}|${query}`)
+  const bulk = useBulkRunner()
+
+  const bulkAttendance = async (status: string) => {
+    const chosen = visible.filter(a => selection.isSelected(a.id))
+    const targets = chosen.filter(a => a.attendance_status !== status)
+    const label = attendanceOf(status).label
+    if (!targets.length) {
+      toast.info(`У всех выбранных уже отмечено «${label}»`)
+      return
+    }
+    const n = targets.length
+    const ok = await confirm({
+      title: `Отметить «${label}»?`,
+      description:
+        `Присутствие изменится у ${formatNumber(n)} ${plural(n, ['человека', 'человек', 'человек'])}` +
+        (chosen.length > n ? ` (ещё ${formatNumber(chosen.length - n)} уже с этой отметкой)` : '') +
+        '. Оплаты не изменятся.',
+      confirmText: 'Отметить',
+    })
+    if (!ok) return
+    await bulk.run(
+      targets,
+      a =>
+        requestOk(`/api/offline-events/${eventId}/attendees/${a.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ attendance_status: status }),
+        }),
+      { done: `Отмечено «${label}»`, noun: ['человек', 'человека', 'человек'], label: attendeeName }
+    )
+    selection.clear()
+    onChanged()
+  }
+
   return (
-    <Panel>
-      {attendees.length > 0 && (
-        <PanelToolbar>
-          <SearchInput value={query} onChange={setQuery} placeholder="Имя, контакт или комментарий" className="sm:w-72" />
-          <Segmented
-            size="sm"
-            aria-label="Тип"
-            value={typeFilter}
-            onChange={setTypeFilter}
-            options={[
-              { value: 'all', label: 'Все', count: attendees.length },
-              { value: 'participant', label: 'Участники', count: participantsCount },
-              { value: 'guest', label: 'Гости', count: attendees.length - participantsCount },
-            ]}
+    <>
+      <Panel>
+        {attendees.length > 0 && (
+          <PanelToolbar>
+            <SearchInput value={query} onChange={setQuery} placeholder="Имя, контакт или комментарий" className="sm:w-72" />
+            <Segmented
+              size="sm"
+              aria-label="Тип"
+              value={typeFilter}
+              onChange={setTypeFilter}
+              options={[
+                { value: 'all', label: 'Все', count: attendees.length },
+                { value: 'participant', label: 'Участники', count: participantsCount },
+                { value: 'guest', label: 'Гости', count: attendees.length - participantsCount },
+              ]}
+            />
+          </PanelToolbar>
+        )}
+        {visible.length === 0 ? (
+          <EmptyState
+            icon={Users}
+            title={attendees.length ? 'Никого не найдено' : 'Список пока пуст'}
+            description={attendees.length ? 'Измените поиск или фильтр' : 'Добавьте участников программ или гостей, чтобы учитывать оплаты и присутствие'}
+            action={
+              !attendees.length && (
+                <Button size="sm" onClick={onAdd}>
+                  <UserPlus /> Добавить участников
+                </Button>
+              )
+            }
           />
-        </PanelToolbar>
-      )}
-      {visible.length === 0 ? (
-        <EmptyState
-          icon={Users}
-          title={attendees.length ? 'Никого не найдено' : 'Список пока пуст'}
-          description={attendees.length ? 'Измените поиск или фильтр' : 'Добавьте участников программ или гостей, чтобы учитывать оплаты и присутствие'}
-          action={
-            !attendees.length && (
-              <Button size="sm" onClick={onAdd}>
-                <UserPlus /> Добавить участников
-              </Button>
-            )
-          }
-        />
-      ) : (
-        <>
-          <Table>
-            <TableHeader>
-              <TableRow className="hover:bg-transparent">
-                <TableHead>Имя</TableHead>
-                <TableHead className="max-md:hidden">Тип</TableHead>
-                <TableHead>Присутствие</TableHead>
-                <TableHead className="text-right">Оплата</TableHead>
-                <TableHead className="w-20" />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {visible.map(a => {
-                const name = attendeeName(a)
-                const isGuest = a.attendee_type === 'guest'
-                const contact = a.guest_phone || a.guest_email
-                const att = attendanceOf(a.attendance_status)
-                const amount = num(a.payment_received)
-                return (
-                  <TableRow key={a.id} className="group cursor-pointer" onClick={() => onEdit(a)}>
-                    <TableCell className="max-w-80 whitespace-normal">
-                      <div className="flex items-center gap-2.5">
-                        <Initials name={name} guest={isGuest} />
-                        <div className="min-w-0">
-                          <div className="truncate font-medium">{name}</div>
-                          {(contact || a.payment_notes) && (
-                            <div className="truncate text-xs text-muted-foreground">{[isGuest ? contact : null, a.payment_notes].filter(Boolean).join(' · ')}</div>
-                          )}
+        ) : (
+          <>
+            <Table>
+              <TableHeader>
+                <TableRow className="hover:bg-transparent">
+                  <SelectHeadCell selection={selection} label="Выбрать всех" />
+                  <TableHead>Имя</TableHead>
+                  <TableHead className="max-md:hidden">Тип</TableHead>
+                  <TableHead>Присутствие</TableHead>
+                  <TableHead className="text-right">Оплата</TableHead>
+                  <TableHead className="w-20" />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {visible.map(a => {
+                  const name = attendeeName(a)
+                  const isGuest = a.attendee_type === 'guest'
+                  const contact = a.guest_phone || a.guest_email
+                  const att = attendanceOf(a.attendance_status)
+                  const amount = num(a.payment_received)
+                  return (
+                    <TableRow
+                      key={a.id}
+                      className="group cursor-pointer"
+                      data-state={selection.isSelected(a.id) ? 'selected' : undefined}
+                      onClick={() => onEdit(a)}
+                    >
+                      <SelectCell selection={selection} id={a.id} label={`Выбрать: ${name}`} />
+                      <TableCell className="max-w-80 whitespace-normal">
+                        <div className="flex items-center gap-2.5">
+                          <Initials name={name} guest={isGuest} />
+                          <div className="min-w-0">
+                            <div className="truncate font-medium">{name}</div>
+                            {(contact || a.payment_notes) && (
+                              <div className="truncate text-xs text-muted-foreground">{[isGuest ? contact : null, a.payment_notes].filter(Boolean).join(' · ')}</div>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    </TableCell>
-                    <TableCell className="max-md:hidden">
-                      <Badge variant={isGuest ? 'info' : 'secondary'}>{isGuest ? 'Гость' : 'Участник'}</Badge>
-                    </TableCell>
-                    <TableCell onClick={e => e.stopPropagation()}>
-                      <Select value={a.attendance_status} onValueChange={v => onAttendance(a, v)}>
-                        <SelectTrigger
-                          size="sm"
-                          aria-label={`Присутствие: ${name}`}
-                          className="-ml-2 h-7 gap-1 border-transparent bg-transparent px-2 shadow-none hover:border-input dark:bg-transparent [&>svg]:opacity-0 group-hover:[&>svg]:opacity-60"
-                        >
-                          <Badge variant={att.variant}>{att.label}</Badge>
-                        </SelectTrigger>
-                        <SelectContent>
-                          {ATTENDANCE.map(o => (
-                            <SelectItem key={o.value} value={o.value}>
-                              {o.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {amount > 0 ? (
-                        <Money usd={amount} currency={a.currency} original={a.original_amount} className="font-medium text-success" />
-                      ) : (
-                        <span className="text-muted-foreground/70">—</span>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-right" onClick={e => e.stopPropagation()}>
-                      <div className={rowActionsCls}>
-                        <Button variant="ghost" size="icon-sm" aria-label="Изменить" className="text-muted-foreground" onClick={() => onEdit(a)}>
-                          <Pencil />
-                        </Button>
-                        <Button variant="ghost" size="icon-sm" aria-label="Удалить" className={dangerIconCls} onClick={() => onDelete(a)}>
-                          <Trash2 />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                )
-              })}
-            </TableBody>
-          </Table>
-          <TotalsBar
-            label={`${formatNumber(visible.length)} ${plural(visible.length, ['человек', 'человека', 'человек'])}`}
-            value={formatMoney(paid, 'USD', { sign: true })}
-            tone={paid > 0 ? 'success' : undefined}
-          />
-        </>
-      )}
-    </Panel>
+                      </TableCell>
+                      <TableCell className="max-md:hidden">
+                        <Badge variant={isGuest ? 'info' : 'secondary'}>{isGuest ? 'Гость' : 'Участник'}</Badge>
+                      </TableCell>
+                      <TableCell onClick={e => e.stopPropagation()}>
+                        <Select value={a.attendance_status} onValueChange={v => onAttendance(a, v)}>
+                          <SelectTrigger
+                            size="sm"
+                            aria-label={`Присутствие: ${name}`}
+                            className="-ml-2 h-7 gap-1 border-transparent bg-transparent px-2 shadow-none hover:border-input dark:bg-transparent [&>svg]:opacity-0 group-hover:[&>svg]:opacity-60"
+                          >
+                            <Badge variant={att.variant}>{att.label}</Badge>
+                          </SelectTrigger>
+                          <SelectContent>
+                            {ATTENDANCE.map(o => (
+                              <SelectItem key={o.value} value={o.value}>
+                                {o.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {amount > 0 ? (
+                          <Money usd={amount} currency={a.currency} original={a.original_amount} className="font-medium text-success" />
+                        ) : (
+                          <span className="text-muted-foreground/70">—</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right" onClick={e => e.stopPropagation()}>
+                        <div className={rowActionsCls}>
+                          <Button variant="ghost" size="icon-sm" aria-label="Изменить" className="text-muted-foreground" onClick={() => onEdit(a)}>
+                            <Pencil />
+                          </Button>
+                          <Button variant="ghost" size="icon-sm" aria-label="Удалить" className={dangerIconCls} onClick={() => onDelete(a)}>
+                            <Trash2 />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
+              </TableBody>
+            </Table>
+            <TotalsBar
+              label={`${formatNumber(visible.length)} ${plural(visible.length, ['человек', 'человека', 'человек'])}`}
+              value={formatMoney(paid, 'USD', { sign: true })}
+              tone={paid > 0 ? 'success' : undefined}
+            />
+          </>
+        )}
+      </Panel>
+      <BulkBar count={selection.count} onClear={selection.clear} progress={bulk.progress}>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button size="sm" variant="outline">
+              Отметить присутствие <ChevronDown />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="center" side="top">
+            <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">Присутствие</DropdownMenuLabel>
+            {ATTENDANCE.map(o => (
+              <DropdownMenuItem key={o.value} onSelect={() => bulkAttendance(o.value)}>
+                <Badge variant={o.variant}>{o.label}</Badge>
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </BulkBar>
+    </>
   )
 }
 
 // ---------- Expenses ----------
 
 function ExpensesPanel({
+  eventId,
+  onChanged,
   expenses,
   onAdd,
   onEdit,
   onDelete,
 }: {
+  eventId: string
+  onChanged: () => void
   expenses: EventExpense[]
   onAdd: () => void
   onEdit: (e: EventExpense) => void
   onDelete: (e: EventExpense) => void
 }) {
+  const confirm = useConfirm()
   const total = expenses.reduce((s, e) => s + num(e.amount), 0)
-  return (
-    <Panel>
-      {expenses.length === 0 ? (
-        <EmptyState
-          icon={Wallet}
-          title="Расходов пока нет"
-          description="Аренда зала, еда, транспорт: всё, что потрачено на событие"
-          action={
-            <Button size="sm" onClick={onAdd}>
-              <Receipt /> Новый расход
-            </Button>
-          }
-        />
-      ) : (
+
+  // ----- Selection and bulk delete -----
+  const ids = React.useMemo(() => expenses.map(e => e.id), [expenses])
+  const selection = useRowSelection(ids)
+  const bulk = useBulkRunner()
+  const chosen = expenses.filter(e => selection.isSelected(e.id))
+  const chosenSum = chosen.reduce((s, e) => s + num(e.amount), 0)
+
+  const bulkDelete = async () => {
+    if (!chosen.length) return
+    const n = chosen.length
+    const ok = await confirm({
+      title: `Удалить ${formatNumber(n)} ${plural(n, ['расход', 'расхода', 'расходов'])}?`,
+      description: (
         <>
-          <Table>
-            <TableHeader>
-              <TableRow className="hover:bg-transparent">
-                <TableHead className="w-28">Дата</TableHead>
-                <TableHead>Расход</TableHead>
-                <TableHead className="max-sm:hidden">Категория</TableHead>
-                <TableHead className="text-right">Сумма</TableHead>
-                <TableHead className="w-20" />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {expenses.map(e => (
-                <TableRow key={e.id} className="group cursor-pointer" onClick={() => onEdit(e)}>
-                  <TableCell className="num text-muted-foreground">{formatDate(e.expense_date)}</TableCell>
-                  <TableCell className="max-w-80 whitespace-normal">
-                    <div className="truncate font-medium">{e.name}</div>
-                    {e.description && <div className="truncate text-xs text-muted-foreground">{e.description}</div>}
-                  </TableCell>
-                  <TableCell className="max-sm:hidden">
-                    <Badge variant="secondary">{categoryLabel(e.category)}</Badge>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Money usd={-num(e.amount)} currency={e.currency} original={e.original_amount} className="font-medium" />
-                  </TableCell>
-                  <TableCell className="text-right" onClick={ev => ev.stopPropagation()}>
-                    <div className={rowActionsCls}>
-                      <Button variant="ghost" size="icon-sm" aria-label="Изменить" className="text-muted-foreground" onClick={() => onEdit(e)}>
-                        <Pencil />
-                      </Button>
-                      <Button variant="ghost" size="icon-sm" aria-label="Удалить" className={dangerIconCls} onClick={() => onDelete(e)}>
-                        <Trash2 />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-          <TotalsBar label={`${formatNumber(expenses.length)} ${plural(expenses.length, ['расход', 'расхода', 'расходов'])}`} value={formatMoney(-total)} />
+          На сумму <span className="num font-medium text-foreground">{formatMoney(chosenSum)}</span>. Расходы события уменьшатся, баланс пересчитается.
+          Действие нельзя отменить.
         </>
-      )}
-    </Panel>
+      ),
+      confirmText: 'Удалить',
+      destructive: true,
+    })
+    if (!ok) return
+    await bulk.run(chosen, e => requestOk(`/api/offline-events/${eventId}/expenses/${e.id}`, { method: 'DELETE' }), {
+      done: 'Расходы удалены',
+      noun: ['расход', 'расхода', 'расходов'],
+      label: e => e.name,
+    })
+    selection.clear()
+    onChanged()
+  }
+
+  return (
+    <>
+      <Panel>
+        {expenses.length === 0 ? (
+          <EmptyState
+            icon={Wallet}
+            title="Расходов пока нет"
+            description="Аренда зала, еда, транспорт: всё, что потрачено на событие"
+            action={
+              <Button size="sm" onClick={onAdd}>
+                <Receipt /> Новый расход
+              </Button>
+            }
+          />
+        ) : (
+          <>
+            <Table>
+              <TableHeader>
+                <TableRow className="hover:bg-transparent">
+                  <SelectHeadCell selection={selection} label="Выбрать все расходы" />
+                  <TableHead className="w-28">Дата</TableHead>
+                  <TableHead>Расход</TableHead>
+                  <TableHead className="max-sm:hidden">Категория</TableHead>
+                  <TableHead className="text-right">Сумма</TableHead>
+                  <TableHead className="w-20" />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {expenses.map(e => (
+                  <TableRow
+                    key={e.id}
+                    className="group cursor-pointer"
+                    data-state={selection.isSelected(e.id) ? 'selected' : undefined}
+                    onClick={() => onEdit(e)}
+                  >
+                    <SelectCell selection={selection} id={e.id} label={`Выбрать: ${e.name}`} />
+                    <TableCell className="num text-muted-foreground">{formatDate(e.expense_date)}</TableCell>
+                    <TableCell className="max-w-80 whitespace-normal">
+                      <div className="truncate font-medium">{e.name}</div>
+                      {e.description && <div className="truncate text-xs text-muted-foreground">{e.description}</div>}
+                    </TableCell>
+                    <TableCell className="max-sm:hidden">
+                      <Badge variant="secondary">{categoryLabel(e.category)}</Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Money usd={-num(e.amount)} currency={e.currency} original={e.original_amount} className="font-medium" />
+                    </TableCell>
+                    <TableCell className="text-right" onClick={ev => ev.stopPropagation()}>
+                      <div className={rowActionsCls}>
+                        <Button variant="ghost" size="icon-sm" aria-label="Изменить" className="text-muted-foreground" onClick={() => onEdit(e)}>
+                          <Pencil />
+                        </Button>
+                        <Button variant="ghost" size="icon-sm" aria-label="Удалить" className={dangerIconCls} onClick={() => onDelete(e)}>
+                          <Trash2 />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+            <TotalsBar label={`${formatNumber(expenses.length)} ${plural(expenses.length, ['расход', 'расхода', 'расходов'])}`} value={formatMoney(-total)} />
+          </>
+        )}
+      </Panel>
+      <BulkBar count={selection.count} onClear={selection.clear} progress={bulk.progress} summary={`· ${formatMoney(-chosenSum)}`}>
+        <Button size="sm" variant="outline" className={dangerIconCls} onClick={bulkDelete}>
+          <Trash2 /> Удалить
+        </Button>
+      </BulkBar>
+    </>
   )
 }
 

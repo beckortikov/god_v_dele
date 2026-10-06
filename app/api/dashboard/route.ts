@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-client'
 import { overdueMonths, type MonthlyPayment, type Participant } from '@/components/participants/types'
+import { ledgerEnabled, loadTransactions } from '@/lib/payments-ledger'
 
 // GET - Fetch aggregated dashboard metrics
 export async function GET(request: Request) {
@@ -38,8 +39,27 @@ export async function GET(request: Request) {
 
         if (expensesError) throw expensesError
 
+        // Partial payments on (migration 014): cash income comes from the
+        // individual receipts by paid_date, so each part counts in its own month.
+        // Cohort figures (payment rate) keep using the monthly rows.
+        const ledger = await ledgerEnabled(request)
+        // From Jan 1, or from the first of the six chart months when that is last year
+        const firstChartMonth = new Date(currentYear, currentMonth - 6, 1)
+        const receiptsFrom = firstChartMonth.getFullYear() < currentYear
+            ? `${firstChartMonth.getFullYear()}-${String(firstChartMonth.getMonth() + 1).padStart(2, '0')}-01`
+            : `${currentYear}-01-01`
+        const receipts = ledger
+            ? (await loadTransactions(request, { from: receiptsFrom, programId: programId && programId !== 'all' ? programId : null })).filter(
+                t => t.paid_date
+            )
+            : null
+        // Same fields the cash sums below read from monthly rows
+        const cashRows: any[] | undefined = receipts
+            ? receipts.map(t => ({ paid_date: t.paid_date, fact_amount: t.amount_usd }))
+            : payments
+
         // Calculate YTD metrics for Current Balance (using actual paid payments in this year)
-        const totalRevenueYTD = payments?.filter(p => {
+        const totalRevenueYTD = cashRows?.filter(p => {
             if (p.paid_date) {
                 return p.paid_date >= `${currentYear}-01-01`
             }
@@ -49,7 +69,7 @@ export async function GET(request: Request) {
         const currentBalance = totalRevenueYTD - totalExpensesYTD
 
         // Calculate current month metrics (using actual cash receipts by paid_date)
-        const currentMonthPayments = payments?.filter(p => {
+        const currentMonthPayments = cashRows?.filter(p => {
             if (p.paid_date) {
                 const pDate = new Date(p.paid_date)
                 return pDate.getMonth() + 1 === currentMonth && pDate.getFullYear() === currentYear
@@ -130,9 +150,18 @@ export async function GET(request: Request) {
             .sort((a, b) => b.year - a.year || b.month - a.month || b.amount - a.amount)
 
         // Filter recent payments by program if specified
-        const recentPayments = programId && programId !== 'all'
-            ? recentPaymentsData?.filter((p: any) => (p.program_id || p.participant?.program_id) === programId)
-            : recentPaymentsData
+        const recentPayments = receipts
+            // Ledger: the latest receipts themselves (one per part payment)
+            ? (await loadTransactions(request, { recent: 10, details: true, programId: programId && programId !== 'all' ? programId : null })).map(t => ({
+                participant: { name: t.participant?.name, program: { name: t.participant?.program?.name } },
+                fact_amount: t.amount_usd,
+                month_number: t.month_number,
+                year: t.year,
+                updated_at: t.created_at,
+            }))
+            : programId && programId !== 'all'
+                ? recentPaymentsData?.filter((p: any) => (p.program_id || p.participant?.program_id) === programId)
+                : recentPaymentsData
 
         // Aggregate monthly data for charts (last 6 months)
         const monthlyData = []
@@ -144,7 +173,7 @@ export async function GET(request: Request) {
             const adjustedMonth = targetMonth > 0 ? targetMonth : 12 + targetMonth
 
             // Select actual cash payments received in this adjustedMonth/targetYear by paid_date
-            const monthPayments = payments?.filter(p => {
+            const monthPayments = cashRows?.filter(p => {
                 if (p.paid_date) {
                     const pDate = new Date(p.paid_date)
                     return pDate.getMonth() + 1 === adjustedMonth && pDate.getFullYear() === targetYear

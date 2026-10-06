@@ -21,6 +21,7 @@ import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer,
 
 import { cn } from '@/lib/utils'
 import { MONTHS_SHORT_RU, formatDate, formatMoney, formatNumber, plural } from '@/lib/format'
+import { monthStatus } from '@/lib/payment-schedule'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -35,6 +36,8 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { PageContainer, PageHeader, Panel, PanelToolbar } from '@/components/erp/page-header'
+import { ExportButton } from '@/components/erp/export-button'
+import { exportToExcel } from '@/components/erp/export'
 import { Segmented } from '@/components/erp/segmented'
 import { SearchInput } from '@/components/erp/search-input'
 import { EmptyState } from '@/components/erp/empty-state'
@@ -100,8 +103,15 @@ function inRange(date: string, range: [Date, Date] | null) {
 
 const STATUS: Record<IncomeItem['status'], { label: string; variant: 'success' | 'destructive' | 'warning' }> = {
   paid: { label: 'Получен', variant: 'success' },
+  partial: { label: 'Частично', variant: 'warning' },
   overdue: { label: 'Просрочен', variant: 'destructive' },
   pending: { label: 'Ожидается', variant: 'warning' },
+}
+
+/** Ledger mode: the receipt's month is covered in full, or only partly. */
+const RECEIPT_STATUS: Partial<Record<IncomeItem['status'], { label: string; variant: 'success' | 'warning' }>> = {
+  paid: { label: 'Месяц оплачен', variant: 'success' },
+  partial: { label: 'Частично', variant: 'warning' },
 }
 
 
@@ -116,6 +126,8 @@ export function IncomeExpensesPage() {
   const [employees, setEmployees] = React.useState<Employee[]>([])
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
+  // Partial payments (migration 014): the list shows individual receipts
+  const [ledger, setLedger] = React.useState(false)
 
   // View state (persisted per user)
   const [tab, setTab] = React.useState<Tab>('income')
@@ -165,21 +177,48 @@ export function IncomeExpensesPage() {
 
   const fetchData = React.useCallback(async () => {
     try {
-      const [paymentsRes, expensesRes, participantsRes, programsRes, employeesRes, accountsRes] = await Promise.all([
+      const [paymentsRes, expensesRes, participantsRes, programsRes, employeesRes, accountsRes, receiptsRes] = await Promise.all([
         fetch('/api/monthly-payments').then(r => r.json()),
         fetch('/api/expenses').then(r => r.json()),
         fetch('/api/participants').then(r => r.json()),
         fetch('/api/programs').then(r => r.json()),
         fetch('/api/hr/employees').then(r => r.json()).catch(() => []),
         fetch('/api/accounts').then(r => r.json()).catch(() => []),
+        fetch('/api/payments/transactions')
+          .then(r => r.json())
+          .catch(() => ({ ledger: false, data: [] })),
       ])
+      if (receiptsRes?.ledger && receiptsRes.error) throw new Error(receiptsRes.error)
+      const isLedger = !!receiptsRes?.ledger
       for (const r of [paymentsRes, expensesRes, participantsRes, programsRes]) if (r.error) throw new Error(r.error)
 
       const progs: Program[] = programsRes.data || []
       const progName = (id?: string | null) => (id ? progs.find(p => p.id === id)?.name ?? null : null)
 
+      setLedger(isLedger)
       setIncomeData(
-        (paymentsRes.data || [])
+        isLedger
+          ? (receiptsRes.data || []).map((t: any): IncomeItem => {
+              const st = monthStatus(t.monthly?.fact_amount, t.monthly?.plan_amount)
+              return {
+                id: t.id,
+                date: t.date,
+                participantId: t.participant_id,
+                participant: t.participant?.name || 'Неизвестный участник',
+                programId: t.program_id || t.participant?.program_id || null,
+                programName: t.participant?.program?.name || progName(t.program_id || t.participant?.program_id),
+                amount: Number(t.amount_usd) || 0,
+                status: st === 'paid' ? 'paid' : 'partial',
+                currency: t.currency,
+                original_amount: t.original_amount ?? undefined,
+                notes: t.notes ?? undefined,
+                account_id: t.account_id ?? undefined,
+                month: Number(t.month_number),
+                year: Number(t.year),
+                receipt: true,
+              }
+            })
+          : (paymentsRes.data || [])
           .map((p: any): IncomeItem => ({
             id: p.id,
             date: p.paid_date || `${p.year}-${String(p.month_number).padStart(2, '0')}-01`,
@@ -307,13 +346,15 @@ export function IncomeExpensesPage() {
   const deletePayment = async (item: IncomeItem) => {
     const ok = await confirm({
       title: 'Удалить поступление?',
-      description: `${item.participant} · ${formatMoney(item.amount)} от ${formatDate(item.date)}. Действие нельзя отменить.`,
+      description: item.receipt
+        ? `${item.participant} · ${formatMoney(item.amount)} от ${formatDate(item.date)}. Оплата за ${MONTHS_SHORT_RU[item.month - 1]} ${item.year} уменьшится на эту сумму, другие поступления месяца останутся.`
+        : `${item.participant} · ${formatMoney(item.amount)} от ${formatDate(item.date)}. Действие нельзя отменить.`,
       confirmText: 'Удалить',
       destructive: true,
     })
     if (!ok) return
     try {
-      const res = await fetch(`/api/monthly-payments?id=${item.id}`, { method: 'DELETE' })
+      const res = await fetch(item.receipt ? `/api/payments/transactions?id=${item.id}` : `/api/monthly-payments?id=${item.id}`, { method: 'DELETE' })
       const result = await res.json()
       if (result.error) throw new Error(result.error)
       toast.success('Поступление удалено')
@@ -470,6 +511,27 @@ export function IncomeExpensesPage() {
               <Button size="sm" variant="ghost" onClick={() => openImport('payments')}>
                 <Upload /> Импорт
               </Button>
+              <ExportButton
+                empty={visibleIncome.length === 0}
+                onExport={() =>
+                  exportToExcel({
+                    filename: 'Поступления',
+                    rows: visibleIncome,
+                    totals: true,
+                    columns: [
+                      { header: 'Дата', value: i => i.date, type: 'date' },
+                      { header: 'Участник', value: i => i.participant },
+                      { header: 'Программа', value: i => i.programName ?? '' },
+                      { header: 'За месяц', value: i => (i.month ? `${String(i.month).padStart(2, '0')}.${i.year}` : '') },
+                      { header: 'Счёт', value: i => accountName(i.account_id) ?? '' },
+                      { header: 'Сумма, USD', value: i => i.amount, type: 'money' },
+                      { header: 'Валюта', value: i => i.currency ?? 'USD' },
+                      { header: 'Сумма в валюте', value: i => i.original_amount ?? i.amount, type: 'money' },
+                      { header: 'Комментарий', value: i => i.notes ?? '' },
+                    ],
+                  })
+                }
+              />
             </div>
           </PanelToolbar>
           {visibleIncome.length === 0 ? (
@@ -498,11 +560,23 @@ export function IncomeExpensesPage() {
                       <TableCell className="num text-muted-foreground">{formatDate(item.date)}</TableCell>
                       <TableCell>
                         <div className="font-medium">{item.participant}</div>
-                        {item.programName && <div className="text-xs text-muted-foreground">{item.programName}</div>}
+                        {item.receipt ? (
+                          <div className="text-xs text-muted-foreground">
+                            {[item.programName, `за ${MONTHS_SHORT_RU[item.month - 1]} ${item.year}`].filter(Boolean).join(' · ')}
+                          </div>
+                        ) : (
+                          item.programName && <div className="text-xs text-muted-foreground">{item.programName}</div>
+                        )}
                       </TableCell>
                       <TableCell className="text-muted-foreground max-md:hidden">{accountName(item.account_id) ?? '—'}</TableCell>
                       <TableCell className="max-sm:hidden">
-                        <Badge variant={STATUS[item.status].variant}>{STATUS[item.status].label}</Badge>
+                        {item.receipt ? (
+                          <Badge variant={(RECEIPT_STATUS[item.status] ?? STATUS[item.status]).variant}>
+                            {(RECEIPT_STATUS[item.status] ?? STATUS[item.status]).label}
+                          </Badge>
+                        ) : (
+                          <Badge variant={STATUS[item.status].variant}>{STATUS[item.status].label}</Badge>
+                        )}
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="num font-medium text-success">{formatMoney(item.amount, 'USD', { sign: true })}</div>
@@ -567,6 +641,27 @@ export function IncomeExpensesPage() {
               <Button size="sm" variant="outline" onClick={() => setRepeatOpen(true)}>
                 <Repeat /> Повторить расходы
               </Button>
+              <ExportButton
+                empty={visibleExpenses.length === 0}
+                onExport={() =>
+                  exportToExcel({
+                    filename: 'Расходы',
+                    rows: visibleExpenses,
+                    totals: true,
+                    columns: [
+                      { header: 'Дата', value: e => e.date, type: 'date' },
+                      { header: 'Расход', value: e => e.name },
+                      { header: 'Категория', value: e => e.category || 'Прочее' },
+                      { header: 'Программа', value: e => e.program_name ?? '' },
+                      { header: 'Счёт', value: e => accountName(e.account_id) ?? '' },
+                      { header: 'Сумма, USD', value: e => e.amount, type: 'money' },
+                      { header: 'Валюта', value: e => e.currency ?? 'USD' },
+                      { header: 'Сумма в валюте', value: e => e.original_amount ?? e.amount, type: 'money' },
+                      { header: 'Комментарий', value: e => e.description ?? '' },
+                    ],
+                  })
+                }
+              />
             </div>
           </PanelToolbar>
           {visibleExpenses.length === 0 ? (
@@ -652,7 +747,6 @@ export function IncomeExpensesPage() {
         onOpenChange={setPaymentOpen}
         participants={participants}
         accounts={accounts}
-        payments={incomeData}
         onSaved={fetchData}
       />
       <ExpenseSheet
@@ -676,6 +770,7 @@ export function IncomeExpensesPage() {
         categories={categories}
         participants={participants}
         payments={incomeData}
+        ledger={ledger}
         expenses={expenseData}
         onSaved={fetchData}
       />

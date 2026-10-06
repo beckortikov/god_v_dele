@@ -2,7 +2,7 @@
 
 import * as React from 'react'
 import { toast } from 'sonner'
-import { Pencil, Plus, Trash2, UserSquare2 } from 'lucide-react'
+import { Pencil, Plus, Trash2, UserCheck, UserMinus, UserSquare2 } from 'lucide-react'
 import { formatDate, formatMoney, formatNumber, plural } from '@/lib/format'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -13,6 +13,9 @@ import { Segmented } from '@/components/erp/segmented'
 import { EmptyState } from '@/components/erp/empty-state'
 import { TotalsBar, TableSkeleton, rowActionsCls, dangerIconCls } from '@/components/erp/table-parts'
 import { useConfirm } from '@/components/erp/confirm'
+import { ExportButton } from '@/components/erp/export-button'
+import { exportToExcel } from '@/components/erp/export'
+import { BulkBar, SelectCell, SelectHeadCell, requestOk, useBulkRunner, useRowSelection } from '@/components/erp/bulk'
 import { useNavAction } from '@/components/app-shell/nav-context'
 import { Avatar, fullName, type HrEmployee } from '@/components/hr/shared'
 import { EMPLOYEE_STATUS, EmployeeSheet, type EmployeeSheetMode } from '@/components/hr/employee-sheet'
@@ -137,6 +140,66 @@ export function EmployeesPage() {
 
   const salarySum = filtered.reduce((s, e) => s + (Number(e.base_salary) || 0), 0)
 
+  // ----- Selection, bulk status, export -----
+  const filteredIds = React.useMemo(() => filtered.map(e => e.id), [filtered])
+  const selection = useRowSelection(filteredIds, `${statusFilter}|${searchTerm}`)
+  const bulk = useBulkRunner()
+
+  const bulkSetStatus = async (status: 'active' | 'inactive') => {
+    const chosen = employees.filter(e => selection.isSelected(e.id))
+    const targets = chosen.filter(e => e.status !== status)
+    const label = EMPLOYEE_STATUS[status].label
+    if (!targets.length) {
+      toast.info(`У всех выбранных уже статус «${label}»`)
+      return
+    }
+    const n = targets.length
+    const people = `${formatNumber(n)} ${plural(n, ['сотрудника', 'сотрудников', 'сотрудников'])}`
+    const ok = await confirm({
+      title: `Поставить статус «${label}»?`,
+      description:
+        `Статус изменится у ${people}` +
+        (chosen.length > n ? ` (ещё ${formatNumber(chosen.length - n)} уже с этим статусом)` : '') +
+        (status === 'inactive'
+          ? '. Неработающие не попадают в новые ведомости и график; данные и история сохранятся.'
+          : '. Они снова появятся в графике и при формировании ведомости.'),
+      confirmText: 'Изменить статус',
+    })
+    if (!ok) return
+    await bulk.run(
+      targets,
+      e =>
+        requestOk(`/api/hr/employees/${e.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status }),
+        }),
+      { done: `Статус «${label}» поставлен`, noun: ['сотруднику', 'сотрудникам', 'сотрудникам'], label: fullName }
+    )
+    selection.clear()
+    fetchEmployees()
+  }
+
+  const runExport = () =>
+    exportToExcel({
+      filename: 'Сотрудники',
+      rows: filtered,
+      totals: { label: `Итого · ${formatNumber(filtered.length)} ${plural(filtered.length, ['сотрудник', 'сотрудника', 'сотрудников'])}` },
+      columns: [
+        { header: 'Фамилия', value: e => e.last_name },
+        { header: 'Имя', value: e => e.first_name },
+        { header: 'Должность', value: e => e.position },
+        { header: 'Отдел', value: e => e.department },
+        { header: 'Телефон', value: e => e.phone },
+        { header: 'Email', value: e => e.email },
+        { header: 'Дата рождения', value: e => e.birth_date, type: 'date' },
+        { header: 'Дата приёма', value: e => e.hire_date, type: 'date' },
+        { header: 'Статус', value: e => (EMPLOYEE_STATUS[e.status] ?? EMPLOYEE_STATUS.inactive).label },
+        { header: 'Оклад', value: e => e.base_salary, type: 'money' },
+        { header: 'Валюта', value: e => e.currency || 'TJS' },
+      ],
+    })
+
   return (
     <PageContainer>
       <PageHeader
@@ -147,9 +210,12 @@ export function EmployeesPage() {
             : `${formatNumber(counts.active)} ${plural(counts.active, ['работает', 'работают', 'работают'])} · всего ${formatNumber(counts.all)}`
         }
         actions={
-          <Button size="sm" onClick={openCreate}>
-            <Plus /> Новый сотрудник
-          </Button>
+          <>
+            <ExportButton empty={isLoading || !filtered.length} onExport={runExport} />
+            <Button size="sm" onClick={openCreate}>
+              <Plus /> Новый сотрудник
+            </Button>
+          </>
         }
       />
 
@@ -190,6 +256,7 @@ export function EmployeesPage() {
               <Table>
                 <TableHeader>
                   <TableRow className="hover:bg-transparent">
+                    <SelectHeadCell selection={selection} label="Выбрать всех сотрудников" />
                     <TableHead>Сотрудник</TableHead>
                     <TableHead className="max-md:hidden">Должность</TableHead>
                     <TableHead className="max-lg:hidden">Телефон</TableHead>
@@ -203,7 +270,13 @@ export function EmployeesPage() {
                   {filtered.map(employee => {
                     const st = EMPLOYEE_STATUS[employee.status] ?? EMPLOYEE_STATUS.inactive
                     return (
-                      <TableRow key={employee.id} className="group cursor-pointer" onClick={() => openView(employee)}>
+                      <TableRow
+                        key={employee.id}
+                        className="group cursor-pointer"
+                        data-state={selection.isSelected(employee.id) ? 'selected' : undefined}
+                        onClick={() => openView(employee)}
+                      >
+                        <SelectCell selection={selection} id={employee.id} label={`Выбрать: ${fullName(employee)}`} />
                         <TableCell>
                           <div className="flex items-center gap-3">
                             <Avatar person={employee} />
@@ -246,6 +319,15 @@ export function EmployeesPage() {
           )}
         </Panel>
       )}
+
+      <BulkBar count={selection.count} onClear={selection.clear} progress={bulk.progress}>
+        <Button size="sm" variant="outline" onClick={() => bulkSetStatus('active')}>
+          <UserCheck /> Работает
+        </Button>
+        <Button size="sm" variant="outline" onClick={() => bulkSetStatus('inactive')}>
+          <UserMinus /> Не работает
+        </Button>
+      </BulkBar>
 
       <EmployeeSheet
         open={sheetOpen}

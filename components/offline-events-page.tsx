@@ -2,7 +2,7 @@
 
 import * as React from 'react'
 import { toast } from 'sonner'
-import { CalendarDays, Inbox, MapPin, Pencil, Plus, Trash2 } from 'lucide-react'
+import { CalendarDays, ChevronDown, Inbox, MapPin, Pencil, Plus, Trash2 } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 import { formatDate, formatMoney, formatNumber, plural } from '@/lib/format'
@@ -16,6 +16,10 @@ import { SearchInput } from '@/components/erp/search-input'
 import { EmptyState } from '@/components/erp/empty-state'
 import { TableSkeleton, TotalsBar, dangerIconCls, rowActionsCls } from '@/components/erp/table-parts'
 import { useConfirm } from '@/components/erp/confirm'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { ExportButton } from '@/components/erp/export-button'
+import { exportToExcel } from '@/components/erp/export'
+import { BulkBar, SelectCell, SelectHeadCell, requestOk, useBulkRunner, useRowSelection } from '@/components/erp/bulk'
 import { useNavAction } from '@/components/app-shell/nav-context'
 import { EventDetailPage } from '@/components/offline-event-detail-page'
 import { EventSheet } from '@/components/events/event-sheet'
@@ -130,6 +134,75 @@ export function OfflineEventsPage() {
     />
   )
 
+  const q = searchQuery.trim().toLowerCase()
+  const byStatus = (s: StatusFilter) => (s === 'all' ? events : events.filter(e => e.status === s))
+  const filteredEvents = byStatus(filterStatus).filter(
+    event => event.name.toLowerCase().includes(q) || (event.location && event.location.toLowerCase().includes(q))
+  )
+
+  // ----- Selection, bulk status, export -----
+  const filteredIds = filteredEvents.map(e => e.id)
+  const selection = useRowSelection(filteredIds, `${filterStatus}|${searchQuery}`)
+  const bulk = useBulkRunner()
+
+  const handleBulkStatus = async (status: EventStatus) => {
+    const chosen = events.filter(e => selection.isSelected(e.id))
+    const targets = chosen.filter(e => e.status !== status)
+    const label = EVENT_STATUS[status].label
+    if (!targets.length) {
+      toast.info(`У всех выбранных событий уже статус «${label}»`)
+      return
+    }
+    const n = targets.length
+    const ok = await confirm({
+      title: `Поставить статус «${label}»?`,
+      description:
+        `Статус изменится у ${formatNumber(n)} ${plural(n, ['события', 'событий', 'событий'])}` +
+        (chosen.length > n ? ` (ещё ${formatNumber(chosen.length - n)} уже с этим статусом)` : '') +
+        '. Участники, оплаты и расходы событий не изменятся.',
+      confirmText: 'Изменить статус',
+    })
+    if (!ok) return
+    await bulk.run(
+      targets,
+      ev =>
+        requestOk(`/api/offline-events/${ev.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status }),
+        }),
+      { done: `Статус «${label}» поставлен`, noun: ['событию', 'событиям', 'событиям'], label: ev => ev.name }
+    )
+    selection.clear()
+    fetchEvents()
+  }
+
+  const runExport = () =>
+    exportToExcel({
+      filename: 'Оффлайн-события',
+      rows: filteredEvents,
+      totals: {
+        label: `Итого · ${formatNumber(filteredEvents.length)} ${plural(filteredEvents.length, ['событие', 'события', 'событий'])}`,
+        sum: ['Пришли', 'Доход, USD', 'Расходы, USD', 'Баланс, USD'],
+      },
+      columns: [
+        { header: 'Дата', value: e => e.event_date, type: 'date' },
+        { header: 'Событие', value: e => e.name },
+        { header: 'Место', value: e => e.location },
+        { header: 'Статус', value: e => EVENT_STATUS[e.status]?.label ?? e.status },
+        { header: 'Пришли', value: e => num(e.attendees_attended), type: 'number' },
+        { header: 'Доход, USD', value: e => num(e.total_income), type: 'money' },
+        { header: 'Расходы, USD', value: e => num(e.total_expenses), type: 'money' },
+        { header: 'Баланс, USD', value: e => num(e.balance), type: 'money' },
+        {
+          header: 'ROI, %',
+          value: e => (num(e.total_expenses) > 0 ? Math.round((num(e.balance) / num(e.total_expenses)) * 1000) / 10 : null),
+          type: 'percent',
+        },
+        { header: 'Описание', value: e => e.description },
+      ],
+    })
+
   // Detail view
   if (selectedEventId) {
     return (
@@ -146,11 +219,6 @@ export function OfflineEventsPage() {
     )
   }
 
-  const q = searchQuery.trim().toLowerCase()
-  const byStatus = (s: StatusFilter) => (s === 'all' ? events : events.filter(e => e.status === s))
-  const filteredEvents = byStatus(filterStatus).filter(
-    event => event.name.toLowerCase().includes(q) || (event.location && event.location.toLowerCase().includes(q))
-  )
 
   // Numerics may come back as strings: sum them as numbers
   const totalIncome = filteredEvents.reduce((sum, e) => sum + num(e.total_income), 0)
@@ -164,9 +232,12 @@ export function OfflineEventsPage() {
         title="Оффлайн-события"
         description="Мероприятия, гости и бюджет каждого события"
         actions={
-          <Button size="sm" onClick={openCreate}>
-            <Plus /> Новое событие
-          </Button>
+          <>
+            <ExportButton empty={loading || !!error || !filteredEvents.length} onExport={runExport} />
+            <Button size="sm" onClick={openCreate}>
+              <Plus /> Новое событие
+            </Button>
+          </>
         }
       />
 
@@ -251,6 +322,7 @@ export function OfflineEventsPage() {
                     <Table>
                       <TableHeader>
                         <TableRow className="hover:bg-transparent">
+                          <SelectHeadCell selection={selection} label="Выбрать все события" />
                           <TableHead className="w-28">Дата</TableHead>
                           <TableHead>Событие</TableHead>
                           <TableHead className="max-sm:hidden">Статус</TableHead>
@@ -271,7 +343,13 @@ export function OfflineEventsPage() {
                           const st = EVENT_STATUS[event.status] ?? { label: event.status, variant: 'secondary' as const }
                           const until = event.status === 'planned' ? untilLabel(event.event_date) : null
                           return (
-                            <TableRow key={event.id} className="group cursor-pointer" onClick={() => openDetail(event.id)}>
+                            <TableRow
+                              key={event.id}
+                              className="group cursor-pointer"
+                              data-state={selection.isSelected(event.id) ? 'selected' : undefined}
+                              onClick={() => openDetail(event.id)}
+                            >
+                              <SelectCell selection={selection} id={event.id} label={`Выбрать: ${event.name}`} />
                               <TableCell>
                                 <div className="num text-muted-foreground">{formatDate(event.event_date)}</div>
                                 {until && <div className="text-xs text-info">{until}</div>}
@@ -332,6 +410,30 @@ export function OfflineEventsPage() {
           </div>
         </>
       )}
+
+      <BulkBar count={selection.count} onClear={selection.clear} progress={bulk.progress}>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button size="sm" variant="outline">
+              Изменить статус <ChevronDown />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="center" side="top">
+            <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">Новый статус</DropdownMenuLabel>
+            {(Object.keys(EVENT_STATUS) as EventStatus[]).map(s => (
+              <DropdownMenuItem key={s} onSelect={() => handleBulkStatus(s)}>
+                <span
+                  className={cn(
+                    'size-2 rounded-full',
+                    EVENT_STATUS[s].variant === 'success' ? 'bg-success' : EVENT_STATUS[s].variant === 'info' ? 'bg-info' : 'bg-muted-foreground/60'
+                  )}
+                />
+                {EVENT_STATUS[s].label}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </BulkBar>
 
       {sheet}
     </PageContainer>

@@ -14,6 +14,9 @@ import { SearchInput } from '@/components/erp/search-input'
 import { EmptyState } from '@/components/erp/empty-state'
 import { TableSkeleton, rowActionsCls, dangerIconCls } from '@/components/erp/table-parts'
 import { useConfirm } from '@/components/erp/confirm'
+import { ExportButton } from '@/components/erp/export-button'
+import { exportToExcel } from '@/components/erp/export'
+import { BulkBar, SelectCell, SelectHeadCell, requestOk, useBulkRunner, useRowSelection } from '@/components/erp/bulk'
 import { Avatar, LEAVE_TYPES, SHIFTS, formatDay, fullName, localISO, type HrEmployee, type LeaveType } from '@/components/hr/shared'
 import { LeaveSheet, PeriodSheet, type LeavePeriod, type LeaveRecord } from '@/components/hr/leave-sheets'
 
@@ -170,6 +173,51 @@ export function VacationsPage() {
     fetchData()
   }
 
+  // ----- Selection, bulk delete, export -----
+  const visibleKeys = React.useMemo(() => visible.map(p => p.key), [visible])
+  const selection = useRowSelection(visibleKeys, `${typeFilter}|${query}`)
+  const bulk = useBulkRunner()
+
+  const handleBulkDelete = async () => {
+    const chosen = visible.filter(p => selection.isSelected(p.key))
+    const records = chosen.flatMap(p => p.records)
+    if (!records.length) return
+    const n = chosen.length
+    const ok = await confirm({
+      title: `Удалить ${formatNumber(n)} ${plural(n, ['период', 'периода', 'периодов'])}?`,
+      description: `Всего ${dayWord(records.length)} отсутствия у ${formatNumber(new Set(chosen.map(p => p.employee_id)).size)} ${plural(
+        new Set(chosen.map(p => p.employee_id)).size,
+        ['сотрудника', 'сотрудников', 'сотрудников']
+      )}. Дни исчезнут из графика работы; удалённое можно вернуть из корзины в журнале изменений.`,
+      confirmText: 'Удалить',
+      destructive: true,
+    })
+    if (!ok) return
+    await bulk.run(records, r => requestOk(`/api/hr/schedule/${r.id}`, { method: 'DELETE' }), {
+      done: n > 1 ? 'Периоды удалены' : 'Период удалён',
+      noun: ['день', 'дня', 'дней'],
+      label: r => `${fullName(r.employees)}, ${formatDay(r.work_date, true)}`,
+    })
+    selection.clear()
+    setPeriodKey(null)
+    fetchData()
+  }
+
+  const runExport = () =>
+    exportToExcel({
+      filename: 'Отгулы и отпуска',
+      rows: visible,
+      totals: { sum: ['Дней'] },
+      columns: [
+        { header: 'Сотрудник', value: p => fullName(p.employees) || 'Сотрудник' },
+        { header: 'Тип', value: p => SHIFTS[p.type].label },
+        { header: 'С', value: p => p.from, type: 'date' },
+        { header: 'По', value: p => p.to, type: 'date' },
+        { header: 'Дней', value: p => p.records.length, type: 'number' },
+        { header: 'Статус', value: p => statusOf(p).label },
+      ],
+    })
+
   const activeEmployees = React.useMemo(
     () => (Array.isArray(employees) ? employees : []).filter(e => e.status === 'active' || e.id === editingDay?.employee_id),
     [employees, editingDay]
@@ -184,9 +232,12 @@ export function VacationsPage() {
         title="Отгулы и отпуска"
         description="Ближайшие 3 месяца. Каждый день отсутствия отражается в графике работы"
         actions={
-          <Button size="sm" onClick={openCreate}>
-            <Plus /> Новое отсутствие
-          </Button>
+          <>
+            <ExportButton empty={isLoading || !visible.length} onExport={runExport} />
+            <Button size="sm" onClick={openCreate}>
+              <Plus /> Новое отсутствие
+            </Button>
+          </>
         }
       />
 
@@ -265,6 +316,7 @@ export function VacationsPage() {
             <Table>
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
+                  <SelectHeadCell selection={selection} label="Выбрать все периоды" />
                   <TableHead>Сотрудник</TableHead>
                   <TableHead className="max-sm:hidden">Тип</TableHead>
                   <TableHead>Период</TableHead>
@@ -278,7 +330,13 @@ export function VacationsPage() {
                   const st = statusOf(p)
                   const sh = SHIFTS[p.type]
                   return (
-                    <TableRow key={p.key} className="group cursor-pointer" onClick={() => setPeriodKey(p.key)}>
+                    <TableRow
+                      key={p.key}
+                      className="group cursor-pointer"
+                      data-state={selection.isSelected(p.key) ? 'selected' : undefined}
+                      onClick={() => setPeriodKey(p.key)}
+                    >
+                      <SelectCell selection={selection} id={p.key} label={`Выбрать: ${fullName(p.employees)}, ${formatDay(p.from)}`} />
                       <TableCell>
                         <div className="flex items-center gap-3">
                           <Avatar person={p.employees} className="max-sm:hidden" />
@@ -316,6 +374,12 @@ export function VacationsPage() {
           )}
         </Panel>
       )}
+
+      <BulkBar count={selection.count} onClear={selection.clear} progress={bulk.progress}>
+        <Button size="sm" variant="outline" className={dangerIconCls} onClick={handleBulkDelete}>
+          <Trash2 /> Удалить
+        </Button>
+      </BulkBar>
 
       <LeaveSheet open={formOpen} onOpenChange={setFormOpen} employees={activeEmployees} editing={editingDay} onSaved={fetchData} />
       <PeriodSheet

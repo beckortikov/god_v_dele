@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-client'
+import { ledgerEnabled, loadTransactions } from '@/lib/payments-ledger'
 
 export async function GET(req: Request) {
     try {
@@ -56,13 +57,20 @@ export async function GET(req: Request) {
         // YTD expenses are company-wide (no program filter), as before
         const ytdExpensesQuery = supabaseAdmin.from('expenses').select(expenseCols).gte('expense_date', ytdStartDate).lte('expense_date', endDate)
 
-        const [participantsRes, accountsRes, paymentsAllRes, expensesRes, openingExpensesRes, ytdExpensesRes] = await Promise.all([
+        // Partial payments on (migration 014): cash figures come from the
+        // individual receipts by their own date, so a month paid in two parts
+        // lands in the months the money actually arrived. Plan figures keep
+        // using monthly_payments. With the ledger off nothing below changes.
+        const ledger = await ledgerEnabled(req)
+
+        const [participantsRes, accountsRes, paymentsAllRes, expensesRes, openingExpensesRes, ytdExpensesRes, receipts] = await Promise.all([
             participantsQuery,
             accountsQuery,
             paymentsAllQuery,
             expensesQuery,
             openingExpensesQuery,
             ytdExpensesQuery,
+            ledger ? loadTransactions(req, { to: endDate, programId: byProgram ? programId : null }) : null,
         ])
 
         if (participantsRes.error) throw participantsRes.error
@@ -80,20 +88,35 @@ export async function GET(req: Request) {
 
         const paidBetween = (p: any, from: string, to: string) => p.paid_date != null && p.paid_date >= from && p.paid_date <= to
 
+        // Receipts in the shape of payment rows; `date` already falls back to the billed month
+        const receiptRows = receipts?.map(t => ({
+            participant_id: t.participant_id,
+            fact_amount: t.amount_usd,
+            currency: t.currency,
+            original_amount: t.original_amount,
+            account_id: t.account_id,
+            paid_date: t.paid_date,
+            date: t.date,
+        })) ?? null
+
         // 1. Planned period payments for the selected month/year (cohort billing)
         const payments = allPayments.filter(p => p.month_number === month && p.year === year)
 
         // 2. Cash received in the selected month (or billed this month, undated and non-zero)
-        const cashPayments = allPayments.filter(p =>
-            paidBetween(p, startDate, endDate) ||
-            (p.paid_date == null && p.month_number === month && p.year === year && p.fact_amount > 0))
+        const cashPayments: any[] = receiptRows
+            ? receiptRows.filter(r => r.date >= startDate && r.date <= endDate)
+            : allPayments.filter(p =>
+                paidBetween(p, startDate, endDate) ||
+                (p.paid_date == null && p.month_number === month && p.year === year && p.fact_amount > 0))
 
         // 3. Opening balances (before startDate), cash basis with a billing-month fallback
-        const openingPayments = allPayments.filter(p => {
-            if (!(p.year <= year)) return false
-            const dateStr = p.paid_date || `${p.year}-${String(p.month_number).padStart(2, '0')}-01`
-            return dateStr < startDate
-        })
+        const openingPayments: any[] = receiptRows
+            ? receiptRows.filter(r => r.date < startDate)
+            : allPayments.filter(p => {
+                if (!(p.year <= year)) return false
+                const dateStr = p.paid_date || `${p.year}-${String(p.month_number).padStart(2, '0')}-01`
+                return dateStr < startDate
+            })
 
         let openingBalanceUSD = 0
         let openingBalanceTJS = 0
@@ -171,9 +194,11 @@ export async function GET(req: Request) {
 
         // 4. YTD: billed Jan…month of this year, and cash received Jan 1…endDate
         const ytdPeriodPayments = allPayments.filter(p => p.year === year && p.month_number <= month)
-        const ytdCashPayments = allPayments.filter(p =>
-            paidBetween(p, ytdStartDate, endDate) ||
-            (p.paid_date == null && p.year === year && p.month_number <= month && p.fact_amount > 0))
+        const ytdCashPayments: any[] = receiptRows
+            ? receiptRows.filter(r => r.date >= ytdStartDate && r.date <= endDate)
+            : allPayments.filter(p =>
+                paidBetween(p, ytdStartDate, endDate) ||
+                (p.paid_date == null && p.year === year && p.month_number <= month && p.fact_amount > 0))
 
         // Lookups instead of O(participants × payments) scans. Arrays keep DB order.
         const paymentByParticipant = new Map<string, any>()

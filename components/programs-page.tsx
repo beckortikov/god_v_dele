@@ -11,6 +11,8 @@ import { PageContainer, PageHeader, Panel } from '@/components/erp/page-header'
 import { EmptyState } from '@/components/erp/empty-state'
 import { TableSkeleton, rowActionsCls, dangerIconCls } from '@/components/erp/table-parts'
 import { useConfirm } from '@/components/erp/confirm'
+import { ExportButton } from '@/components/erp/export-button'
+import { exportToExcel } from '@/components/erp/export'
 import { ProgramSheet } from '@/components/participants/program-sheet'
 import type { Program } from '@/components/participants/types'
 
@@ -68,6 +70,18 @@ export function ProgramsPage() {
     setPrograms(list => [...list, program].sort((a, b) => a.name.localeCompare(b.name, 'ru')))
   }
 
+  const runExport = () =>
+    exportToExcel({
+      filename: 'Программы',
+      rows: programs,
+      columns: [
+        { header: 'Программа', value: p => p.name },
+        { header: 'Цена в месяц, USD', value: p => Number(p.price_per_month || 0), type: 'money' },
+        { header: 'Длительность, мес.', value: p => Number(p.duration_months || 0), type: 'number' },
+        { header: 'Полная стоимость, USD', value: p => Number(p.price_per_month || 0) * Number(p.duration_months || 0), type: 'money' },
+      ],
+    })
+
   if (error) {
     return (
       <PageContainer>
@@ -105,9 +119,12 @@ export function ProgramsPage() {
             : `${formatNumber(programs.length)} ${plural(programs.length, ['программа', 'программы', 'программ'])} · цены и длительность обучения`
         }
         actions={
-          <Button size="sm" onClick={() => setIsAddOpen(true)}>
-            <Plus /> Новая программа
-          </Button>
+          <>
+            <ExportButton empty={loading || !programs.length} onExport={runExport} />
+            <Button size="sm" onClick={() => setIsAddOpen(true)}>
+              <Plus /> Новая программа
+            </Button>
+          </>
         }
       />
 

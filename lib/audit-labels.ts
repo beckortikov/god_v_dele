@@ -25,6 +25,7 @@ export interface AuditEntry {
 /** Section names shown in the journal filter and table. */
 export const TABLE_LABELS: Record<string, string> = {
   monthly_payments: 'Поступления',
+  payment_transactions: 'Оплаты участников',
   expenses: 'Расходы',
   accounts: 'Счета',
   account_transfers: 'Переводы между счетами',
@@ -60,6 +61,7 @@ export const ACTION_LABELS: Record<AuditActionName, string> = {
  */
 export const RESTORABLE_TABLES = new Set([
   'monthly_payments',
+  'payment_transactions',
   'expenses',
   'accounts',
   'account_transfers',
@@ -86,6 +88,7 @@ export const MONEY_FIELDS = new Set([
   'amount',
   'fact_amount',
   'plan_amount',
+  'amount_usd',
   'original_amount',
   'payment_received',
   'price_per_month',
@@ -165,6 +168,9 @@ export const FIELD_LABELS: Record<string, string> = {
   notes: 'Комментарий',
   amount: 'Сумма, $',
   fact_amount: 'Получено, $',
+  amount_usd: 'Сумма, $',
+  monthly_payment_id: 'Месяц графика',
+  created_by: 'Внёс',
   plan_amount: 'План, $',
   original_amount: 'Сумма в валюте',
   currency: 'Валюта',

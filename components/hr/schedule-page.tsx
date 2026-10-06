@@ -12,6 +12,8 @@ import { PageContainer, PageHeader, Panel, PanelToolbar } from '@/components/erp
 import { StatStrip } from '@/components/erp/stat-strip'
 import { EmptyState } from '@/components/erp/empty-state'
 import { useConfirm } from '@/components/erp/confirm'
+import { ExportButton } from '@/components/erp/export-button'
+import { exportToExcel, type ExportColumn } from '@/components/erp/export'
 import {
   MonthSwitcher,
   SHIFTS,
@@ -148,6 +150,44 @@ export function SchedulePage() {
 
   const dayWord = (n: number) => plural(n, ['день', 'дня', 'дней'])
 
+  /** Month grid as in the table: one column per day, «9–18» for shifts, letter codes for absences. */
+  const runExport = () => {
+    const dayHeader = (d: string) => `${d.slice(8)} ${WEEKDAYS_SHORT[weekday(d)]}`
+    const count = (emp: HrEmployee, t: keyof typeof SHIFTS) => {
+      let n = 0
+      byCell.get(emp.id)?.forEach(c => c.shift_type === t && n++)
+      return n
+    }
+    const columns: ExportColumn<HrEmployee>[] = [
+      { header: 'Сотрудник', value: e => fullName(e) },
+      { header: 'Должность', value: e => e.position },
+      ...days.map<ExportColumn<HrEmployee>>(d => ({
+        header: dayHeader(d),
+        width: 7,
+        value: e => {
+          const c = byCell.get(e.id)?.get(d)
+          if (!c) return null
+          return c.shift_type === 'work' && c.start_time ? `${hhmm(c.start_time)}–${hhmm(c.end_time)}` : SHIFTS[c.shift_type].code
+        },
+      })),
+      { header: 'Смен', value: e => count(e, 'work'), type: 'number' },
+      { header: 'Отпуск, дн.', value: e => count(e, 'vacation'), type: 'number' },
+      { header: 'Больничный, дн.', value: e => count(e, 'sick_leave'), type: 'number' },
+      { header: 'Отгул б/с, дн.', value: e => count(e, 'unpaid_leave'), type: 'number' },
+    ]
+    return exportToExcel({
+      filename: `График ${monthLabel(ym)}`,
+      sheetName: monthLabel(ym),
+      rows,
+      columns,
+      totals: {
+        label: 'На работе',
+        sum: ['Смен', 'Отпуск, дн.', 'Больничный, дн.', 'Отгул б/с, дн.'],
+        values: Object.fromEntries(days.map(d => [dayHeader(d), workingPerDay.get(d) ?? 0])),
+      },
+    })
+  }
+
   return (
     <PageContainer>
       <PageHeader
@@ -156,6 +196,7 @@ export function SchedulePage() {
         actions={
           <>
             <MonthSwitcher value={ym} onChange={setYm} />
+            <ExportButton empty={isLoading || !rows.length} onExport={runExport} />
             <Button size="sm" onClick={openNew}>
               <Plus /> Назначить смену
             </Button>

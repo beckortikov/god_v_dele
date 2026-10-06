@@ -129,6 +129,7 @@ export function ImportSheet({
   categories,
   participants,
   payments,
+  ledger = false,
   expenses,
   onSaved,
 }: {
@@ -140,6 +141,8 @@ export function ImportSheet({
   categories: string[]
   participants: Participant[]
   payments: IncomeItem[]
+  /** Partial payments on (migration 014): each row adds a receipt, months are never replaced. */
+  ledger?: boolean
   expenses: ExpenseItem[]
   onSaved: () => void
 }) {
@@ -246,6 +249,12 @@ export function ImportSheet({
     const lastIncomeAccount = readPref('last-income-account')
     const seenPayments = new Map<string, number>()
     const existingPayments = new Set(payments.map(p => `${p.participantId}|${p.month}|${p.year}`))
+    // Ledger: a receipt is a duplicate when participant, date, currency and amount all match
+    const receiptKey = (pid: string, date: string, cur: string | undefined, amount: unknown) => `${pid}|${date}|${cur || 'USD'}|${roundMoney(amount)}`
+    const existingReceipts = new Set(
+      ledger ? payments.map(p => receiptKey(p.participantId, p.date, p.currency, p.currency === 'TJS' ? p.original_amount : p.amount)) : []
+    )
+    const seenReceipts = new Map<string, number>()
     const existingExpenses = new Set(expenses.map(e => `${normName(e.name)}|${e.date}|${roundMoney(e.currency === 'TJS' ? e.original_amount : e.amount)}`))
 
     return body.map((raw, i): ParsedRow => {
@@ -329,7 +338,19 @@ export function ImportSheet({
                 : autoAccount(accounts, participant.program_id, currency, lastIncomeAccount)
           }
           if (!accountId) errors.push('Не выбран счёт')
-          if (date) {
+          if (date && ledger) {
+            // Several payments for one month are fine; only exact repeats are suspicious
+            const k = receiptKey(participant.id, date, currency, amount)
+            const prevLine = seenReceipts.get(k)
+            if (prevLine) {
+              warnings.push(`Такая же сумма и дата уже в строке ${prevLine}`)
+              suggested = false
+            } else seenReceipts.set(k, line)
+            if (existingReceipts.has(k)) {
+              warnings.push('Такое поступление уже есть')
+              suggested = false
+            }
+          } else if (date) {
             const [y, m] = date.split('-').map(Number)
             const k = `${participant.id}|${m}|${y}`
             const prevLine = seenPayments.get(k)
@@ -368,6 +389,7 @@ export function ImportSheet({
     grid,
     headerRow,
     payments,
+    ledger,
     expenses,
     defaultCurrency,
     defaultCategory,
@@ -456,7 +478,23 @@ export function ImportSheet({
         } else {
           const p = r.participant!
           const [y, m] = r.date!.split('-').map(Number)
-          res = await fetch('/api/monthly-payments', {
+          res = ledger
+            ? await fetch('/api/payments/transactions', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  participant_id: p.id,
+                  month_number: m,
+                  year: y,
+                  amount: original,
+                  currency: r.currency,
+                  exchange_rate: rate,
+                  paid_date: r.date,
+                  account_id: r.accountId,
+                  notes: r.comment || null,
+                }),
+              })
+            : await fetch('/api/monthly-payments', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -681,7 +719,12 @@ export function ImportSheet({
                       />
                     </Field>
                   </div>
-                  {mode === 'payments' && (
+                  {mode === 'payments' && ledger && (
+                    <p className="mt-3 rounded-lg border px-3 py-2.5 text-xs text-muted-foreground">
+                      Каждая строка добавит отдельное поступление. Если за месяц уже есть оплата, суммы сложатся — заменять ничего не нужно.
+                    </p>
+                  )}
+                  {mode === 'payments' && !ledger && (
                     <label className="mt-3 flex cursor-pointer items-center justify-between gap-4 rounded-lg border px-3 py-2.5">
                       <span>
                         <span className="block text-sm font-medium">Заменять существующие оплаты</span>

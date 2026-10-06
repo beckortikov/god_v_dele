@@ -9,6 +9,8 @@ import { StatStrip } from '@/components/erp/stat-strip'
 import { SearchInput } from '@/components/erp/search-input'
 import { EmptyState } from '@/components/erp/empty-state'
 import { TotalsBar, TableSkeleton } from '@/components/erp/table-parts'
+import { ExportButton } from '@/components/erp/export-button'
+import { exportToExcel } from '@/components/erp/export'
 import { Avatar, MonthSwitcher, currentYearMonth, monthLabel, type YearMonth } from '@/components/hr/shared'
 
 interface TimesheetRow {
@@ -58,12 +60,38 @@ export function TimesheetPage() {
   const maxMinutes = Math.max(1, ...data.map(r => r.total_minutes || 0))
   const visibleMinutes = visible.reduce((s, r) => s + (r.total_minutes || 0), 0)
 
+  const round1 = (v: number) => Math.round(v * 10) / 10
+  const runExport = () =>
+    exportToExcel({
+      filename: `Табель ${monthLabel(ym)}`,
+      sheetName: monthLabel(ym),
+      rows: visible,
+      totals: { sum: ['Дней', 'Часов'] },
+      columns: [
+        { header: 'Сотрудник', value: r => r.employee_name.trim() || 'Без имени' },
+        { header: 'Должность', value: r => r.position },
+        { header: 'Дней', value: r => r.days_worked || 0, type: 'number' },
+        { header: 'Часов', value: r => round1(hours(r.total_minutes || 0)), type: 'number', format: '0.0' },
+        {
+          header: 'В среднем, ч/день',
+          value: r => (r.days_worked ? round1(hours(r.total_minutes || 0) / r.days_worked) : null),
+          type: 'number',
+          format: '0.0',
+        },
+      ],
+    })
+
   return (
     <PageContainer>
       <PageHeader
         title="Табель учёта времени"
         description="Отработанные часы по отметкам сотрудников в личном кабинете"
-        actions={<MonthSwitcher value={ym} onChange={setYm} />}
+        actions={
+          <>
+            <MonthSwitcher value={ym} onChange={setYm} />
+            <ExportButton empty={loading || !visible.length} onExport={runExport} />
+          </>
+        }
       />
 
       <StatStrip
