@@ -88,7 +88,7 @@ export async function GET(request: Request) {
             .from('monthly_payments')
             .select(`
                 *,
-                participant:participants(name, program:programs(name))
+                participant:participants(name, program_id, program:programs(name))
             `)
             .not('fact_amount', 'is', null)
             .gt('fact_amount', 0)
@@ -119,7 +119,7 @@ export async function GET(request: Request) {
 
         // Filter recent payments by program if specified
         const recentPayments = programId && programId !== 'all'
-            ? recentPaymentsData?.filter(p => p.participant?.program?.program_id === programId)
+            ? recentPaymentsData?.filter((p: any) => (p.program_id || p.participant?.program_id) === programId)
             : recentPaymentsData
 
         // Aggregate monthly data for charts (last 6 months)

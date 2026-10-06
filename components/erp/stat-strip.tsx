@@ -25,11 +25,18 @@ const toneCls = {
  * separate KPI cards.
  */
 export function StatStrip({ stats, loading, className }: { stats: Stat[]; loading?: boolean; className?: string }) {
+  // Phones: two columns (an odd last cell spans the row) so the strip stays short
   const cols =
-    stats.length >= 4 ? 'sm:grid-cols-2 lg:grid-cols-4' : stats.length === 3 ? 'sm:grid-cols-3' : stats.length === 2 ? 'sm:grid-cols-2' : ''
+    stats.length >= 4
+      ? 'grid-cols-2 lg:grid-cols-4'
+      : stats.length === 3
+        ? 'grid-cols-2 sm:grid-cols-3 max-sm:[&>*:last-child]:col-span-2'
+        : stats.length === 2
+          ? 'grid-cols-2'
+          : 'grid-cols-1'
   return (
     <section
-      className={cn('grid grid-cols-1 gap-px overflow-hidden rounded-xl border bg-border shadow-xs', cols, className)}
+      className={cn('grid gap-px overflow-hidden rounded-xl border bg-border shadow-xs', cols, className)}
     >
       {stats.map((s, i) => {
         const Comp = s.onClick ? 'button' : 'div'
@@ -37,9 +44,9 @@ export function StatStrip({ stats, loading, className }: { stats: Stat[]; loadin
           <Comp
             key={i}
             onClick={s.onClick}
-            className={cn('bg-card px-5 py-4 text-left', s.onClick && 'transition-colors hover:bg-accent')}
+            className={cn('min-w-0 bg-card px-4 py-3.5 text-left sm:px-5 sm:py-4', s.onClick && 'transition-colors hover:bg-accent')}
           >
-            <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
+            <p className="flex items-center gap-1.5 text-[13px] text-muted-foreground sm:text-sm">
               {s.dot && <span className="size-2 rounded-full" style={{ background: s.dot }} />}
               {s.label}
             </p>
@@ -47,7 +54,7 @@ export function StatStrip({ stats, loading, className }: { stats: Stat[]; loadin
               <Skeleton className="mt-2 h-7 w-28" />
             ) : (
               <>
-                <p className={cn('num mt-1 text-2xl font-semibold tracking-tight', toneCls[s.tone ?? 'default'])}>{s.value}</p>
+                <p className={cn('num mt-1 truncate text-xl font-semibold tracking-tight sm:text-2xl', toneCls[s.tone ?? 'default'])}>{s.value}</p>
                 {s.sub && <div className="mt-0.5 text-xs text-muted-foreground">{s.sub}</div>}
               </>
             )}

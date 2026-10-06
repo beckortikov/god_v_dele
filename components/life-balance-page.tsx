@@ -1,29 +1,43 @@
 'use client'
 
 import { useEffect, useState, useCallback, useMemo } from 'react'
-import { Save, Loader2, CheckCircle2, AlertCircle, Plus, Trash2, Search, Eye, BarChart3, X, Sparkles } from 'lucide-react'
+import { toast } from 'sonner'
+import { Plus, Scale, Settings2, Trash2 } from 'lucide-react'
+import { cn } from '@/lib/utils'
+import { MONTHS_SHORT_RU } from '@/lib/format'
 import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
+import { Skeleton } from '@/components/ui/skeleton'
+import { PageContainer, PageHeader, Panel } from '@/components/erp/page-header'
+import { Segmented } from '@/components/erp/segmented'
+import { EmptyState } from '@/components/erp/empty-state'
+import { useConfirm } from '@/components/erp/confirm'
+import { MONTH_COLORS } from '@/components/wheels/colors'
+import { FillReport, type FillRow } from '@/components/wheels/fill-report'
 import {
-    Radar,
-    RadarChart,
-    PolarGrid,
-    PolarAngleAxis,
-    PolarRadiusAxis,
-    ResponsiveContainer,
-    Legend,
-    Tooltip
-} from 'recharts'
+    Meter,
+    PanelHeading,
+    ParticipantPicker,
+    PeriodStepper,
+    SaveBar,
+    SaveStatus,
+    WheelTabs,
+    YearSelect,
+    type WheelTab,
+} from '@/components/wheels/parts'
+import {
+    MONTHS_FULL,
+    TEMPLATE_ID,
+    saveErrorMessage,
+    useBeforeUnload,
+    usePersistentState,
+    useSaveShortcut,
+    type WheelParticipant,
+} from '@/components/wheels/shared'
+import { WheelRadar } from '@/components/wheels/wheel-radar'
 
 // ─────────────────────────── Types ───────────────────────────
-interface Participant {
-    id: string
-    name: string
-    program?: { name: string }
-    status: string
-}
+type Participant = WheelParticipant
 
 interface LifeBalanceEntry {
     id?: string
@@ -34,8 +48,6 @@ interface LifeBalanceEntry {
 }
 
 // ─────────────────────────── Constants ───────────────────────────
-const TEMPLATE_ID = '00000000-0000-0000-0000-000000000000'
-
 const DEFAULT_CATEGORY_NAMES = [
     'финансы',
     'спорт/тело',
@@ -50,48 +62,13 @@ const DEFAULT_CATEGORY_NAMES = [
     'путешествие'
 ]
 
-const MONTHS = [
-    'Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
-    'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'
-]
+const MONTHS = MONTHS_FULL
 
-const MONTH_COLORS: Record<string, string> = {
-    'Январь': '#3b82f6',   // Blue
-    'Февраль': '#06b6d4',  // Cyan
-    'Март': '#10b981',    // Emerald
-    'Апрель': '#84cc16',   // Lime
-    'Май': '#eab308',     // Yellow
-    'Июнь': '#f97316',     // Orange
-    'Июль': '#ef4444',     // Red
-    'Август': '#ec4899',   // Pink
-    'Сентябрь': '#8b5cf6',  // Purple
-    'Октябрь': '#a855f7',  // Violet
-    'Ноябрь': '#6366f1',   // Indigo
-    'Декабрь': '#14b8a6'   // Teal
-}
-
-const CATEGORY_COLORS: Record<string, string> = {
-    'финансы': '#3b82f6',        // Blue
-    'спорт/тело': '#10b981',     // Emerald
-    'духовность': '#8b5cf6',     // Purple
-    'личностный рост': '#ec4899',// Pink
-    'навыки': '#0ea5e9',         // Sky
-    'душа': '#6366f1',           // Indigo
-    'личный бренд': '#f59e0b',   // Amber
-    'семья': '#f87171',          // Red
-    'здоровье': '#06b6d4',       // Cyan
-    'чтение': '#a855f7',         // Violet
-    'путешествие': '#f97316'     // Orange
-}
-
-const PALETTE = [
-    '#6366f1', '#8b5cf6', '#ec4899', '#f43f5e',
-    '#f97316', '#eab308', '#22c55e', '#14b8a6',
-    '#06b6d4', '#3b82f6', '#a855f7'
-]
+type View = 'month' | 'year'
 
 export function LifeBalancePage({ participantId: fixedParticipantId, participantName }: { participantId?: string, participantName?: string } = {}) {
     const isParticipantMode = !!fixedParticipantId
+    const confirm = useConfirm()
 
     const [participants, setParticipants] = useState<Participant[]>([])
     const [selectedParticipantId, setSelectedParticipantId] = useState<string>(fixedParticipantId || '')
@@ -102,10 +79,7 @@ export function LifeBalancePage({ participantId: fixedParticipantId, participant
     const [idealValues, setIdealValues] = useState<Record<string, number>>({})
     const [monthlyValues, setMonthlyValues] = useState<Record<string, Record<string, number>>>({})
 
-    // Filter query for category row highlighting
-    const [catFilter, setCatFilter] = useState('')
-
-    // Which months are selected to render in Recharts radar
+    // Which months are selected to render in the radar
     const [selectedMonths, setSelectedMonths] = useState<Record<string, boolean>>(() => {
         const curM = MONTHS[new Date().getMonth()]
         return MONTHS.reduce((acc, m) => {
@@ -114,18 +88,21 @@ export function LifeBalancePage({ participantId: fixedParticipantId, participant
         }, {} as Record<string, boolean>)
     })
 
+    // View state (presentation only)
+    const [view, setView] = usePersistentState<View>('life-balance-view', 'month', ['month', 'year'])
+    const [focusMonth, setFocusMonth] = useState<string>(() => MONTHS[new Date().getMonth()])
+    const [editCats, setEditCats] = useState(false)
+
     // UI Feedback States
     const [isSaving, setIsSaving] = useState(false)
     const [isLoading, setIsLoading] = useState(false)
-    const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle')
     const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
 
     // Report states
-    const [activeTab, setActiveTab] = useState<'editor' | 'report'>('editor')
+    const [savedTab, setSavedTab] = usePersistentState<WheelTab>('life-balance-tab', 'editor', ['editor', 'report'])
+    const activeTab: WheelTab = isParticipantMode ? 'editor' : savedTab
     const [allEntries, setAllEntries] = useState<LifeBalanceEntry[]>([])
     const [isReportLoading, setIsReportLoading] = useState(false)
-    const [searchTerm, setSearchTerm] = useState('')
-    const [programFilter, setProgramFilter] = useState('all')
 
     // Fetch active participants (admin mode only)
     useEffect(() => {
@@ -175,7 +152,7 @@ export function LifeBalancePage({ participantId: fixedParticipantId, participant
 
             if (data && data.length > 0) {
                 const entry = data[0] as LifeBalanceEntry
-                
+
                 // Merge default categories with whatever custom exists in entry
                 const entryCats = new Set<string>()
                 Object.keys(entry.ideal_values || {}).forEach(k => entryCats.add(k))
@@ -212,16 +189,31 @@ export function LifeBalancePage({ participantId: fixedParticipantId, participant
         fetchEntry()
     }, [fetchEntry])
 
+    const pid = fixedParticipantId || selectedParticipantId
+
+    // Admin: when a participant opens, jump to the latest month they rated
+    // (participants keep the current month, which they are about to fill).
+    useEffect(() => {
+        if (isLoading || isParticipantMode) return
+        const curM = MONTHS[new Date().getMonth()]
+        const hasCur = Object.keys(monthlyValues[curM] || {}).length > 0
+        if (hasCur) return
+        const last = [...MONTHS].reverse().find(m => Object.keys(monthlyValues[m] || {}).length > 0)
+        if (!last) return
+        setFocusMonth(last)
+        setSelectedMonths({ [last]: true })
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isLoading])
+
     // Save
     const handleSave = async () => {
         const pid = fixedParticipantId || selectedParticipantId
         if (!pid) {
-            alert('Пожалуйста, выберите участника')
+            toast.error('Сначала выберите участника')
             return
         }
 
         setIsSaving(true)
-        setSaveStatus('idle')
 
         try {
             const res = await fetch('/api/life-balance', {
@@ -240,21 +232,18 @@ export function LifeBalancePage({ participantId: fixedParticipantId, participant
                 throw new Error(result?.error || 'Не удалось сохранить')
             }
 
-            setSaveStatus('success')
-            setTimeout(() => setSaveStatus('idle'), 3000)
+            toast.success('Колесо жизни сохранено', { description: `${year} год` })
             setHasUnsavedChanges(false)
             fetchReportData()
         } catch (e: any) {
-            setSaveStatus('error')
-            let userMsg = e.message || 'Неизвестная ошибка'
-            if (userMsg.includes('violates foreign key constraint')) {
-                userMsg = 'Ваш аккаунт персонала не связан с записью участника в базе данных. Пожалуйста, обратитесь к администратору или примените SQL-миграцию.'
-            }
-            alert('Ошибка при сохранении: ' + userMsg)
+            toast.error('Не удалось сохранить', { description: saveErrorMessage(e) })
         } finally {
             setIsSaving(false)
         }
     }
+
+    useSaveShortcut(handleSave, activeTab === 'editor' && !!pid && !isSaving)
+    useBeforeUnload(hasUnsavedChanges)
 
     // Grid modifications
     const handleIdealChange = (cat: string, val: string) => {
@@ -266,7 +255,7 @@ export function LifeBalancePage({ participantId: fixedParticipantId, participant
     const handleScoreChange = (month: string, cat: string, val: string) => {
         const parsed = parseInt(val, 10)
         const finalVal = isNaN(parsed) ? 0 : Math.min(10, Math.max(0, parsed))
-        
+
         setMonthlyValues(prev => {
             const monthScores = { ...(prev[month] || {}) }
             if (val === '') {
@@ -322,11 +311,18 @@ export function LifeBalancePage({ participantId: fixedParticipantId, participant
 
         setCategories(prev => [...prev, name])
         setHasUnsavedChanges(true)
+        setEditCats(true)
     }
 
-    const removeCategory = (index: number) => {
+    const removeCategory = async (index: number) => {
         const name = categories[index]
-        if (!confirm(`Удалить категорию "${name}"? Все сохраненные оценки по ней будут стерты.`)) return
+        const ok = await confirm({
+            title: `Удалить «${name}»?`,
+            description: 'Все оценки по этой категории за год будут стёрты после сохранения.',
+            confirmText: 'Удалить',
+            destructive: true,
+        })
+        if (!ok) return
 
         setCategories(prev => prev.filter((_, i) => i !== index))
 
@@ -388,523 +384,450 @@ export function LifeBalancePage({ participantId: fixedParticipantId, participant
         }, {} as Record<string, boolean>))
     }
 
-    // Report processing
-    const uniquePrograms = Array.from(new Set(participants.map(p => p.program?.name).filter(Boolean)))
+    /** Run `fn` only if there is nothing to lose, or the user agrees to drop it. */
+    const guard = async (fn: () => void) => {
+        if (hasUnsavedChanges) {
+            const ok = await confirm({
+                title: 'Уйти без сохранения?',
+                description: 'Несохранённые оценки пропадут.',
+                confirmText: 'Не сохранять',
+                destructive: true,
+            })
+            if (!ok) return
+        }
+        fn()
+    }
 
-    const reportRows = useMemo(() => {
-        return participants
-            .filter(p => {
-                const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase())
-                const matchesProgram = programFilter === 'all' || p.program?.name === programFilter
-                return matchesSearch && matchesProgram
+    // Report processing
+    const curMonthName = MONTHS[new Date().getMonth()]
+    const reportRows: FillRow[] = useMemo(() => {
+        return participants.map(p => {
+            const userEntries = allEntries.filter(e => e.participant_id === p.id && e.participant_id !== TEMPLATE_ID)
+            const filledMonths = MONTHS.filter(m => {
+                const entry = userEntries[0] // Since grouped by year
+                return entry && entry.monthly_values?.[m] && Object.keys(entry.monthly_values[m]).length > 0
             })
-            .map(p => {
-                const userEntries = allEntries.filter(e => e.participant_id === p.id && e.participant_id !== TEMPLATE_ID)
-                const filledMonths = MONTHS.filter(m => {
-                    const entry = userEntries[0] // Since grouped by year
-                    return entry && entry.monthly_values?.[m] && Object.keys(entry.monthly_values[m]).length > 0
-                })
-                return {
-                    participant: p,
-                    filledMonths,
-                    count: filledMonths.length
-                }
-            })
-    }, [participants, allEntries, searchTerm, programFilter])
+            return {
+                participant: p,
+                count: filledMonths.length,
+                periods: filledMonths,
+                current: year === new Date().getFullYear() && filledMonths.includes(curMonthName),
+            }
+        })
+    }, [participants, allEntries, year, curMonthName])
+
+    const openFromReport = (row: FillRow) =>
+        guard(() => {
+            setSelectedParticipantId(row.participant.id)
+            setSavedTab('editor')
+            if (row.periods.length > 0) {
+                const lastM = row.periods[row.periods.length - 1]
+                setSelectedMonths({ [lastM]: true })
+                setFocusMonth(lastM)
+            }
+        })
+
+    // ── View helpers ──
+    const idealOf = (cat: string) => (idealValues[cat] !== undefined ? idealValues[cat] : 10)
+    const focusIdx = MONTHS.indexOf(focusMonth)
+    const ratedInFocus = categories.filter(c => monthlyValues[focusMonth]?.[c] !== undefined).length
+    const curMonthIdx = new Date().getMonth()
+    const isCurrentYear = year === new Date().getFullYear()
+
+    const radarSeries = [
+        { key: 'ideal', name: 'Мой идеал', color: 'var(--muted-foreground)', dashed: true },
+        ...MONTHS.filter(m => selectedMonths[m]).map(m => ({ key: m, name: m, color: MONTH_COLORS[MONTHS.indexOf(m)] })),
+    ]
+
+    const editorSkeleton = (
+        <div className="divide-y">
+            {Array.from({ length: 8 }).map((_, i) => (
+                <div key={i} className="flex items-center gap-3 px-4 py-3">
+                    <Skeleton className="h-4 flex-1" />
+                    <Skeleton className="h-9 w-12" />
+                    <Skeleton className="h-9 w-14" />
+                </div>
+            ))}
+        </div>
+    )
+
+    const categoryEditButton = (
+        <Button variant={editCats ? 'soft' : 'ghost'} size="sm" onClick={() => setEditCats(v => !v)}>
+            {editCats ? 'Готово' : <><Settings2 /> Категории</>}
+        </Button>
+    )
 
     return (
-        <div className="p-4 sm:p-5 space-y-4 min-h-full bg-background/50">
-            {/* Header Title */}
-            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3 border-b border-border pb-3">
-                <div>
-                    <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground flex items-center gap-2.5">
-                        <span className="text-3xl sm:text-4xl animate-pulse">🎡</span>
-                        Колесо жизни
-                        {isParticipantMode && participantName && (
-                            <Badge variant="outline" className="ml-2 text-xs font-bold py-1 px-2.5 border-indigo-500/30 text-indigo-600 dark:text-indigo-400 bg-indigo-500/5">
-                                {participantName}
-                            </Badge>
-                        )}
-                    </h1>
-                    <p className="text-xs sm:text-sm text-muted-foreground mt-1 font-medium">Сравнительный анализ и баланс ключевых сфер вашей жизнедеятельности по месяцам</p>
-                </div>
+        <PageContainer>
+            <PageHeader
+                title="Колесо жизни"
+                description={
+                    isParticipantMode
+                        ? `${participantName ? participantName + ' · ' : ''}Оцените каждую сферу жизни от 0 до 10`
+                        : 'Оценки участников по сферам жизни, месяц за месяцем'
+                }
+            />
 
-                <div className="flex items-center gap-2.5 flex-wrap w-full md:w-auto justify-end">
-                    {/* Period Pickers */}
-                    <div className="flex items-center gap-2 bg-card px-3 py-1.5 rounded-lg border border-border shadow-sm">
-                        <select
-                            value={year}
-                            onChange={e => { setYear(Number(e.target.value)); setHasUnsavedChanges(true) }}
-                            className="bg-transparent border-none text-xs font-bold text-foreground focus:outline-none cursor-pointer p-0.5"
-                        >
-                            {[2025, 2026, 2027, 2028].map(y => (
-                                <option key={y} value={y} className="bg-card text-foreground">{y} год</option>
-                            ))}
-                        </select>
-                    </div>
-
-                    {activeTab === 'editor' && saveStatus === 'success' && (
-                        <span className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400 bg-green-500/10 border border-green-500/20 px-3 py-1.5 rounded-lg animate-in fade-in zoom-in duration-300 font-semibold">
-                            <CheckCircle2 className="w-4 h-4" /> Изменения сохранены!
-                        </span>
-                    )}
-                    {activeTab === 'editor' && saveStatus === 'error' && (
-                        <span className="flex items-center gap-1 text-xs text-red-600 dark:text-red-400 bg-red-500/10 border border-red-500/20 px-3 py-1.5 rounded-lg animate-in fade-in zoom-in duration-300 font-semibold">
-                            <AlertCircle className="w-4 h-4" /> Ошибка сохранения
-                        </span>
-                    )}
-
-                    {activeTab === 'editor' && (
-                        <Button
-                            onClick={handleSave}
-                            disabled={isSaving || !selectedParticipantId}
-                            size="default"
-                            className="gap-2 font-bold bg-indigo-600 hover:bg-indigo-500 text-xs shadow-md px-5 py-2 transition-all active:scale-95 text-white"
-                        >
-                            {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                            {isSaving ? 'Сохранение...' : 'Сохранить изменения'}
-                        </Button>
-                    )}
-                </div>
-            </div>
-
-            {/* Tab Links (Admin Only) */}
             {!isParticipantMode && (
-                <div className="flex border-b border-border/80 gap-1">
-                    <button
-                        onClick={() => setActiveTab('editor')}
-                        className={`px-5 py-2.5 border-b-2 text-xs font-bold transition-all relative ${activeTab === 'editor'
-                            ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400'
-                            : 'border-transparent text-muted-foreground hover:text-foreground'
-                        }`}
-                    >
-                        Конструктор оценок
-                        {hasUnsavedChanges && (
-                            <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
-                        )}
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('report')}
-                        className={`px-5 py-2.5 border-b-2 text-xs font-bold transition-all ${activeTab === 'report'
-                            ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400'
-                            : 'border-transparent text-muted-foreground hover:text-foreground'
-                        }`}
-                    >
-                        Отчет по заполнению
-                    </button>
-                </div>
+                <WheelTabs value={activeTab} onChange={t => setSavedTab(t)} dirty={hasUnsavedChanges} />
             )}
 
-            {activeTab === 'editor' ? (
-                <div className="space-y-5">
-                    {/* User Selection & Highlighting (Admin/User Mode) */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-12 gap-3 items-center">
-                        {/* Selector (Admin Only) */}
-                        {!isParticipantMode ? (
-                            <div className="sm:col-span-2 md:col-span-6 bg-card border border-border p-3.5 rounded-xl shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                                <div>
-                                    <h3 className="text-xs font-extrabold text-foreground uppercase tracking-wider">Выбор участника</h3>
-                                    <p className="text-[10px] text-muted-foreground mt-0.5">Выберите анкету для заполнения</p>
-                                </div>
-                                <select
-                                    value={selectedParticipantId}
-                                    onChange={e => { setSelectedParticipantId(e.target.value); setHasUnsavedChanges(false) }}
-                                    className="w-full sm:w-[280px] px-3 py-2 bg-background border border-border rounded-lg text-foreground text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/30 font-semibold shadow-sm touch-manipulation"
-                                >
-                                    <option value="">— Выберите участника —</option>
-                                    <option value={TEMPLATE_ID}>⚙️ Базовый шаблон (для всех)</option>
-                                    {participants.map(p => (
-                                        <option key={p.id} value={p.id}>
-                                            {p.name} {p.program?.name ? `(${p.program.name})` : ''}
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
-                        ) : null}
-
-                        {/* Search Checkpoints Filter */}
-                        {selectedParticipantId && (
-                            <div className="sm:col-span-2 md:col-span-6 bg-card border border-border p-3.5 rounded-xl shadow-sm flex items-center gap-3">
-                                <div className="relative flex-1">
-                                    <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground/60" />
-                                    <Input
-                                        placeholder="Поиск по сферам (например: здоровье, финансы, чтение)..."
-                                        value={catFilter}
-                                        onChange={e => setCatFilter(e.target.value)}
-                                        className="pl-9 h-9 text-xs border-border bg-background focus-visible:ring-indigo-500/30 rounded-lg"
-                                    />
-                                    {catFilter && (
-                                        <button 
-                                            onClick={() => setCatFilter('')}
-                                            className="absolute right-3 top-2.5 text-muted-foreground/60 hover:text-foreground text-xs"
-                                        >
-                                            <X className="w-4 h-4" />
-                                        </button>
-                                    )}
-                                </div>
-                            </div>
-                        )}
-                    </div>
-
-                    {!selectedParticipantId && !isParticipantMode ? (
-                        <div className="flex flex-col items-center justify-center py-24 gap-4 text-muted-foreground bg-card border border-dashed border-border rounded-2xl shadow-sm">
-                            <div className="p-4 bg-indigo-500/5 rounded-full border border-indigo-500/10 text-indigo-500">
-                                <BarChart3 className="w-12 h-12" />
-                            </div>
-                            <h3 className="text-lg font-bold text-foreground">Выберите участника для заполнения</h3>
-                            <p className="text-xs text-center max-w-sm text-muted-foreground mt-0.5 leading-relaxed">
-                                Выберите студента или базовый шаблон в выпадающем списке выше, чтобы открыть интерактивную матрицу оценок его колеса жизни.
-                            </p>
-                        </div>
-                    ) : (
-                        <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
-                            {/* Matrix Grid Editor */}
-                            <Card className="xl:col-span-8 p-4 sm:p-5 border-border shadow-md overflow-x-auto bg-card/60 backdrop-blur-md rounded-2xl">
-                                <div className="flex items-center justify-between mb-5 pb-3.5 border-b border-border/40">
-                                    <div>
-                                        <h2 className="text-sm font-extrabold text-foreground uppercase tracking-wider">Таблица оценок баланса</h2>
-                                        <p className="text-[10px] text-muted-foreground mt-0.5">
-                                            Укажите идеальный порог и выставьте оценки по 10-балльной шкале
-                                        </p>
-                                    </div>
-                                    <Button
-                                        size="sm"
-                                        variant="outline"
-                                        onClick={addCustomCategory}
-                                        className="gap-1 text-[10.5px] font-bold border-indigo-600/30 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500/5 transition-all"
-                                    >
-                                        <Plus className="w-3.5 h-3.5" /> Добавить категорию
-                                    </Button>
-                                </div>
-
-                                <div className="min-w-[800px] overflow-x-auto relative">
-                                    <table className="w-full text-left border-collapse">
-                                        <thead>
-                                            <tr className="border-b border-border/80 text-[10px] font-extrabold text-muted-foreground uppercase tracking-wider">
-                                                <th className="py-3 px-2.5 w-[160px] sm:w-[200px] sticky left-0 bg-card z-20 border-r border-border/60 shadow-sm">Категория</th>
-                                                <th className="py-3 px-2 text-center w-[85px] bg-slate-500/5 dark:bg-slate-500/10 rounded-t-lg">Мой идеал</th>
-                                                {MONTHS.map(m => (
-                                                    <th key={m} className="py-3 px-1 text-center w-[52px]">
-                                                        {m.substring(0, 3)}
-                                                    </th>
-                                                ))}
-                                                <th className="py-3 px-2 w-[40px]"></th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-border/40 text-xs">
-                                            {categories.map((cat, idx) => {
-                                                const isDefault = DEFAULT_CATEGORY_NAMES.includes(cat)
-                                                const idealVal = idealValues[cat] !== undefined ? idealValues[cat] : 10
-                                                const catLower = cat.toLowerCase()
-                                                const catColor = CATEGORY_COLORS[catLower] || PALETTE[idx % PALETTE.length]
-
-                                                const isHighlighted = catFilter
-                                                    ? cat.toLowerCase().includes(catFilter.toLowerCase())
-                                                    : false
-                                                const isDimmed = catFilter && !isHighlighted
-
-                                                return (
-                                                    <tr 
-                                                        key={idx} 
-                                                        className={`hover:bg-muted/20 transition-all border-l-2 ${
-                                                            isDimmed ? 'opacity-30 scale-98' : 'opacity-100'
-                                                        }`}
-                                                        style={{ borderLeftColor: catColor }}
-                                                    >
-                                                        {/* Sticky Category Name Column for Mobile */}
-                                                        <td className="py-2 px-2.5 sticky left-0 bg-card z-10 border-r border-border/60 shadow-sm">
-                                                            {isDefault ? (
-                                                                <span className="font-extrabold text-foreground tracking-tight text-xs">{cat}</span>
-                                                            ) : (
-                                                                <Input
-                                                                    value={cat}
-                                                                    onChange={e => handleCustomCategoryChange(idx, e.target.value)}
-                                                                    className="h-8 py-0.5 text-xs font-bold bg-indigo-500/5 border-indigo-500/20 focus:border-indigo-500 focus:ring-0 w-full rounded-md"
-                                                                />
-                                                            )}
-                                                        </td>
-
-                                                        {/* Ideal Target */}
-                                                        <td className="py-2 px-2 bg-slate-500/5 dark:bg-slate-500/10 text-center">
-                                                            <Input
-                                                                type="number"
-                                                                min={0}
-                                                                max={10}
-                                                                value={idealVal}
-                                                                onChange={e => handleIdealChange(cat, e.target.value)}
-                                                                className="h-8 py-0.5 px-1 text-center font-extrabold text-indigo-600 dark:text-indigo-400 bg-background focus:ring-indigo-500/35 rounded-md"
-                                                            />
-                                                        </td>
-
-                                                        {/* Monthly inputs */}
-                                                        {MONTHS.map(m => {
-                                                            const val = monthlyValues[m]?.[cat]
-                                                            return (
-                                                                <td key={m} className="py-2 px-1">
-                                                                    <Input
-                                                                        type="number"
-                                                                        min={0}
-                                                                        max={10}
-                                                                        value={val !== undefined ? val : ''}
-                                                                        onChange={e => handleScoreChange(m, cat, e.target.value)}
-                                                                        placeholder="-"
-                                                                        className="h-8 py-0.5 px-1 text-center font-extrabold placeholder:text-muted-foreground/30 focus-visible:ring-indigo-500/30 rounded-md border-border/85"
-                                                                        style={val !== undefined ? { color: catColor, backgroundColor: `${catColor}07`, borderColor: `${catColor}35` } : {}}
-                                                                    />
-                                                                </td>
-                                                            )
-                                                        })}
-
-                                                        {/* Delete custom category */}
-                                                        <td className="py-2 px-2 text-right">
-                                                            {!isDefault && (
-                                                                <button
-                                                                    onClick={() => removeCategory(idx)}
-                                                                    className="p-1 text-muted-foreground hover:text-red-500 hover:bg-red-500/5 rounded transition-all"
-                                                                    title="Удалить показатель"
-                                                                >
-                                                                    <Trash2 className="w-3.5 h-3.5" />
-                                                                </button>
-                                                            )}
-                                                        </td>
-                                                    </tr>
-                                                )
-                                            })}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </Card>
-
-                            {/* Radar Visualization Column */}
-                            <div className="xl:col-span-4 space-y-6">
-                                {/* Months Selector & Filters */}
-                                <Card className="p-4 sm:p-5 border-border shadow-md bg-card/85 backdrop-blur-md rounded-2xl">
-                                    <div className="flex items-center justify-between border-b border-border/50 pb-3 mb-3">
-                                        <h3 className="font-extrabold text-xs text-foreground uppercase tracking-wider">Фильтр месяцев</h3>
-                                        <div className="flex gap-1.5">
-                                            <Button variant="ghost" size="sm" onClick={selectAllMonths} className="text-[10px] font-bold h-6 px-1.5 rounded">
-                                                Все
-                                            </Button>
-                                            <Button variant="ghost" size="sm" onClick={clearAllMonths} className="text-[10px] font-bold h-6 px-1.5 rounded text-muted-foreground">
-                                                Сброс
-                                            </Button>
-                                        </div>
-                                    </div>
-
-                                    <div className="grid grid-cols-3 sm:grid-cols-4 xl:grid-cols-3 gap-2">
-                                        {MONTHS.map(m => {
-                                            const isChecked = !!selectedMonths[m]
-                                            const hasData = Object.values(monthlyValues[m] || {}).some(v => v > 0)
-                                            return (
-                                                <button
-                                                    key={m}
-                                                    onClick={() => toggleMonthSelected(m)}
-                                                    className={`px-2.5 py-1.5 rounded-lg border text-[11px] font-bold text-center transition-all flex items-center justify-between gap-1 ${
-                                                        isChecked
-                                                            ? 'border-indigo-500 text-indigo-600 bg-indigo-500/10'
-                                                            : 'border-border text-muted-foreground hover:bg-muted/40'
-                                                    }`}
-                                                >
-                                                    <span className="truncate">{m}</span>
-                                                    {hasData && (
-                                                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" title="Есть заполнение" />
-                                                    )}
-                                                </button>
-                                            )
-                                        })}
-                                    </div>
-                                </Card>
-
-                                {/* Radar chart */}
-                                <Card className="p-5 border-border shadow-md flex flex-col items-center bg-card/75 backdrop-blur-md rounded-2xl">
-                                    <h3 className="font-extrabold text-sm text-foreground mb-3 self-start flex items-center gap-1.5">
-                                        <Sparkles className="w-4 h-4 text-amber-500 animate-spin" style={{ animationDuration: '8s' }} />
-                                        Диаграмма баланса
-                                    </h3>
-
-                                    <div className="w-full h-[320px]">
-                                        <ResponsiveContainer width="100%" height="100%">
-                                            <RadarChart cx="50%" cy="50%" outerRadius="80%" data={chartData}>
-                                                <PolarGrid stroke="hsl(var(--muted-foreground) / 0.18)" />
-                                                <PolarAngleAxis
-                                                    dataKey="category"
-                                                    tick={{ fill: 'currentColor', fontSize: 9, fontWeight: 600 }}
-                                                    className="text-muted-foreground"
-                                                />
-                                                <PolarRadiusAxis angle={30} domain={[0, 10]} tick={{ fontSize: 8 }} />
-                                                
-                                                {/* Ideal Base Line */}
-                                                <Radar
-                                                    name="Мой идеал"
-                                                    dataKey="ideal"
-                                                    stroke="#94a3b8"
-                                                    strokeDasharray="4 4"
-                                                    fill="none"
-                                                    strokeWidth={1.5}
-                                                />
-
-                                                {/* Selected Months */}
-                                                {MONTHS.map(m => {
-                                                    if (!selectedMonths[m]) return null
-                                                    return (
-                                                        <Radar
-                                                            key={m}
-                                                            name={m}
-                                                            dataKey={m}
-                                                            stroke={MONTH_COLORS[m]}
-                                                            fill={`url(#gradient-${m})`}
-                                                            fillOpacity={0.2}
-                                                            strokeWidth={2}
-                                                        />
-                                                    )
-                                                })}
-
-                                                {/* Gradient definitions for glowing charts */}
-                                                <defs>
-                                                    {MONTHS.map(m => (
-                                                        <linearGradient id={`gradient-${m}`} key={m} x1="0" y1="0" x2="0" y2="1">
-                                                            <stop offset="0%" stopColor={MONTH_COLORS[m]} stopOpacity={0.45} />
-                                                            <stop offset="100%" stopColor={MONTH_COLORS[m]} stopOpacity={0.01} />
-                                                        </linearGradient>
-                                                    ))}
-                                                </defs>
-
-                                                <Tooltip
-                                                    contentStyle={{
-                                                        backgroundColor: 'hsl(var(--background))',
-                                                        borderColor: 'hsl(var(--border))',
-                                                        borderRadius: '12px',
-                                                        fontSize: '11px',
-                                                        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.08)'
-                                                    }}
-                                                />
-                                                <Legend wrapperStyle={{ fontSize: '9px', marginTop: '10px', fontWeight: 600 }} />
-                                            </RadarChart>
-                                        </ResponsiveContainer>
-                                    </div>
-                                </Card>
-                            </div>
-                        </div>
-                    )}
-                </div>
+            {activeTab === 'report' ? (
+                <FillReport
+                    rows={reportRows}
+                    loading={isReportLoading}
+                    outOf={12}
+                    unit={['месяц', 'месяца', 'месяцев']}
+                    currentLabel="в этом месяце"
+                    onOpen={openFromReport}
+                    toolbarExtra={<YearSelect value={year} onChange={y => guard(() => setYear(y))} />}
+                    maxBadges={12}
+                />
             ) : (
-                /* Report View (Admin Only) */
-                <Card className="p-5 border-border shadow-md space-y-6 bg-card rounded-2xl">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border/50 pb-4">
-                        <div>
-                            <h2 className="text-lg font-extrabold text-foreground">Отчет по заполнению</h2>
-                            <p className="text-[11px] text-muted-foreground mt-0.5">
-                                Участники и месяцы, в которых заполнялся чек-лист колеса жизни в {year} году
-                            </p>
-                        </div>
-                        <div className="flex flex-col sm:flex-row gap-2.5">
-                            <div className="relative">
-                                <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground/60" />
-                                <Input
-                                    placeholder="Поиск по имени..."
-                                    value={searchTerm}
-                                    onChange={e => setSearchTerm(e.target.value)}
-                                    className="pl-8.5 w-full sm:w-[200px] h-9 text-xs border-border bg-background focus-visible:ring-indigo-500/30 rounded-lg"
+                <>
+                    {/* Controls */}
+                    <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+                        {!isParticipantMode && (
+                            <ParticipantPicker
+                                participants={participants}
+                                value={selectedParticipantId}
+                                onChange={id => guard(() => setSelectedParticipantId(id))}
+                            />
+                        )}
+                        {pid && (
+                            <div className="flex items-center gap-2">
+                                <YearSelect value={year} onChange={y => guard(() => setYear(y))} />
+                                <Segmented
+                                    aria-label="Вид"
+                                    value={view}
+                                    onChange={setView}
+                                    options={[
+                                        { value: 'month', label: 'По месяцам' },
+                                        { value: 'year', label: 'Весь год' },
+                                    ]}
+                                    className="max-sm:flex-1 max-sm:[&>button]:h-8 max-sm:[&>button]:flex-1 max-sm:[&>button]:justify-center"
                                 />
                             </div>
-                            <select
-                                value={programFilter}
-                                onChange={e => setProgramFilter(e.target.value)}
-                                className="px-3 py-1 bg-background border border-border rounded-lg text-foreground text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/30 h-9 font-semibold shadow-sm"
-                            >
-                                <option value="all">Все программы</option>
-                                {uniquePrograms.map(p => (
-                                    <option key={p} value={p}>{p}</option>
-                                ))}
-                            </select>
-                        </div>
+                        )}
                     </div>
 
-                    {isReportLoading ? (
-                        <div className="flex flex-col items-center justify-center py-20 gap-2 text-muted-foreground">
-                            <Loader2 className="w-6 h-6 animate-spin text-indigo-600" />
-                            <p className="text-xs">Загрузка данных отчета...</p>
-                        </div>
+                    {!pid ? (
+                        <Panel>
+                            <EmptyState
+                                icon={Scale}
+                                title="Выберите участника"
+                                description="Найдите участника в списке выше, чтобы открыть его оценки за год."
+                                action={
+                                    <Button variant="outline" size="sm" onClick={() => setSavedTab('report')}>
+                                        Кто уже заполнил
+                                    </Button>
+                                }
+                            />
+                        </Panel>
                     ) : (
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-left border-collapse">
-                                <thead>
-                                    <tr className="border-b border-border text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
-                                        <th className="py-3 px-4">Участник</th>
-                                        <th className="py-3 px-4 text-center w-[180px]">Всего заполнено месяцев</th>
-                                        <th className="py-3 px-4">Месяцы заполнения</th>
-                                        <th className="py-3 px-4 text-right w-[100px]">Действие</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-border/60 text-xs">
-                                    {reportRows.map(({ participant, filledMonths, count }) => (
-                                        <tr key={participant.id} className="hover:bg-muted/30 transition-colors">
-                                            <td className="py-3.5 px-4">
-                                                <div className="font-bold text-foreground">{participant.name}</div>
-                                                {participant.program?.name && (
-                                                    <Badge variant="secondary" className="mt-0.5 text-[9px] px-1.5 py-0 border-none font-medium">
-                                                        {participant.program.name}
-                                                    </Badge>
-                                                )}
-                                            </td>
-                                            <td className="py-3.5 px-4 text-center">
-                                                <span className={`inline-flex items-center justify-center px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                                                    count > 0 ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400' : 'bg-muted text-muted-foreground'
-                                                }`}>
-                                                    {count} из 12
-                                                </span>
-                                            </td>
-                                            <td className="py-3.5 px-4">
-                                                {count > 0 ? (
-                                                    <div className="flex flex-wrap gap-1.5">
-                                                        {filledMonths.map(m => (
-                                                            <Badge
-                                                                key={m}
-                                                                variant="outline"
-                                                                className="text-[9px] px-1.5 py-0 font-bold bg-emerald-500/5 text-emerald-600 border-emerald-500/20"
-                                                            >
-                                                                {m}
-                                                            </Badge>
-                                                        ))}
-                                                    </div>
-                                                ) : (
-                                                    <span className="text-[10px] text-muted-foreground italic">Не заполнено</span>
-                                                )}
-                                            </td>
-                                            <td className="py-3.5 px-4 text-right">
-                                                <Button
-                                                    variant="ghost"
-                                                    size="sm"
-                                                    className="gap-1 hover:text-indigo-600 hover:bg-indigo-500/10 text-muted-foreground text-[10.5px] h-7 px-2 font-bold"
-                                                    onClick={() => {
-                                                        setSelectedParticipantId(participant.id)
-                                                        setActiveTab('editor')
-                                                        if (filledMonths.length > 0) {
-                                                            const lastM = filledMonths[filledMonths.length - 1]
-                                                            setSelectedMonths({ [lastM]: true })
-                                                        }
-                                                    }}
-                                                >
-                                                    <Eye className="w-3.5 h-3.5" /> Посмотреть
-                                                </Button>
-                                            </td>
-                                        </tr>
-                                    ))}
+                        <div
+                            className={cn(
+                                'grid grid-cols-1 items-start gap-4',
+                                view === 'month' ? 'lg:grid-cols-2' : 'xl:grid-cols-[minmax(0,1fr)_380px]'
+                            )}
+                        >
+                            {view === 'month' ? (
+                                /* ── One month at a time: phone-friendly list ── */
+                                <Panel className="overflow-visible">
+                                    <PanelHeading
+                                        title="Оценки за месяц"
+                                        description="0 — совсем плохо, 10 — идеально"
+                                        actions={categoryEditButton}
+                                        className="rounded-t-xl"
+                                    />
+                                    <div className="flex items-center gap-3 border-b px-4 py-2.5">
+                                        <PeriodStepper
+                                            className="flex-1 sm:flex-none"
+                                            label={`${focusMonth} ${year}`}
+                                            onPrev={() => setFocusMonth(MONTHS[focusIdx - 1])}
+                                            onNext={() => setFocusMonth(MONTHS[focusIdx + 1])}
+                                            prevDisabled={focusIdx <= 0}
+                                            nextDisabled={focusIdx >= 11}
+                                            onReset={isCurrentYear && focusIdx !== curMonthIdx ? () => setFocusMonth(MONTHS[curMonthIdx]) : undefined}
+                                        />
+                                        <span className="num ml-auto text-sm text-muted-foreground max-sm:hidden">
+                                            Оценено {ratedInFocus} из {categories.length}
+                                        </span>
+                                    </div>
 
-                                    {reportRows.length === 0 && (
-                                        <tr>
-                                            <td colSpan={4} className="py-10 text-center text-muted-foreground italic text-xs">
-                                                Участники не найдены
-                                            </td>
-                                        </tr>
+                                    {/* Column captions stay visible while scrolling */}
+                                    <div className="sticky top-0 z-10 flex items-center gap-3 border-b bg-card px-4 py-1.5 text-xs text-muted-foreground">
+                                        <span className="flex-1">Сфера</span>
+                                        <span className="w-12 text-center">Идеал</span>
+                                        <span className="w-16 text-center">{focusMonth.slice(0, 3)}</span>
+                                        {editCats && <span className="w-10" />}
+                                    </div>
+
+                                    {isLoading ? editorSkeleton : (
+                                        <div className="divide-y">
+                                            {categories.map((cat, idx) => {
+                                                const isDefault = DEFAULT_CATEGORY_NAMES.includes(cat)
+                                                const ideal = idealOf(cat)
+                                                const val = monthlyValues[focusMonth]?.[cat]
+                                                return (
+                                                    <div key={idx} className="flex items-center gap-3 px-4 py-2">
+                                                        <div className="min-w-0 flex-1">
+                                                            {editCats && !isDefault ? (
+                                                                <Input
+                                                                    aria-label="Название категории"
+                                                                    value={cat}
+                                                                    onChange={e => handleCustomCategoryChange(idx, e.target.value)}
+                                                                    className="h-9"
+                                                                />
+                                                            ) : (
+                                                                <label htmlFor={`s-${idx}`} className="block truncate text-sm first-letter:uppercase">
+                                                                    {cat}
+                                                                </label>
+                                                            )}
+                                                            <Meter
+                                                                value={val ?? 0}
+                                                                max={10}
+                                                                marker={ideal}
+                                                                tone={val !== undefined && val >= ideal ? 'success' : 'primary'}
+                                                                className="mt-2"
+                                                            />
+                                                        </div>
+                                                        <ScoreInput
+                                                            value={ideal}
+                                                            onChange={v => handleIdealChange(cat, v)}
+                                                            ariaLabel={`Идеал: ${cat}`}
+                                                            className="w-12 text-muted-foreground"
+                                                        />
+                                                        <ScoreInput
+                                                            id={`s-${idx}`}
+                                                            value={val !== undefined ? val : ''}
+                                                            onChange={v => handleScoreChange(focusMonth, cat, v)}
+                                                            ariaLabel={`${focusMonth}: ${cat}`}
+                                                            placeholder="–"
+                                                            className="w-16 font-medium"
+                                                        />
+                                                        {editCats && (
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="icon"
+                                                                disabled={isDefault}
+                                                                aria-label={`Удалить ${cat}`}
+                                                                onClick={() => removeCategory(idx)}
+                                                                className="size-10 shrink-0 text-muted-foreground hover:bg-destructive-soft hover:text-destructive disabled:opacity-0"
+                                                            >
+                                                                <Trash2 />
+                                                            </Button>
+                                                        )}
+                                                    </div>
+                                                )
+                                            })}
+                                            {editCats && (
+                                                <div className="px-4 py-3">
+                                                    <Button variant="outline" onClick={addCustomCategory} className="w-full max-sm:h-11">
+                                                        <Plus /> Добавить категорию
+                                                    </Button>
+                                                </div>
+                                            )}
+                                        </div>
                                     )}
-                                </tbody>
-                            </table>
+                                </Panel>
+                            ) : (
+                                /* ── Whole year: matrix with sticky header and first column ── */
+                                <Panel>
+                                    <PanelHeading
+                                        title="Оценки за год"
+                                        description="Идеал и оценки по месяцам, от 0 до 10"
+                                        actions={
+                                            <Button variant="ghost" size="sm" onClick={addCustomCategory}>
+                                                <Plus /> Категория
+                                            </Button>
+                                        }
+                                    />
+                                    {isLoading ? editorSkeleton : (
+                                        <div className="max-h-[70vh] overflow-auto">
+                                            <table className="w-full border-separate border-spacing-0 text-sm">
+                                                <thead>
+                                                    <tr className="text-xs text-muted-foreground">
+                                                        <th className="sticky top-0 left-0 z-30 min-w-28 border-r sm:min-w-40 border-b bg-card px-3 py-2 text-left font-medium">Сфера</th>
+                                                        <th className="sticky top-0 z-20 border-b bg-muted px-1.5 py-2 text-center font-medium">Идеал</th>
+                                                        {MONTHS.map((m, i) => (
+                                                            <th
+                                                                key={m}
+                                                                className={cn(
+                                                                    'sticky top-0 z-20 border-b bg-card px-1 py-2 text-center font-medium',
+                                                                    isCurrentYear && i === curMonthIdx && 'text-primary'
+                                                                )}
+                                                            >
+                                                                {MONTHS_SHORT_RU[i]}
+                                                            </th>
+                                                        ))}
+                                                        <th className="sticky top-0 z-20 w-10 border-b bg-card" />
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {categories.map((cat, idx) => {
+                                                        const isDefault = DEFAULT_CATEGORY_NAMES.includes(cat)
+                                                        return (
+                                                            <tr key={idx} className="group">
+                                                                <td className="sticky left-0 z-10 border-r border-b bg-card px-3 py-1.5 group-hover:bg-muted">
+                                                                    {isDefault ? (
+                                                                        <span className="block max-w-48 truncate first-letter:uppercase">{cat}</span>
+                                                                    ) : (
+                                                                        <Input
+                                                                            aria-label="Название категории"
+                                                                            value={cat}
+                                                                            onChange={e => handleCustomCategoryChange(idx, e.target.value)}
+                                                                            className="h-8"
+                                                                        />
+                                                                    )}
+                                                                </td>
+                                                                <td className="border-b bg-muted/60 px-1.5 py-1.5">
+                                                                    <ScoreInput
+                                                                        value={idealOf(cat)}
+                                                                        onChange={v => handleIdealChange(cat, v)}
+                                                                        ariaLabel={`Идеал: ${cat}`}
+                                                                        className="w-11 sm:h-8"
+                                                                    />
+                                                                </td>
+                                                                {MONTHS.map(m => {
+                                                                    const val = monthlyValues[m]?.[cat]
+                                                                    return (
+                                                                        <td key={m} className="border-b px-0.5 py-1.5">
+                                                                            <ScoreInput
+                                                                                value={val !== undefined ? val : ''}
+                                                                                onChange={v => handleScoreChange(m, cat, v)}
+                                                                                ariaLabel={`${m}: ${cat}`}
+                                                                                placeholder="–"
+                                                                                className="w-11 sm:h-8"
+                                                                                heat={val}
+                                                                            />
+                                                                        </td>
+                                                                    )
+                                                                })}
+                                                                <td className="border-b px-1 py-1.5 text-right">
+                                                                    {!isDefault && (
+                                                                        <Button
+                                                                            variant="ghost"
+                                                                            size="icon-sm"
+                                                                            aria-label={`Удалить ${cat}`}
+                                                                            onClick={() => removeCategory(idx)}
+                                                                            className="text-muted-foreground hover:bg-destructive-soft hover:text-destructive"
+                                                                        >
+                                                                            <Trash2 />
+                                                                        </Button>
+                                                                    )}
+                                                                </td>
+                                                            </tr>
+                                                        )
+                                                    })}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    )}
+                                </Panel>
+                            )}
+
+                            {/* Radar */}
+                            <Panel>
+                                <PanelHeading
+                                    title="Диаграмма баланса"
+                                    description="Пунктир — ваш идеал"
+                                    actions={
+                                        <>
+                                            <Button variant="ghost" size="xs" onClick={selectAllMonths}>Все</Button>
+                                            <Button variant="ghost" size="xs" onClick={clearAllMonths} className="text-muted-foreground">Сбросить</Button>
+                                        </>
+                                    }
+                                />
+                                <div className="grid grid-cols-4 gap-1.5 border-b px-4 py-3 sm:grid-cols-6">
+                                    {MONTHS.map((m, i) => {
+                                        const on = !!selectedMonths[m]
+                                        const hasData = Object.values(monthlyValues[m] || {}).some(v => v > 0)
+                                        return (
+                                            <button
+                                                key={m}
+                                                type="button"
+                                                aria-pressed={on}
+                                                onClick={() => toggleMonthSelected(m)}
+                                                title={hasData ? 'Есть оценки' : 'Нет оценок'}
+                                                className={cn(
+                                                    'flex h-9 items-center justify-center gap-1.5 rounded-md border text-xs transition-colors sm:h-8',
+                                                    on
+                                                        ? 'border-transparent bg-primary-soft font-medium text-primary-soft-foreground'
+                                                        : hasData
+                                                            ? 'bg-card text-foreground hover:bg-accent'
+                                                            : 'bg-card text-muted-foreground hover:bg-accent'
+                                                )}
+                                            >
+                                                <span
+                                                    className={cn('size-2 rounded-full', !on && !hasData && 'opacity-30')}
+                                                    style={{ background: on ? MONTH_COLORS[i] : hasData ? 'var(--success)' : 'var(--muted-foreground)' }}
+                                                />
+                                                {MONTHS_SHORT_RU[i]}
+                                            </button>
+                                        )
+                                    })}
+                                </div>
+                                <div className="px-2 pt-2 pb-4 sm:px-4">
+                                    <WheelRadar data={chartData} series={radarSeries} max={10} height={340} />
+                                </div>
+                            </Panel>
                         </div>
                     )}
-                </Card>
+
+                    {pid && (
+                        <SaveBar dirty={hasUnsavedChanges} saving={isSaving} disabled={!selectedParticipantId} onSave={handleSave}>
+                            <div className="min-w-0">
+                                <p className="truncate font-medium">
+                                    {view === 'month' ? `${focusMonth}: оценено ${ratedInFocus} из ${categories.length}` : `${year} год`}
+                                </p>
+                                <div className="text-xs">
+                                    <SaveStatus dirty={hasUnsavedChanges} />
+                                </div>
+                            </div>
+                        </SaveBar>
+                    )}
+                </>
             )}
-        </div>
+        </PageContainer>
+    )
+}
+
+/** 0–10 score field: numeric keyboard on phones, selects on focus. */
+function ScoreInput({
+    id,
+    value,
+    onChange,
+    ariaLabel,
+    placeholder,
+    className,
+    heat,
+}: {
+    id?: string
+    value: number | string
+    onChange: (v: string) => void
+    ariaLabel: string
+    placeholder?: string
+    className?: string
+    /** Tints the cell by score (year matrix). */
+    heat?: number
+}) {
+    return (
+        <Input
+            id={id}
+            type="number"
+            inputMode="numeric"
+            enterKeyHint="next"
+            min={0}
+            max={10}
+            value={value}
+            placeholder={placeholder}
+            aria-label={ariaLabel}
+            onChange={e => onChange(e.target.value)}
+            onFocus={e => e.currentTarget.select()}
+            className={cn('num h-10 shrink-0 px-1 text-center [appearance:textfield] sm:h-9 [&::-webkit-inner-spin-button]:appearance-none', className)}
+            style={heat !== undefined ? { background: `color-mix(in oklch, var(--primary) ${Math.round(heat * 3.5)}%, var(--card))` } : undefined}
+        />
     )
 }
 

@@ -1,320 +1,558 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { DollarSign, Download, Filter, CheckCircle, AlertCircle, Plus } from 'lucide-react'
+import * as React from 'react'
+import { toast } from 'sonner'
+import { Ban, Check, FilePlus2, MoreHorizontal, RotateCcw, Trash2, Wallet } from 'lucide-react'
+import { cn } from '@/lib/utils'
+import { formatDate, formatMoney, formatNumber, plural, todayISO } from '@/lib/format'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from '@/components/ui/select'
-import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
-import { toast } from 'sonner' // Assuming sonner or generic alert
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { Sheet, SheetBody, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { PageContainer, PageHeader, Panel } from '@/components/erp/page-header'
+import { StatStrip } from '@/components/erp/stat-strip'
+import { EmptyState } from '@/components/erp/empty-state'
+import { TotalsBar, TableSkeleton } from '@/components/erp/table-parts'
+import { useConfirm } from '@/components/erp/confirm'
+import { Avatar, DetailRow, MonthSwitcher, currentYearMonth, fullName, monthLabel, type YearMonth } from '@/components/hr/shared'
 
 interface PayrollRecord {
-    id: string
-    employee_id: string
-    month_number: number
-    year: number
-    base_salary: number
-    bonus_amount: number
-    deduction_amount: number
-    total_amount: number
-    status: 'pending' | 'paid' | 'cancelled'
-    payment_date: string | null
-    employees?: {
-        first_name: string
-        last_name: string
-        position: string
-    }
+  id: string
+  employee_id: string
+  month_number: number
+  year: number
+  base_salary: number
+  bonus_amount: number
+  deduction_amount: number
+  total_amount: number
+  status: 'pending' | 'paid' | 'cancelled'
+  payment_date: string | null
+  employees?: {
+    first_name: string
+    last_name: string
+    position: string
+  }
 }
 
+const STATUS: Record<PayrollRecord['status'], { label: string; variant: 'success' | 'warning' | 'secondary' }> = {
+  pending: { label: 'К выплате', variant: 'warning' },
+  paid: { label: 'Выплачено', variant: 'success' },
+  cancelled: { label: 'Отменено', variant: 'secondary' },
+}
+
+const tjs = (v: number | string | null | undefined) => formatMoney(v, 'TJS')
+
 export function PayrollPage() {
-    const [selectedMonth, setSelectedMonth] = useState<string>(String(new Date().getMonth() + 1))
-    const [selectedYear, setSelectedYear] = useState<string>(String(new Date().getFullYear()))
-    const [payrollData, setPayrollData] = useState<PayrollRecord[]>([])
-    const [isLoading, setIsLoading] = useState(true)
+  const confirm = useConfirm()
+  const [ym, setYm] = React.useState<YearMonth>(currentYearMonth)
+  const selectedMonth = String(ym.month)
+  const selectedYear = String(ym.year)
+  const [payrollData, setPayrollData] = React.useState<PayrollRecord[]>([])
+  const [isLoading, setIsLoading] = React.useState(true)
+  const [generating, setGenerating] = React.useState(false)
+  const [busyId, setBusyId] = React.useState<string | null>(null)
+  const [detailId, setDetailId] = React.useState<string | null>(null)
 
-    useEffect(() => {
+  const fetchPayroll = React.useCallback(async () => {
+    setIsLoading(true)
+    try {
+      const res = await fetch(`/api/hr/payroll?month=${selectedMonth}&year=${selectedYear}`)
+      if (res.ok) {
+        const data = await res.json()
+        setPayrollData(Array.isArray(data) ? data : [])
+      }
+    } catch (error) {
+      console.error('Failed to fetch payroll', error)
+      toast.error('Не удалось загрузить ведомость', { description: 'Проверьте соединение и обновите страницу' })
+    } finally {
+      setIsLoading(false)
+    }
+  }, [selectedMonth, selectedYear])
+
+  React.useEffect(() => {
+    fetchPayroll()
+  }, [fetchPayroll])
+
+  const period = monthLabel(ym)
+
+  const handleGenerate = async () => {
+    const ok = await confirm({
+      title: `Сформировать ведомость за ${period.toLowerCase()}?`,
+      description:
+        'Для каждого работающего сотрудника без записи за этот месяц появится начисление по окладу. Дни отгула без сохранения будут удержаны автоматически.',
+      confirmText: 'Сформировать',
+    })
+    if (!ok) return
+
+    setGenerating(true)
+    try {
+      // 1. Fetch active employees
+      const empRes = await fetch('/api/hr/employees')
+      const employees = await empRes.json()
+
+      // 2. Create records for employees that do not have one yet
+      let createdCount = 0
+      let failed = 0
+      for (const emp of employees) {
+        if (emp.status !== 'active') continue
+        const exists = payrollData.find(p => p.employee_id === emp.id)
+        if (exists) continue
+
+        const res = await fetch('/api/hr/payroll', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            employee_id: emp.id,
+            month_number: Number(selectedMonth),
+            year: Number(selectedYear),
+            base_salary: emp.base_salary,
+            bonus_amount: 0,
+            deduction_amount: 0,
+            total_amount: emp.base_salary, // Simple logic
+            status: 'pending',
+          }),
+        })
+
+        if (res.ok) {
+          createdCount++
+        } else {
+          failed++
+          console.error('Failed to create record for', emp.first_name, await res.text())
+        }
+      }
+
+      if (createdCount > 0) {
+        toast.success(`Ведомость сформирована`, {
+          description: `${formatNumber(createdCount)} ${plural(createdCount, ['начисление', 'начисления', 'начислений'])} за ${period.toLowerCase()}`,
+        })
         fetchPayroll()
-    }, [selectedMonth, selectedYear])
-
-    const fetchPayroll = async () => {
-        setIsLoading(true)
-        try {
-            const res = await fetch(`/api/hr/payroll?month=${selectedMonth}&year=${selectedYear}`)
-            if (res.ok) {
-                const data = await res.json()
-                setPayrollData(data)
-            }
-        } catch (error) {
-            console.error('Failed to fetch payroll', error)
-        } finally {
-            setIsLoading(false)
-        }
+      } else if (!failed) {
+        toast.info('Новых начислений нет', { description: 'Ведомость уже сформирована или нет работающих сотрудников' })
+      }
+      if (failed) {
+        toast.error(`Не удалось создать ${formatNumber(failed)} ${plural(failed, ['начисление', 'начисления', 'начислений'])}`, {
+          description: 'Попробуйте ещё раз; уже созданные записи не задублируются',
+        })
+      }
+    } catch (error: any) {
+      console.error('Error generating payroll', error)
+      toast.error('Не удалось сформировать ведомость', { description: error?.message })
+    } finally {
+      setGenerating(false)
     }
+  }
 
-    const handleGenerate = async () => {
-        if (!confirm(`Сформировать ведомость за ${selectedMonth}.${selectedYear}? Это создаст черновики для всех активных сотрудников.`)) return;
+  const handleStatusChange = async (record: PayrollRecord, newStatus: PayrollRecord['status']) => {
+    setBusyId(record.id)
+    try {
+      const res = await fetch(`/api/hr/payroll/${record.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: newStatus,
+          payment_date: newStatus === 'paid' ? todayISO() : null,
+        }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.error || `Ошибка ${res.status}`)
+      }
+      const name = fullName(record.employees)
+      toast.success(
+        newStatus === 'paid' ? 'Выплата отмечена' : newStatus === 'cancelled' ? 'Выплата отменена' : 'Начисление возвращено к выплате',
+        { description: `${name} · ${tjs(record.total_amount)}` }
+      )
+      fetchPayroll()
+    } catch (error: any) {
+      console.error('Error updating status', error)
+      toast.error('Не удалось изменить статус', { description: error.message })
+    } finally {
+      setBusyId(null)
+    }
+  }
 
-        try {
-            // 1. Fetch active employees
-            const empRes = await fetch('/api/hr/employees');
-            const employees = await empRes.json();
+  const handlePay = async (record: PayrollRecord) => {
+    const ok = await confirm({
+      title: 'Отметить зарплату выплаченной?',
+      description: (
+        <>
+          {fullName(record.employees)} · <span className="num font-medium text-foreground">{tjs(record.total_amount)}</span> за{' '}
+          {period.toLowerCase()}, дата выплаты — сегодня. Списание со счёта при этом не создаётся: чтобы деньги ушли из кассы, проведите расход «Зарплаты» в разделе «Доходы и
+          расходы» — тогда статус обновится сам.
+        </>
+      ),
+      confirmText: 'Отметить выплату',
+    })
+    if (!ok) return
+    await handleStatusChange(record, 'paid')
+  }
 
-            // 2. Create records
-            // Ideally should be a bulk backend operation, but iterating for now
-            let createdCount = 0;
-            for (const emp of employees) {
-                if (emp.status !== 'active') continue;
+  const handleCancel = async (record: PayrollRecord) => {
+    const ok = await confirm({
+      title: 'Отменить выплату?',
+      description: `${fullName(record.employees)} · ${tjs(record.total_amount)}. Начисление останется в ведомости со статусом «Отменено», его можно будет вернуть.`,
+      confirmText: 'Отменить выплату',
+      cancelText: 'Не отменять',
+      destructive: true,
+    })
+    if (!ok) return
+    await handleStatusChange(record, 'cancelled')
+  }
 
-                // Check if already exists (simplified check here, mostly relying on backend or ignoring dupes logic if we had it, 
-                // but checking local state is safer or just letting backend handle UNIQUE constraints if any. 
-                // Our schema defines UNIQUE(employee_id, month_number, year) index? No, it defines INDEX but not UNIQUE constraint in schema provided.
-                // Wait, unique index IS creating unique constraint usually if defined as UNIQUE INDEX or just INDEX?
-                // Schema said: CREATE INDEX idx_payroll_employee_period. That is NOT a unique constraint.
-                // So we should be careful not to duplicate.
-                // Let's check if record exists in current `payrollData`
-                const exists = payrollData.find(p => p.employee_id === emp.id);
-                if (exists) continue;
+  const handleDelete = async (record: PayrollRecord) => {
+    const name = fullName(record.employees)
+    const ok = await confirm({
+      title: 'Удалить начисление?',
+      description: `${name} · ${period.toLowerCase()}. Запись будет удалена. Расход «Зарплата: ${name}» за этот месяц в Финансах тоже удалится.`,
+      confirmText: 'Удалить',
+      destructive: true,
+    })
+    if (!ok) return
 
-                const res = await fetch('/api/hr/payroll', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        employee_id: emp.id,
-                        month_number: Number(selectedMonth),
-                        year: Number(selectedYear),
-                        base_salary: emp.base_salary,
-                        bonus_amount: 0,
-                        deduction_amount: 0,
-                        total_amount: emp.base_salary, // Simple logic
-                        status: 'pending'
-                    })
-                });
+    setBusyId(record.id)
+    try {
+      const res = await fetch(`/api/hr/payroll/${record.id}`, { method: 'DELETE' })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.error || `Ошибка ${res.status}`)
+      }
+      toast.success('Начисление удалено', { description: name })
+      setDetailId(null)
+      fetchPayroll()
+    } catch (error: any) {
+      console.error('Error deleting record', error)
+      toast.error('Не удалось удалить начисление', { description: error.message })
+    } finally {
+      setBusyId(null)
+    }
+  }
 
-                if (res.ok) {
-                    createdCount++;
-                } else {
-                    console.error('Failed to create record for', emp.first_name, await res.text());
+  // Stats
+  const totalAmount = payrollData.reduce((sum, item) => sum + Number(item.total_amount || 0), 0)
+  const paidRows = payrollData.filter(i => i.status === 'paid')
+  const pendingRows = payrollData.filter(i => i.status === 'pending')
+  const paidAmount = paidRows.reduce((sum, item) => sum + Number(item.total_amount || 0), 0)
+  const pendingAmount = pendingRows.reduce((sum, item) => sum + Number(item.total_amount || 0), 0)
+  const sum = (k: 'base_salary' | 'bonus_amount' | 'deduction_amount') => payrollData.reduce((s, r) => s + Number(r[k] || 0), 0)
+
+  const detail = payrollData.find(r => r.id === detailId) ?? null
+  const actions = { onPay: handlePay, onCancel: handleCancel, onRestore: (r: PayrollRecord) => handleStatusChange(r, 'pending'), onDelete: handleDelete }
+
+  return (
+    <PageContainer>
+      <PageHeader
+        title="Зарплата"
+        description="Начисления по окладу, премии, удержания и выплаты"
+        actions={
+          <>
+            <MonthSwitcher value={ym} onChange={setYm} />
+            {(isLoading || payrollData.length > 0) && (
+              <Button size="sm" variant="outline" onClick={handleGenerate} disabled={generating || isLoading}>
+                <FilePlus2 /> {generating ? 'Формируем…' : 'Дополнить ведомость'}
+              </Button>
+            )}
+          </>
+        }
+      />
+
+      <StatStrip
+        loading={isLoading}
+        stats={[
+          {
+            label: 'Начислено',
+            value: tjs(totalAmount),
+            sub: `${formatNumber(payrollData.length)} ${plural(payrollData.length, ['сотрудник', 'сотрудника', 'сотрудников'])} · ${period}`,
+          },
+          {
+            label: 'Выплачено',
+            value: tjs(paidAmount),
+            tone: paidAmount > 0 ? 'success' : 'default',
+            dot: 'var(--success)',
+            sub: `${formatNumber(paidRows.length)} ${plural(paidRows.length, ['выплата', 'выплаты', 'выплат'])}`,
+          },
+          {
+            label: 'Осталось выплатить',
+            value: tjs(pendingAmount),
+            tone: pendingAmount > 0 ? 'warning' : 'default',
+            dot: 'var(--warning)',
+            sub: pendingRows.length
+              ? `${formatNumber(pendingRows.length)} ${plural(pendingRows.length, ['сотрудник', 'сотрудника', 'сотрудников'])}`
+              : payrollData.length
+                ? 'всё выплачено'
+                : '—',
+          },
+        ]}
+      />
+
+      <div className="mt-6">
+        {isLoading ? (
+          <TableSkeleton rows={5} toolbar={false} />
+        ) : (
+          <Panel>
+            {payrollData.length === 0 ? (
+              <EmptyState
+                icon={Wallet}
+                title={`Ведомости за ${period.toLowerCase()} нет`}
+                description="Сформируйте её: начисления по окладу создадутся для всех работающих сотрудников"
+                action={
+                  <Button size="sm" onClick={handleGenerate} disabled={generating}>
+                    <FilePlus2 /> {generating ? 'Формируем…' : 'Сформировать ведомость'}
+                  </Button>
                 }
-            }
-
-            if (createdCount > 0) {
-                alert(`Создано записей: ${createdCount}`);
-                fetchPayroll();
-            } else {
-                alert('Ведомость уже сформирована (или нет активных сотрудников)');
-            }
-
-        } catch (error) {
-            console.error('Error generating payroll', error)
-        }
-    }
-
-    const handlePay = async (record: PayrollRecord) => {
-        if (!confirm(`Подтвердить выплату для ${record.employees?.first_name}? Это также создаст расход в Финансах.`)) return;
-        await handleStatusChange(record, 'paid');
-    }
-
-    const handleStatusChange = async (record: PayrollRecord, newStatus: PayrollRecord['status']) => {
-        try {
-            const res = await fetch(`/api/hr/payroll/${record.id}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    status: newStatus,
-                    payment_date: newStatus === 'paid' ? new Date().toISOString().split('T')[0] : null
-                })
-            });
-
-            if (res.ok) {
-                fetchPayroll();
-            } else {
-                alert('Ошибка при обновлении статуса');
-            }
-        } catch (error) {
-            console.error('Error updating status', error);
-        }
-    }
-
-    const handleDelete = async (record: PayrollRecord) => {
-        if (!confirm('Вы уверены, что хотите удалить эту запись?')) return;
-
-        try {
-            const res = await fetch(`/api/hr/payroll/${record.id}`, {
-                method: 'DELETE'
-            });
-
-            if (res.ok) {
-                fetchPayroll();
-            } else {
-                alert('Ошибка при удалении');
-            }
-        } catch (error) {
-            console.error('Error deleting record', error);
-        }
-    }
-
-    // Stats
-    const totalAmount = payrollData.reduce((sum, item) => sum + Number(item.total_amount || 0), 0)
-    const paidAmount = payrollData.filter(i => i.status === 'paid').reduce((sum, item) => sum + Number(item.total_amount || 0), 0)
-    const pendingAmount = payrollData.filter(i => i.status === 'pending').reduce((sum, item) => sum + Number(item.total_amount || 0), 0)
-
-    const monthOptions = [
-        { val: '1', label: 'Январь' }, { val: '2', label: 'Февраль' }, { val: '3', label: 'Март' },
-        { val: '4', label: 'Апрель' }, { val: '5', label: 'Май' }, { val: '6', label: 'Июнь' },
-        { val: '7', label: 'Июль' }, { val: '8', label: 'Август' }, { val: '9', label: 'Сентябрь' },
-        { val: '10', label: 'Октябрь' }, { val: '11', label: 'Ноябрь' }, { val: '12', label: 'Декабрь' },
-    ]
-
-    return (
-        <div className="p-3 sm:p-6 space-y-4 sm:space-y-6 min-h-full">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 border-b border-border pb-3.5">
-                <h1 className="text-xl sm:text-2xl font-bold">Зарплата</h1>
-                <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-end">
-                    <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-                        <SelectTrigger className="w-[130px] text-xs sm:text-sm touch-manipulation">
-                            <SelectValue placeholder="Месяц" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            {monthOptions.map(m => <SelectItem key={m.val} value={m.val}>{m.label}</SelectItem>)}
-                        </SelectContent>
-                    </Select>
-                    <Select value={selectedYear} onValueChange={setSelectedYear}>
-                        <SelectTrigger className="w-[90px] text-xs sm:text-sm touch-manipulation">
-                            <SelectValue placeholder="Год" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="2024">2024</SelectItem>
-                            <SelectItem value="2025">2025</SelectItem>
-                            <SelectItem value="2026">2026</SelectItem>
-                        </SelectContent>
-                    </Select>
-                    <Button variant="default" onClick={handleGenerate} className="touch-manipulation">
-                        <Plus className="w-4 h-4 mr-2" />
-                        Сформировать
-                    </Button>
-                </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Фонд оплаты труда</CardTitle>
-                        <DollarSign className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">{totalAmount.toLocaleString()} TJS</div>
-                        <p className="text-xs text-muted-foreground">Начислено за период</p>
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Выплачено</CardTitle>
-                        <CheckCircle className="h-4 w-4 text-green-600" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold text-green-600">{paidAmount.toLocaleString()} TJS</div>
-                        <p className="text-xs text-muted-foreground">Фактические выплаты</p>
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Задолженность</CardTitle>
-                        <AlertCircle className="h-4 w-4 text-red-600" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold text-red-600">{pendingAmount.toLocaleString()} TJS</div>
-                        <p className="text-xs text-muted-foreground">Остаток к выплате</p>
-                    </CardContent>
-                </Card>
-            </div>
-
-            <Card>
-                <CardHeader>
-                    <CardTitle>Ведомость</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead>Сотрудник</TableHead>
-                                <TableHead>Оклад</TableHead>
-                                <TableHead>Премии</TableHead>
-                                <TableHead>Вычеты</TableHead>
-                                <TableHead>К выплате</TableHead>
-                                <TableHead>Статус</TableHead>
-                                <TableHead className="text-right">Действия</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {isLoading ? (
-                                <TableRow>
-                                    <TableCell colSpan={7} className="text-center py-4">Загрузка...</TableCell>
-                                </TableRow>
-                            ) : payrollData.length === 0 ? (
-                                <TableRow>
-                                    <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                                        Нет данных. Нажмите "Сформировать", чтобы создать ведомость.
-                                    </TableCell>
-                                </TableRow>
-                            ) : (
-                                payrollData.map(record => (
-                                    <TableRow key={record.id}>
-                                        <TableCell>
-                                            <div className="font-medium">{record.employees?.first_name} {record.employees?.last_name}</div>
-                                            <div className="text-xs text-muted-foreground">{record.employees?.position}</div>
-                                        </TableCell>
-                                        <TableCell>{record.base_salary.toLocaleString()}</TableCell>
-                                        <TableCell className="text-green-600">+{record.bonus_amount.toLocaleString()}</TableCell>
-                                        <TableCell className="text-red-600">-{record.deduction_amount.toLocaleString()}</TableCell>
-                                        <TableCell className="font-bold">{record.total_amount.toLocaleString()} TJS</TableCell>
-                                        <TableCell>
-                                            <Badge variant={record.status === 'paid' ? 'default' : 'secondary'} className={
-                                                record.status === 'paid' ? 'bg-green-100 text-green-700 hover:bg-green-200' :
-                                                    record.status === 'cancelled' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'
-                                            }>
-                                                {record.status === 'paid' ? 'Выплачено' :
-                                                    record.status === 'cancelled' ? 'Отменено' : 'Ожидает'}
-                                            </Badge>
-                                        </TableCell>
-                                        <TableCell className="text-right">
-                                            <div className="flex justify-end gap-2">
-                                                {record.status === 'paid' && (
-                                                    <Button size="sm" variant="outline" className="text-red-600 hover:text-red-700 hover:bg-red-50" onClick={() => handleStatusChange(record, 'cancelled')}>
-                                                        Отменить
-                                                    </Button>
-                                                )}
-                                                {record.status === 'cancelled' && (
-                                                    <Button size="sm" variant="outline" onClick={() => handleStatusChange(record, 'pending')}>
-                                                        Вернуть
-                                                    </Button>
-                                                )}
-                                                <Button size="sm" variant="ghost" className="text-gray-400 hover:text-red-600" onClick={() => handleDelete(record)}>
-                                                    <span className="sr-only">Удалить</span>
-                                                    ×
-                                                </Button>
-                                            </div>
-                                        </TableCell>
-                                    </TableRow>
-                                ))
+              />
+            ) : (
+              <>
+                <Table>
+                  <TableHeader>
+                    <TableRow className="hover:bg-transparent">
+                      <TableHead>Сотрудник</TableHead>
+                      <TableHead className="text-right max-md:hidden">Оклад</TableHead>
+                      <TableHead className="text-right max-lg:hidden">Премии</TableHead>
+                      <TableHead className="text-right max-lg:hidden">Удержания</TableHead>
+                      <TableHead className="text-right">К выплате</TableHead>
+                      <TableHead className="max-sm:hidden">Статус</TableHead>
+                      <TableHead className="w-36 max-sm:w-auto" />
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {payrollData.map(record => {
+                      const st = STATUS[record.status] ?? STATUS.pending
+                      const busy = busyId === record.id
+                      return (
+                        <TableRow key={record.id} className="group cursor-pointer" onClick={() => setDetailId(record.id)}>
+                          <TableCell>
+                            <div className="flex items-center gap-3">
+                              <Avatar person={record.employees} className="max-sm:hidden" />
+                              <div className="min-w-0">
+                                <div className="truncate font-medium">{fullName(record.employees) || 'Сотрудник удалён'}</div>
+                                <div className="truncate text-xs text-muted-foreground max-sm:hidden">{record.employees?.position}</div>
+                                <Badge variant={st.variant} className="mt-1 sm:hidden">
+                                  {st.label}
+                                </Badge>
+                              </div>
+                            </div>
+                          </TableCell>
+                          <TableCell className="num text-right text-muted-foreground max-md:hidden">{tjs(record.base_salary)}</TableCell>
+                          <TableCell className={cn('num text-right max-lg:hidden', Number(record.bonus_amount) > 0 ? 'text-success' : 'text-muted-foreground')}>
+                            {Number(record.bonus_amount) > 0 ? formatMoney(record.bonus_amount, 'TJS', { sign: true }) : '—'}
+                          </TableCell>
+                          <TableCell className={cn('num text-right max-lg:hidden', Number(record.deduction_amount) > 0 ? 'text-destructive' : 'text-muted-foreground')}>
+                            {Number(record.deduction_amount) > 0 ? formatMoney(-record.deduction_amount, 'TJS') : '—'}
+                          </TableCell>
+                          <TableCell className="num text-right font-semibold">{tjs(record.total_amount)}</TableCell>
+                          <TableCell className="max-sm:hidden">
+                            <Badge variant={st.variant}>{st.label}</Badge>
+                            {record.status === 'paid' && record.payment_date && (
+                              <span className="num ml-2 text-xs text-muted-foreground max-lg:hidden">{formatDate(record.payment_date)}</span>
                             )}
-                        </TableBody>
-                    </Table>
-                </CardContent>
-            </Card>
-        </div>
-    )
+                          </TableCell>
+                          <TableCell className="text-right" onClick={e => e.stopPropagation()}>
+                            <div className="flex items-center justify-end gap-1">
+                              {record.status === 'pending' && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-7 px-2.5 max-sm:w-7 max-sm:px-0"
+                                  disabled={busy}
+                                  onClick={() => handlePay(record)}
+                                  aria-label="Выплатить"
+                                >
+                                  <Check /> <span className="max-sm:hidden">Выплатить</span>
+                                </Button>
+                              )}
+                              <RowMenu record={record} disabled={busy} {...actions} />
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })}
+                  </TableBody>
+                </Table>
+                <div className="grid grid-cols-3 gap-px border-t bg-border text-xs max-lg:hidden">
+                  {[
+                    ['Оклады', tjs(sum('base_salary'))],
+                    ['Премии', formatMoney(sum('bonus_amount'), 'TJS', { sign: true })],
+                    ['Удержания', formatMoney(-sum('deduction_amount'), 'TJS')],
+                  ].map(([l, v]) => (
+                    <div key={l} className="flex items-center justify-between bg-card px-4 py-2 text-muted-foreground">
+                      <span>{l}</span>
+                      <span className="num font-medium text-foreground">{v}</span>
+                    </div>
+                  ))}
+                </div>
+                <TotalsBar
+                  label={`${formatNumber(payrollData.length)} ${plural(payrollData.length, ['начисление', 'начисления', 'начислений'])}`}
+                  value={tjs(totalAmount)}
+                />
+              </>
+            )}
+          </Panel>
+        )}
+      </div>
+
+      <PayrollSheet record={detail} period={period} busy={!!detail && busyId === detail.id} onClose={() => setDetailId(null)} {...actions} />
+    </PageContainer>
+  )
+}
+
+// ---------------------------------------------------------------------------
+
+interface RecordActions {
+  onPay: (r: PayrollRecord) => void
+  onCancel: (r: PayrollRecord) => void
+  onRestore: (r: PayrollRecord) => void
+  onDelete: (r: PayrollRecord) => void
+}
+
+function RowMenu({ record, disabled, onPay, onCancel, onRestore, onDelete }: RecordActions & { record: PayrollRecord; disabled?: boolean }) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" size="icon-sm" className="text-muted-foreground" aria-label="Действия" disabled={disabled}>
+          <MoreHorizontal />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        {record.status === 'pending' && (
+          <DropdownMenuItem onSelect={() => onPay(record)}>
+            <Check /> Отметить выплату
+          </DropdownMenuItem>
+        )}
+        {record.status === 'paid' && (
+          <DropdownMenuItem onSelect={() => onCancel(record)}>
+            <Ban /> Отменить выплату
+          </DropdownMenuItem>
+        )}
+        {record.status === 'cancelled' && (
+          <DropdownMenuItem onSelect={() => onRestore(record)}>
+            <RotateCcw /> Вернуть к выплате
+          </DropdownMenuItem>
+        )}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem variant="destructive" onSelect={() => onDelete(record)}>
+          <Trash2 /> Удалить
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
+function PayrollSheet({
+  record,
+  period,
+  busy,
+  onClose,
+  onPay,
+  onCancel,
+  onRestore,
+  onDelete,
+}: RecordActions & { record: PayrollRecord | null; period: string; busy: boolean; onClose: () => void }) {
+  // Keep the last record while the sheet animates out
+  const [shown, setShown] = React.useState<PayrollRecord | null>(record)
+  React.useEffect(() => {
+    if (record) setShown(record)
+  }, [record])
+  const r = record ?? shown
+  const st = r ? STATUS[r.status] ?? STATUS.pending : null
+
+  return (
+    <Sheet open={!!record} onOpenChange={o => !o && onClose()}>
+      <SheetContent>
+        {r && st && (
+          <div className="flex h-full flex-col">
+            <SheetHeader>
+              <div className="flex items-center gap-3">
+                <Avatar person={r.employees} className="size-11 text-sm" />
+                <div className="min-w-0">
+                  <SheetTitle className="truncate">{fullName(r.employees) || 'Сотрудник удалён'}</SheetTitle>
+                  <SheetDescription className="truncate">
+                    {r.employees?.position ? `${r.employees.position} · ` : ''}
+                    {period}
+                  </SheetDescription>
+                </div>
+              </div>
+            </SheetHeader>
+            <SheetBody>
+              <div className="rounded-lg border px-3">
+                <div className="divide-y">
+                  <DetailRow label="Оклад">
+                    <span className="num">{tjs(r.base_salary)}</span>
+                  </DetailRow>
+                  <DetailRow label="Премии">
+                    <span className={cn('num', Number(r.bonus_amount) > 0 && 'text-success')}>
+                      {formatMoney(r.bonus_amount, 'TJS', { sign: true })}
+                    </span>
+                  </DetailRow>
+                  <DetailRow
+                    label={
+                      <>
+                        Удержания
+                        <span className="block text-xs">за отгулы без сохранения</span>
+                      </>
+                    }
+                  >
+                    <span className={cn('num', Number(r.deduction_amount) > 0 && 'text-destructive')}>
+                      {Number(r.deduction_amount) > 0 ? formatMoney(-r.deduction_amount, 'TJS') : tjs(0)}
+                    </span>
+                  </DetailRow>
+                </div>
+                <div className="flex items-baseline justify-between border-t py-3">
+                  <span className="font-medium">К выплате</span>
+                  <span className="num text-xl font-semibold tracking-tight">{tjs(r.total_amount)}</span>
+                </div>
+              </div>
+
+              <div className="mt-4 divide-y rounded-lg border px-3">
+                <DetailRow label="Статус">
+                  <Badge variant={st.variant}>{st.label}</Badge>
+                </DetailRow>
+                <DetailRow label="Дата выплаты">
+                  <span className="num">{formatDate(r.payment_date)}</span>
+                </DetailRow>
+              </div>
+
+              {r.status === 'pending' && (
+                <p className="mt-4 rounded-lg bg-muted px-3 py-2.5 text-xs text-muted-foreground">
+                  Когда вы проводите расход «Зарплаты» на этого сотрудника в разделе «Доходы и расходы», начисление отмечается выплаченным
+                  автоматически.
+                </p>
+              )}
+            </SheetBody>
+            <SheetFooter>
+              {r.status === 'pending' && (
+                <Button disabled={busy} onClick={() => onPay(r)}>
+                  <Check /> Отметить выплату
+                </Button>
+              )}
+              {r.status === 'paid' && (
+                <Button variant="outline" disabled={busy} onClick={() => onCancel(r)}>
+                  <Ban /> Отменить выплату
+                </Button>
+              )}
+              {r.status === 'cancelled' && (
+                <Button variant="outline" disabled={busy} onClick={() => onRestore(r)}>
+                  <RotateCcw /> Вернуть к выплате
+                </Button>
+              )}
+              <Button
+                variant="ghost"
+                disabled={busy}
+                className="ml-auto text-muted-foreground hover:bg-destructive-soft hover:text-destructive"
+                onClick={() => onDelete(r)}
+              >
+                <Trash2 /> Удалить
+              </Button>
+            </SheetFooter>
+          </div>
+        )}
+      </SheetContent>
+    </Sheet>
+  )
 }

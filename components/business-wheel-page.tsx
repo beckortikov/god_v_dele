@@ -1,29 +1,41 @@
 'use client'
 
 import { useEffect, useState, useCallback, useMemo } from 'react'
-import { Save, Loader2, CheckCircle2, AlertCircle, Search, Eye, BarChart3, CheckSquare, Square, Check, X, RefreshCw, Sparkles } from 'lucide-react'
+import { toast } from 'sonner'
+import { Briefcase, Check, SearchX } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
-import { Input } from '@/components/ui/input'
+import { Skeleton } from '@/components/ui/skeleton'
+import { PageContainer, PageHeader, Panel } from '@/components/erp/page-header'
+import { SearchInput } from '@/components/erp/search-input'
+import { EmptyState } from '@/components/erp/empty-state'
+import { useConfirm } from '@/components/erp/confirm'
+import { FillReport, type FillRow } from '@/components/wheels/fill-report'
 import {
-    Radar,
-    RadarChart,
-    PolarGrid,
-    PolarAngleAxis,
-    PolarRadiusAxis,
-    ResponsiveContainer,
-    Legend,
-    Tooltip
-} from 'recharts'
+    Meter,
+    PanelHeading,
+    ParticipantPicker,
+    PeriodStepper,
+    SaveBar,
+    SaveStatus,
+    WheelTabs,
+    YearSelect,
+    type WheelTab,
+} from '@/components/wheels/parts'
+import {
+    MONTHS_FULL,
+    TEMPLATE_ID,
+    YEARS,
+    saveErrorMessage,
+    useBeforeUnload,
+    usePersistentState,
+    useSaveShortcut,
+    type WheelParticipant,
+} from '@/components/wheels/shared'
+import { WheelRadar } from '@/components/wheels/wheel-radar'
 
 // ─────────────────────────── Types ───────────────────────────
-interface Participant {
-    id: string
-    name: string
-    program?: { name: string }
-    status: string
-}
+type Participant = WheelParticipant
 
 interface BusinessWheelEntry {
     id?: string
@@ -34,21 +46,12 @@ interface BusinessWheelEntry {
 }
 
 // ─────────────────────────── Constants ───────────────────────────
-const TEMPLATE_ID = '00000000-0000-0000-0000-000000000000'
-
-const MONTHS = [
-    'Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
-    'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'
-]
+const MONTHS = MONTHS_FULL
 
 const BUSINESS_CATEGORIES = [
     {
         id: 1,
         name: '1. Ниша',
-        color: '#8b5cf6', // Violet
-        gradient: 'from-violet-500/10 to-violet-500/0',
-        borderClass: 'border-violet-500/20 hover:border-violet-500/40 dark:border-violet-800/30 dark:hover:border-violet-700/50',
-        bgHeader: 'bg-violet-500/10 text-violet-700 dark:bg-violet-950/20 dark:text-violet-400',
         items: [
             { id: '1_1', label: 'Анализ ниши и поиск голубого океана' },
             { id: '1_2', label: 'Анализ объема и емкости рынка' },
@@ -62,10 +65,6 @@ const BUSINESS_CATEGORIES = [
     {
         id: 2,
         name: '2. Клиенты и рынок',
-        color: '#3b82f6', // Blue
-        gradient: 'from-blue-500/10 to-blue-500/0',
-        borderClass: 'border-blue-500/20 hover:border-blue-500/40 dark:border-blue-800/30 dark:hover:border-blue-700/50',
-        bgHeader: 'bg-blue-500/10 text-blue-700 dark:bg-blue-950/20 dark:text-blue-400',
         items: [
             { id: '2_1', label: 'Анализ конкурентов' },
             { id: '2_2', label: 'Портреты-аватар целевой аудитории' },
@@ -79,10 +78,6 @@ const BUSINESS_CATEGORIES = [
     {
         id: 3,
         name: '3. Продукт',
-        color: '#f59e0b', // Amber
-        gradient: 'from-amber-500/10 to-amber-500/0',
-        borderClass: 'border-amber-500/20 hover:border-amber-500/40 dark:border-amber-800/30 dark:hover:border-amber-700/50',
-        bgHeader: 'bg-amber-500/10 text-amber-700 dark:bg-amber-950/20 dark:text-amber-400',
         items: [
             { id: '3_1', label: 'Анализ конкурентоспособности продукта' },
             { id: '3_2', label: 'Плановый и фактический MVP продукта' },
@@ -96,10 +91,6 @@ const BUSINESS_CATEGORIES = [
     {
         id: 4,
         name: '4. Трафик / продажи',
-        color: '#10b981', // Emerald
-        gradient: 'from-emerald-500/10 to-emerald-500/0',
-        borderClass: 'border-emerald-500/20 hover:border-emerald-500/40 dark:border-emerald-800/30 dark:hover:border-emerald-700/50',
-        bgHeader: 'bg-emerald-500/10 text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-400',
         items: [
             { id: '4_1', label: 'План/факт лидов, план/факт охватов' },
             { id: '4_2', label: 'План/факт по стоимости лида и клиента' },
@@ -113,10 +104,6 @@ const BUSINESS_CATEGORIES = [
     {
         id: 5,
         name: '5. Маркетинг и брендинг',
-        color: '#0ea5e9', // Sky
-        gradient: 'from-sky-500/10 to-sky-500/0',
-        borderClass: 'border-sky-500/20 hover:border-sky-500/40 dark:border-sky-800/30 dark:hover:border-sky-700/50',
-        bgHeader: 'bg-sky-500/10 text-sky-700 dark:bg-sky-950/20 dark:text-sky-400',
         items: [
             { id: '5_1', label: 'Брендбук' },
             { id: '5_2', label: 'Наличие оффера или УТП' },
@@ -130,10 +117,6 @@ const BUSINESS_CATEGORIES = [
     {
         id: 6,
         name: '6. Командообразование',
-        color: '#a78bfa', // Light violet
-        gradient: 'from-violet-400/10 to-violet-400/0',
-        borderClass: 'border-violet-400/20 hover:border-violet-400/40 dark:border-violet-800/30 dark:hover:border-violet-700/50',
-        bgHeader: 'bg-violet-400/10 text-violet-700 dark:bg-violet-950/20 dark:text-violet-400',
         items: [
             { id: '6_1', label: 'Организационная структура компании' },
             { id: '6_2', label: 'Портрет, ЦКП, KPI и ДИ каждого сотрудника' },
@@ -147,10 +130,6 @@ const BUSINESS_CATEGORIES = [
     {
         id: 7,
         name: '7. Финансы',
-        color: '#60a5fa', // Light blue
-        gradient: 'from-blue-400/10 to-blue-400/0',
-        borderClass: 'border-blue-400/20 hover:border-blue-400/40 dark:border-blue-800/30 dark:hover:border-blue-700/50',
-        bgHeader: 'bg-blue-400/10 text-blue-700 dark:bg-blue-950/20 dark:text-blue-400',
         items: [
             { id: '7_1', label: 'Финансовое планирование (бюджет)' },
             { id: '7_2', label: 'План прибыли' },
@@ -164,10 +143,6 @@ const BUSINESS_CATEGORIES = [
     {
         id: 8,
         name: '8. Масштабирование',
-        color: '#fbbf24', // Light amber
-        gradient: 'from-amber-400/10 to-amber-400/0',
-        borderClass: 'border-amber-400/20 hover:border-amber-400/40 dark:border-amber-800/30 dark:hover:border-amber-700/50',
-        bgHeader: 'bg-amber-400/10 text-amber-700 dark:bg-amber-950/20 dark:text-amber-400',
         items: [
             { id: '8_1', label: 'Цели и инструменты масштабирования' },
             { id: '8_2', label: 'Система безопасности в налогообложении' },
@@ -181,10 +156,6 @@ const BUSINESS_CATEGORIES = [
     {
         id: 9,
         name: '9. Стратегия',
-        color: '#34d399', // Light emerald
-        gradient: 'from-emerald-400/10 to-emerald-400/0',
-        borderClass: 'border-emerald-400/20 hover:border-emerald-400/40 dark:border-emerald-800/30 dark:hover:border-emerald-700/50',
-        bgHeader: 'bg-emerald-400/10 text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-400',
         items: [
             { id: '9_1', label: 'Стратегическая сессия (от 2-х раз в год)' },
             { id: '9_2', label: 'Стратегия внедрения инноваций ИИ в бизнес' },
@@ -198,10 +169,6 @@ const BUSINESS_CATEGORIES = [
     {
         id: 10,
         name: '10. Бизнес процессы',
-        color: '#38bdf8', // Light sky
-        gradient: 'from-sky-400/10 to-sky-400/0',
-        borderClass: 'border-sky-400/20 hover:border-sky-400/40 dark:border-sky-800/30 dark:hover:border-sky-700/50',
-        bgHeader: 'bg-sky-400/10 text-sky-700 dark:bg-sky-950/20 dark:text-sky-400',
         items: [
             { id: '10_1', label: 'Определение направлений внедрения регламентации' },
             { id: '10_2', label: 'Разработка карты процессов по направлениям' },
@@ -214,8 +181,12 @@ const BUSINESS_CATEGORIES = [
     }
 ]
 
+
+const shortName = (name: string) => name.replace(/^\d+\.\s+/, '')
+
 export function BusinessWheelPage({ participantId: fixedParticipantId, participantName }: { participantId?: string, participantName?: string } = {}) {
     const isParticipantMode = !!fixedParticipantId
+    const confirm = useConfirm()
 
     const [participants, setParticipants] = useState<Participant[]>([])
     const [selectedParticipantId, setSelectedParticipantId] = useState<string>(fixedParticipantId || '')
@@ -228,18 +199,16 @@ export function BusinessWheelPage({ participantId: fixedParticipantId, participa
     // UI Feedback States
     const [isSaving, setIsSaving] = useState(false)
     const [isLoading, setIsLoading] = useState(false)
-    const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle')
     const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
 
-    // Filter query for highlighting items
+    // Filter query for checkpoints
     const [highlightFilter, setHighlightFilter] = useState('')
 
     // Report states
-    const [activeTab, setActiveTab] = useState<'editor' | 'report'>('editor')
+    const [savedTab, setSavedTab] = usePersistentState<WheelTab>('business-wheel-tab', 'editor', ['editor', 'report'])
+    const activeTab: WheelTab = isParticipantMode ? 'editor' : savedTab
     const [allEntries, setAllEntries] = useState<BusinessWheelEntry[]>([])
     const [isReportLoading, setIsReportLoading] = useState(false)
-    const [searchTerm, setSearchTerm] = useState('')
-    const [programFilter, setProgramFilter] = useState('all')
 
     // Fetch active participants (admin mode only)
     useEffect(() => {
@@ -306,16 +275,17 @@ export function BusinessWheelPage({ participantId: fixedParticipantId, participa
         fetchEntry()
     }, [fetchEntry])
 
+    const pid = fixedParticipantId || selectedParticipantId
+
     // Save
     const handleSave = async () => {
         const pid = fixedParticipantId || selectedParticipantId
         if (!pid) {
-            alert('Пожалуйста, выберите участника')
+            toast.error('Сначала выберите участника')
             return
         }
 
         setIsSaving(true)
-        setSaveStatus('idle')
 
         try {
             const res = await fetch('/api/business-wheel', {
@@ -334,21 +304,18 @@ export function BusinessWheelPage({ participantId: fixedParticipantId, participa
                 throw new Error(result?.error || 'Не удалось сохранить')
             }
 
-            setSaveStatus('success')
-            setTimeout(() => setSaveStatus('idle'), 3000)
+            toast.success('Колесо бизнеса сохранено', { description: `${month} ${year}` })
             setHasUnsavedChanges(false)
             fetchReportData()
         } catch (e: any) {
-            setSaveStatus('error')
-            let userMsg = e.message || 'Неизвестная ошибка'
-            if (userMsg.includes('violates foreign key constraint')) {
-                userMsg = 'Ваш аккаунт персонала не связан с записью участника в базе данных. Пожалуйста, обратитесь к администратору или примените SQL-миграцию.'
-            }
-            alert('Ошибка при сохранении: ' + userMsg)
+            toast.error('Не удалось сохранить', { description: saveErrorMessage(e) })
         } finally {
             setIsSaving(false)
         }
     }
+
+    useSaveShortcut(handleSave, activeTab === 'editor' && !!pid && !isSaving)
+    useBeforeUnload(hasUnsavedChanges)
 
     // Toggle checklist item
     const toggleItem = (itemId: string) => {
@@ -384,6 +351,18 @@ export function BusinessWheelPage({ participantId: fixedParticipantId, participa
         setHasUnsavedChanges(true)
     }
 
+    const resetAll = async () => {
+        const ok = await confirm({
+            title: 'Снять все отметки?',
+            description: `Все пункты за ${month.toLowerCase()} ${year} станут неотмеченными. Изменение применится после сохранения.`,
+            confirmText: 'Снять все',
+            destructive: true,
+        })
+        if (!ok) return
+        setCheckedItems({})
+        setHasUnsavedChanges(true)
+    }
+
     // Calculate dynamic scores for the Radar chart
     const categoryScores = useMemo(() => {
         const scores: Record<number, number> = {}
@@ -404,659 +383,304 @@ export function BusinessWheelPage({ participantId: fixedParticipantId, participa
     // Recharts Data
     const chartData = useMemo(() => {
         return BUSINESS_CATEGORIES.map(cat => ({
-            category: cat.name.replace(/^\d+\.\s+/, ''), // Strip the number prefix for clean labels
+            category: shortName(cat.name), // Strip the number prefix for clean labels
             checked: categoryScores[cat.id] || 0,
             ideal: 7 // Max checkpoints per category is 7
         }))
     }, [categoryScores])
 
     // Report table processing
-    const uniquePrograms = Array.from(new Set(participants.map(p => p.program?.name).filter(Boolean)))
-
-    const reportRows = useMemo(() => {
-        return participants
-            .filter(p => {
-                const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase())
-                const matchesProgram = programFilter === 'all' || p.program?.name === programFilter
-                return matchesSearch && matchesProgram
+    const curMonthName = MONTHS[new Date().getMonth()]
+    const reportRows: FillRow[] = useMemo(() => {
+        return participants.map(p => {
+            const userEntries = allEntries.filter(e => e.participant_id === p.id && e.participant_id !== TEMPLATE_ID)
+            const filledMonths = MONTHS.filter(m => {
+                const entry = userEntries.find(e => e.month === m)
+                return entry && Object.keys(entry.checked_items || {}).length > 0
             })
-            .map(p => {
-                const userEntries = allEntries.filter(e => e.participant_id === p.id && e.participant_id !== TEMPLATE_ID)
-                const filledMonths = MONTHS.filter(m => {
-                    const entry = userEntries.find(e => e.month === m)
-                    return entry && Object.keys(entry.checked_items || {}).length > 0
-                })
-                return {
-                    participant: p,
-                    filledMonths,
-                    count: filledMonths.length
-                }
-            })
-    }, [participants, allEntries, searchTerm, programFilter])
+            return {
+                participant: p,
+                count: filledMonths.length,
+                periods: filledMonths,
+                current: year === new Date().getFullYear() && filledMonths.includes(curMonthName),
+            }
+        })
+    }, [participants, allEntries, year, curMonthName])
 
     const overallPercentage = Math.round((totalChecked / 70) * 100)
-    const overallStrokeDashoffset = 201.06 - (201.06 * overallPercentage) / 100
+
+    /** Run `fn` only if there is nothing to lose, or the user agrees to drop it. */
+    const guard = async (fn: () => void) => {
+        if (hasUnsavedChanges) {
+            const ok = await confirm({
+                title: 'Уйти без сохранения?',
+                description: 'Отметки за этот месяц пропадут.',
+                confirmText: 'Не сохранять',
+                destructive: true,
+            })
+            if (!ok) return
+        }
+        fn()
+    }
+
+    const openFromReport = (row: FillRow) =>
+        guard(() => {
+            setSelectedParticipantId(row.participant.id)
+            setSavedTab('editor')
+            if (row.periods.length > 0) {
+                setMonth(row.periods[row.periods.length - 1])
+            }
+        })
+
+    // Month stepper that crosses year boundaries (within the supported years)
+    const mIdx = MONTHS.indexOf(month)
+    const canPrev = mIdx > 0 || year > YEARS[0]
+    const canNext = mIdx < 11 || year < YEARS[YEARS.length - 1]
+    const step = (dir: -1 | 1) =>
+        guard(() => {
+            const next = mIdx + dir
+            if (next < 0) {
+                setYear(year - 1)
+                setMonth(MONTHS[11])
+            } else if (next > 11) {
+                setYear(year + 1)
+                setMonth(MONTHS[0])
+            } else {
+                setMonth(MONTHS[next])
+            }
+        })
+    const now = new Date()
+    const isNow = year === now.getFullYear() && mIdx === now.getMonth()
+
+    // Search filters the checklist (presentation only)
+    const q = highlightFilter.trim().toLowerCase()
+    const visibleCategories = BUSINESS_CATEGORIES.map(cat => ({
+        ...cat,
+        visibleItems: q
+            ? cat.items.filter(i => i.label.toLowerCase().includes(q) || cat.name.toLowerCase().includes(q))
+            : cat.items,
+    })).filter(c => c.visibleItems.length > 0)
 
     return (
-        <div className="p-3 sm:p-6 space-y-4 sm:space-y-6 min-h-full bg-background/50">
-            {/* Header Title */}
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-border pb-3.5">
-                <div>
-                    <h1 className="text-xl sm:text-3xl font-extrabold tracking-tight text-foreground flex items-center gap-2">
-                        <span className="text-2xl sm:text-4xl animate-pulse">🏢</span>
-                        Колесо бизнеса
-                        {isParticipantMode && participantName && (
-                            <Badge variant="outline" className="ml-1.5 text-xs font-bold py-0.5 px-2 border-indigo-500/30 text-indigo-600 dark:text-indigo-400 bg-indigo-500/5">
-                                {participantName}
-                            </Badge>
-                        )}
-                    </h1>
-                    <p className="text-xs sm:text-sm text-muted-foreground mt-1 font-medium">Интерактивный аудит 10 ключевых сфер вашего бизнеса по 7 чек-поинтам в каждой</p>
-                </div>
+        <PageContainer>
+            <PageHeader
+                title="Колесо бизнеса"
+                description={
+                    isParticipantMode
+                        ? `${participantName ? participantName + ' · ' : ''}Отметьте, что уже есть в вашем бизнесе: 10 направлений по 7 пунктов`
+                        : 'Аудит бизнеса участников: 10 направлений по 7 пунктов'
+                }
+            />
 
-                <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto justify-end">
-                    {/* Period Pickers */}
-                    <div className="flex items-center gap-2 bg-card px-3 py-1.5 rounded-lg border border-border shadow-sm">
-                        <select
-                            value={year}
-                            onChange={e => { setYear(Number(e.target.value)); setHasUnsavedChanges(true) }}
-                            className="bg-transparent border-none text-xs font-bold text-foreground focus:outline-none cursor-pointer p-0.5"
-                        >
-                            {[2025, 2026, 2027, 2028].map(y => (
-                                <option key={y} value={y} className="bg-card text-foreground">{y} год</option>
-                            ))}
-                        </select>
-                        <span className="text-muted-foreground/30 font-light">|</span>
-                        <select
-                            value={month}
-                            onChange={e => { setMonth(e.target.value); setHasUnsavedChanges(true) }}
-                            className="bg-transparent border-none text-xs font-bold text-foreground focus:outline-none cursor-pointer p-0.5"
-                        >
-                            {MONTHS.map(m => (
-                                <option key={m} value={m} className="bg-card text-foreground">{m}</option>
-                            ))}
-                        </select>
-                    </div>
-
-                    {activeTab === 'editor' && saveStatus === 'success' && (
-                        <span className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400 bg-green-500/10 border border-green-500/20 px-3 py-1.5 rounded-lg animate-in fade-in zoom-in duration-300 font-semibold">
-                            <CheckCircle2 className="w-4 h-4" /> Изменения сохранены!
-                        </span>
-                    )}
-                    {activeTab === 'editor' && saveStatus === 'error' && (
-                        <span className="flex items-center gap-1 text-xs text-red-600 dark:text-red-400 bg-red-500/10 border border-red-500/20 px-3 py-1.5 rounded-lg animate-in fade-in zoom-in duration-300 font-semibold">
-                            <AlertCircle className="w-4 h-4" /> Ошибка сохранения
-                        </span>
-                    )}
-
-                    {activeTab === 'editor' && (
-                        <Button
-                            onClick={handleSave}
-                            disabled={isSaving || !selectedParticipantId}
-                            size="default"
-                            className="gap-2 font-bold bg-indigo-600 hover:bg-indigo-500 text-xs shadow-md px-5 py-2 transition-all active:scale-95 text-white"
-                        >
-                            {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                            {isSaving ? 'Сохранение...' : 'Сохранить изменения'}
-                        </Button>
-                    )}
-                </div>
-            </div>
-
-            {/* Tab Links (Admin Only) */}
             {!isParticipantMode && (
-                <div className="flex border-b border-border/80 gap-1">
-                    <button
-                        onClick={() => setActiveTab('editor')}
-                        className={`px-5 py-2.5 border-b-2 text-xs font-bold transition-all relative ${activeTab === 'editor'
-                            ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400'
-                            : 'border-transparent text-muted-foreground hover:text-foreground'
-                        }`}
-                    >
-                        Конструктор чек-листа
-                        {hasUnsavedChanges && (
-                            <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
-                        )}
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('report')}
-                        className={`px-5 py-2.5 border-b-2 text-xs font-bold transition-all ${activeTab === 'report'
-                            ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400'
-                            : 'border-transparent text-muted-foreground hover:text-foreground'
-                        }`}
-                    >
-                        Отчет по заполнению
-                    </button>
-                </div>
+                <WheelTabs value={activeTab} onChange={t => setSavedTab(t)} dirty={hasUnsavedChanges} />
             )}
 
-            {activeTab === 'editor' ? (
-                <div className="space-y-5">
-                    {/* User Selection & Highlighting (Admin/User Mode) */}
-                    <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-center">
-                        {/* Selector (Admin Only) */}
-                        {!isParticipantMode ? (
-                            <div className="md:col-span-6 bg-card border border-border p-3.5 rounded-xl shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                                <div>
-                                    <h3 className="text-xs font-extrabold text-foreground uppercase tracking-wider">Выбор участника</h3>
-                                    <p className="text-[10px] text-muted-foreground mt-0.5">Выберите анкету для заполнения</p>
-                                </div>
-                                <select
-                                    value={selectedParticipantId}
-                                    onChange={e => { setSelectedParticipantId(e.target.value); setHasUnsavedChanges(false) }}
-                                    className="w-full sm:w-[280px] px-3 py-2 bg-background border border-border rounded-lg text-foreground text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/30 font-semibold shadow-sm"
-                                >
-                                    <option value="">— Выберите участника —</option>
-                                    <option value={TEMPLATE_ID}>⚙️ Базовый шаблон (для всех)</option>
-                                    {participants.map(p => (
-                                        <option key={p.id} value={p.id}>
-                                            {p.name} {p.program?.name ? `(${p.program.name})` : ''}
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
-                        ) : (
-                            <div className="md:col-span-6" />
+            {activeTab === 'report' ? (
+                <FillReport
+                    rows={reportRows}
+                    loading={isReportLoading}
+                    outOf={12}
+                    unit={['месяц', 'месяца', 'месяцев']}
+                    currentLabel="в этом месяце"
+                    onOpen={openFromReport}
+                    toolbarExtra={<YearSelect value={year} onChange={y => guard(() => setYear(y))} />}
+                    maxBadges={12}
+                />
+            ) : (
+                <>
+                    {/* Controls */}
+                    <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+                        {!isParticipantMode && (
+                            <ParticipantPicker
+                                participants={participants}
+                                value={selectedParticipantId}
+                                onChange={id => guard(() => setSelectedParticipantId(id))}
+                            />
                         )}
-
-                        {/* Search Checkpoints Filter */}
-                        {selectedParticipantId && (
-                            <div className="md:col-span-6 bg-card border border-border p-3.5 rounded-xl shadow-sm flex items-center gap-3">
-                                <div className="relative flex-1">
-                                    <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground/60" />
-                                    <Input
-                                        placeholder="Поиск по чек-поинтам (например: CRM, SWOT, план)..."
-                                        value={highlightFilter}
-                                        onChange={e => setHighlightFilter(e.target.value)}
-                                        className="pl-9 h-9 text-xs border-border bg-background focus-visible:ring-indigo-500/30 rounded-lg"
-                                    />
-                                    {highlightFilter && (
-                                        <button 
-                                            onClick={() => setHighlightFilter('')}
-                                            className="absolute right-3 top-2.5 text-muted-foreground/60 hover:text-foreground text-xs"
-                                        >
-                                            <X className="w-4 h-4" />
-                                        </button>
-                                    )}
-                                </div>
-                            </div>
+                        {pid && (
+                            <PeriodStepper
+                                label={`${month} ${year}`}
+                                onPrev={() => step(-1)}
+                                onNext={() => step(1)}
+                                prevDisabled={!canPrev}
+                                nextDisabled={!canNext}
+                                onReset={
+                                    !isNow && YEARS.includes(now.getFullYear())
+                                        ? () => guard(() => { setYear(now.getFullYear()); setMonth(MONTHS[now.getMonth()]) })
+                                        : undefined
+                                }
+                            />
+                        )}
+                        {pid && (
+                            <SearchInput
+                                value={highlightFilter}
+                                onChange={setHighlightFilter}
+                                placeholder="Найти пункт: CRM, SWOT…"
+                                className="sm:ml-auto sm:w-72 [&_input]:max-sm:h-9"
+                            />
                         )}
                     </div>
 
-                    {!selectedParticipantId && !isParticipantMode ? (
-                        <div className="flex flex-col items-center justify-center py-24 gap-4 text-muted-foreground bg-card border border-dashed border-border rounded-2xl shadow-sm">
-                            <div className="p-4 bg-indigo-500/5 rounded-full border border-indigo-500/10 text-indigo-500">
-                                <BarChart3 className="w-12 h-12" />
-                            </div>
-                            <h3 className="text-lg font-bold text-foreground">Выберите участника для аудита</h3>
-                            <p className="text-xs text-center max-w-sm text-muted-foreground mt-0.5 leading-relaxed">
-                                Выберите студента или базовый шаблон в выпадающем списке выше, чтобы открыть интерактивный чек-лист и радар-диаграмму его бизнеса.
-                            </p>
-                        </div>
+                    {!pid ? (
+                        <Panel>
+                            <EmptyState
+                                icon={Briefcase}
+                                title="Выберите участника"
+                                description="Найдите участника в списке выше, чтобы открыть его чек-лист и диаграмму бизнеса."
+                                action={
+                                    <Button variant="outline" size="sm" onClick={() => setSavedTab('report')}>
+                                        Кто уже заполнил
+                                    </Button>
+                                }
+                            />
+                        </Panel>
                     ) : (
-                        <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
-                            {/* Editor Checklist Grid */}
-                            <div className="xl:col-span-8 space-y-6">
+                        <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
+                            {/* Checklist */}
+                            <div className="min-w-0">
                                 {isLoading ? (
-                                    <div className="flex flex-col items-center justify-center py-32 gap-3 text-muted-foreground bg-card border border-border rounded-2xl shadow-sm">
-                                        <Loader2 className="w-10 h-10 animate-spin text-indigo-600" />
-                                        <p className="text-xs font-semibold">Загрузка данных чек-листа бизнеса...</p>
+                                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                                        {Array.from({ length: 4 }).map((_, i) => (
+                                            <Panel key={i} className="space-y-3 p-4">
+                                                <Skeleton className="h-5 w-40" />
+                                                {Array.from({ length: 5 }).map((__, j) => (
+                                                    <Skeleton key={j} className="h-4 w-full" />
+                                                ))}
+                                            </Panel>
+                                        ))}
                                     </div>
+                                ) : visibleCategories.length === 0 ? (
+                                    <Panel>
+                                        <EmptyState
+                                            icon={SearchX}
+                                            title="Ничего не нашли"
+                                            description="Попробуйте другое слово"
+                                            action={<Button variant="outline" size="sm" onClick={() => setHighlightFilter('')}>Сбросить поиск</Button>}
+                                        />
+                                    </Panel>
                                 ) : (
-                                    <div className="space-y-6">
-                                        {/* Row 1 (Categories 1-5) */}
-                                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
-                                            {BUSINESS_CATEGORIES.slice(0, 5).map(cat => {
-                                                const checkedCount = cat.items.filter(item => checkedItems[item.id]).length
-                                                const percentage = Math.round((checkedCount / 7) * 100)
-                                                const strokeDashoffset = 50.26 - (50.26 * percentage) / 100
-
-                                                return (
-                                                    <Card key={cat.id} className="border-border hover:shadow-md transition-all duration-300 overflow-hidden flex flex-col group rounded-xl">
-                                                        {/* Header banner */}
-                                                        <div className={`p-3 border-b flex justify-between items-center transition-all ${cat.bgHeader} border-border/40`}>
-                                                            <div className="flex flex-col truncate pr-1">
-                                                                <span className="font-extrabold text-xs tracking-tight truncate">{cat.name}</span>
+                                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                                        {visibleCategories.map(cat => {
+                                            const checkedCount = cat.items.filter(item => checkedItems[item.id]).length
+                                            const full = checkedCount === 7
+                                            return (
+                                                <Panel key={cat.id} id={`bw-cat-${cat.id}`} className="scroll-mt-4">
+                                                    <div className="flex items-center gap-3 border-b px-4 py-3">
+                                                        <span className="num flex size-7 shrink-0 items-center justify-center rounded-md bg-muted text-xs font-medium text-muted-foreground">
+                                                            {cat.id}
+                                                        </span>
+                                                        <div className="min-w-0 flex-1">
+                                                            <div className="flex items-baseline justify-between gap-2">
+                                                                <h3 className="truncate font-medium">{shortName(cat.name)}</h3>
+                                                                <span className={cn('num shrink-0 text-sm', full ? 'text-success' : 'text-muted-foreground')}>
+                                                                    {checkedCount} из 7
+                                                                </span>
                                                             </div>
-
-                                                            {/* Custom Animated Progress Ring */}
-                                                            <div className="flex items-center gap-1">
-                                                                <button
-                                                                    onClick={() => toggleCategoryAll(cat.id, checkedCount, cat.items)}
-                                                                    className="opacity-70 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-muted text-muted-foreground/60 hover:text-foreground touch-manipulation"
-                                                                    title={checkedCount === 7 ? "Сбросить все" : "Выбрать все"}
-                                                                >
-                                                                    {checkedCount === 7 ? <X className="w-3 h-3" /> : <Check className="w-3 h-3" />}
-                                                                </button>
-                                                                
-                                                                <div className="relative flex items-center justify-center w-7 h-7 flex-shrink-0">
-                                                                    <svg className="w-7 h-7 transform -rotate-90">
-                                                                        <circle
-                                                                            cx="14"
-                                                                            cy="14"
-                                                                            r="8"
-                                                                            className="stroke-muted/30 dark:stroke-muted/10 fill-none"
-                                                                            strokeWidth="2"
-                                                                        />
-                                                                        <circle
-                                                                            cx="14"
-                                                                            cy="14"
-                                                                            r="8"
-                                                                            className="fill-none transition-all duration-500 ease-in-out"
-                                                                            strokeWidth="2.2"
-                                                                            strokeDasharray="50.26"
-                                                                            strokeDashoffset={strokeDashoffset}
-                                                                            stroke={cat.color}
-                                                                            strokeLinecap="round"
-                                                                        />
-                                                                    </svg>
-                                                                    <span className="absolute text-[8.5px] font-extrabold text-foreground">
-                                                                        {checkedCount}
-                                                                    </span>
-                                                                </div>
-                                                            </div>
+                                                            <Meter value={checkedCount} max={7} tone={full ? 'success' : 'primary'} className="mt-1.5" />
                                                         </div>
-
-                                                        {/* Items list */}
-                                                        <div className="p-2.5 space-y-2 flex-1 bg-card/60">
-                                                            {cat.items.map(item => {
-                                                                const isChecked = !!checkedItems[item.id]
-                                                                const isHighlighted = highlightFilter
-                                                                    ? item.label.toLowerCase().includes(highlightFilter.toLowerCase())
-                                                                    : false
-                                                                const isDimmed = highlightFilter && !isHighlighted
-
-                                                                return (
-                                                                    <div
-                                                                        key={item.id}
+                                                    </div>
+                                                    <ul className="py-1">
+                                                        {cat.visibleItems.map(item => {
+                                                            const isChecked = !!checkedItems[item.id]
+                                                            return (
+                                                                <li key={item.id}>
+                                                                    <button
+                                                                        type="button"
+                                                                        role="checkbox"
+                                                                        aria-checked={isChecked}
                                                                         onClick={() => toggleItem(item.id)}
-                                                                        className={`group/item flex items-start gap-2.5 p-2 rounded-lg cursor-pointer transition-all duration-200 select-none border-l-2 ${
-                                                                            isChecked 
-                                                                                ? 'shadow-sm' 
-                                                                                : 'border-transparent hover:bg-muted/40'
-                                                                        } ${isDimmed ? 'opacity-30 scale-95' : 'opacity-100 scale-100'} ${
-                                                                            isHighlighted ? 'ring-2 ring-indigo-500/30 dark:ring-indigo-400/30' : ''
-                                                                        }`}
-                                                                        style={isChecked ? { borderLeftColor: cat.color, backgroundColor: `${cat.color}08` } : {}}
+                                                                        className="flex min-h-11 w-full items-start gap-3 px-4 py-2.5 text-left text-sm transition-colors outline-none hover:bg-accent focus-visible:bg-accent sm:min-h-0 sm:py-2"
                                                                     >
-                                                                        {/* Custom Checkbox */}
-                                                                        <div 
-                                                                            className={`flex-shrink-0 mt-0.5 w-4 h-4 rounded border flex items-center justify-center transition-all duration-200 ${
-                                                                                isChecked 
-                                                                                    ? 'border-transparent text-white' 
-                                                                                    : 'border-muted-foreground/30 bg-background group-hover/item:border-muted-foreground/60'
-                                                                            }`}
-                                                                            style={isChecked ? { backgroundColor: cat.color } : {}}
-                                                                        >
-                                                                            {isChecked && (
-                                                                                <svg className="w-2.5 h-2.5 fill-current stroke-white stroke-2" viewBox="0 0 20 20">
-                                                                                    <path d="M0 11l2-2 5 5L18 3l2 2L7 18z" />
-                                                                                </svg>
+                                                                        <span
+                                                                            className={cn(
+                                                                                'mt-px flex size-[18px] shrink-0 items-center justify-center rounded-[5px] border transition-colors',
+                                                                                isChecked
+                                                                                    ? 'border-primary bg-primary text-primary-foreground'
+                                                                                    : 'border-input bg-card'
                                                                             )}
-                                                                        </div>
-                                                                        <span className={`text-[11px] leading-tight font-semibold transition-colors ${
-                                                                            isChecked 
-                                                                                ? 'text-foreground' 
-                                                                                : 'text-muted-foreground/90 group-hover/item:text-foreground'
-                                                                        }`}>
-                                                                            {item.label}
-                                                                        </span>
-                                                                    </div>
-                                                                )
-                                                            })}
-                                                        </div>
-                                                    </Card>
-                                                )
-                                            })}
-                                        </div>
-
-                                        {/* Row 2 (Categories 6-10) */}
-                                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
-                                            {BUSINESS_CATEGORIES.slice(5, 10).map(cat => {
-                                                const checkedCount = cat.items.filter(item => checkedItems[item.id]).length
-                                                const percentage = Math.round((checkedCount / 7) * 100)
-                                                const strokeDashoffset = 50.26 - (50.26 * percentage) / 100
-
-                                                return (
-                                                    <Card key={cat.id} className="border-border hover:shadow-md transition-all duration-300 overflow-hidden flex flex-col group rounded-xl">
-                                                        {/* Header banner */}
-                                                        <div className={`p-3 border-b flex justify-between items-center transition-all ${cat.bgHeader} border-border/40`}>
-                                                            <div className="flex flex-col truncate pr-1">
-                                                                <span className="font-extrabold text-xs tracking-tight truncate">{cat.name}</span>
-                                                            </div>
-
-                                                            {/* Custom Animated Progress Ring */}
-                                                            <div className="flex items-center gap-1">
-                                                                <button
-                                                                    onClick={() => toggleCategoryAll(cat.id, checkedCount, cat.items)}
-                                                                    className="opacity-70 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-muted text-muted-foreground/60 hover:text-foreground touch-manipulation"
-                                                                    title={checkedCount === 7 ? "Сбросить все" : "Выбрать все"}
-                                                                >
-                                                                    {checkedCount === 7 ? <X className="w-3 h-3" /> : <Check className="w-3 h-3" />}
-                                                                </button>
-                                                                
-                                                                <div className="relative flex items-center justify-center w-7 h-7 flex-shrink-0">
-                                                                    <svg className="w-7 h-7 transform -rotate-90">
-                                                                        <circle
-                                                                            cx="14"
-                                                                            cy="14"
-                                                                            r="8"
-                                                                            className="stroke-muted/30 dark:stroke-muted/10 fill-none"
-                                                                            strokeWidth="2"
-                                                                        />
-                                                                        <circle
-                                                                            cx="14"
-                                                                            cy="14"
-                                                                            r="8"
-                                                                            className="fill-none transition-all duration-500 ease-in-out"
-                                                                            strokeWidth="2.2"
-                                                                            strokeDasharray="50.26"
-                                                                            strokeDashoffset={strokeDashoffset}
-                                                                            stroke={cat.color}
-                                                                            strokeLinecap="round"
-                                                                        />
-                                                                    </svg>
-                                                                    <span className="absolute text-[8.5px] font-extrabold text-foreground">
-                                                                        {checkedCount}
-                                                                    </span>
-                                                                </div>
-                                                            </div>
-                                                        </div>
-
-                                                        {/* Items list */}
-                                                        <div className="p-2.5 space-y-2 flex-1 bg-card/60">
-                                                            {cat.items.map(item => {
-                                                                const isChecked = !!checkedItems[item.id]
-                                                                const isHighlighted = highlightFilter
-                                                                    ? item.label.toLowerCase().includes(highlightFilter.toLowerCase())
-                                                                    : false
-                                                                const isDimmed = highlightFilter && !isHighlighted
-
-                                                                return (
-                                                                    <div
-                                                                        key={item.id}
-                                                                        onClick={() => toggleItem(item.id)}
-                                                                        className={`group/item flex items-start gap-2.5 p-2 rounded-lg cursor-pointer transition-all duration-200 select-none border-l-2 ${
-                                                                            isChecked 
-                                                                                ? 'shadow-sm' 
-                                                                                : 'border-transparent hover:bg-muted/40'
-                                                                        } ${isDimmed ? 'opacity-30 scale-95' : 'opacity-100 scale-100'} ${
-                                                                            isHighlighted ? 'ring-2 ring-indigo-500/30 dark:ring-indigo-400/30' : ''
-                                                                        }`}
-                                                                        style={isChecked ? { borderLeftColor: cat.color, backgroundColor: `${cat.color}08` } : {}}
-                                                                    >
-                                                                        {/* Custom Checkbox */}
-                                                                        <div 
-                                                                            className={`flex-shrink-0 mt-0.5 w-4 h-4 rounded border flex items-center justify-center transition-all duration-200 ${
-                                                                                isChecked 
-                                                                                    ? 'border-transparent text-white' 
-                                                                                    : 'border-muted-foreground/30 bg-background group-hover/item:border-muted-foreground/60'
-                                                                            }`}
-                                                                            style={isChecked ? { backgroundColor: cat.color } : {}}
                                                                         >
-                                                                            {isChecked && (
-                                                                                <svg className="w-2.5 h-2.5 fill-current stroke-white stroke-2" viewBox="0 0 20 20">
-                                                                                    <path d="M0 11l2-2 5 5L18 3l2 2L7 18z" />
-                                                                                </svg>
-                                                                            )}
-                                                                        </div>
-                                                                        <span className={`text-[11px] leading-tight font-semibold transition-colors ${
-                                                                            isChecked 
-                                                                                ? 'text-foreground' 
-                                                                                : 'text-muted-foreground/90 group-hover/item:text-foreground'
-                                                                        }`}>
-                                                                            {item.label}
+                                                                            {isChecked && <Check className="size-3.5" strokeWidth={3} />}
                                                                         </span>
-                                                                    </div>
-                                                                )
-                                                            })}
+                                                                        <span className={cn('leading-snug', !isChecked && 'text-foreground/85')}>{item.label}</span>
+                                                                    </button>
+                                                                </li>
+                                                            )
+                                                        })}
+                                                    </ul>
+                                                    {!q && (
+                                                        <div className="border-t px-2 py-1.5">
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="sm"
+                                                                className="w-full text-muted-foreground max-sm:h-10"
+                                                                onClick={() => toggleCategoryAll(cat.id, checkedCount, cat.items)}
+                                                            >
+                                                                {full ? 'Снять все' : 'Отметить все'}
+                                                            </Button>
                                                         </div>
-                                                    </Card>
-                                                )
-                                            })}
-                                        </div>
+                                                    )}
+                                                </Panel>
+                                            )
+                                        })}
                                     </div>
                                 )}
                             </div>
 
-                            {/* Radar Visualization Column */}
-                            <div className="xl:col-span-4 space-y-6">
-                                <Card className="p-5 border-border shadow-md flex flex-col items-center xl:sticky xl:top-4 bg-card/75 backdrop-blur-md">
-                                    <div className="w-full flex items-center justify-between mb-3 border-b border-border/50 pb-3">
-                                        <h3 className="font-extrabold text-sm text-foreground flex items-center gap-1.5">
-                                            <Sparkles className="w-4 h-4 text-amber-500 animate-spin" style={{ animationDuration: '6s' }} />
-                                            Диаграмма бизнеса
-                                        </h3>
-                                        {totalChecked > 0 && (
-                                            <Button 
-                                                variant="ghost" 
-                                                size="sm"
-                                                onClick={() => { setCheckedItems({}); setHasUnsavedChanges(true) }}
-                                                className="h-6 text-[10px] font-bold text-muted-foreground hover:text-red-500 px-2 rounded"
-                                            >
-                                                Сбросить всё
+                            {/* Overview + radar */}
+                            <Panel className="xl:sticky xl:top-4">
+                                <PanelHeading
+                                    title="Диаграмма бизнеса"
+                                    description={`${month} ${year}`}
+                                    actions={
+                                        totalChecked > 0 && (
+                                            <Button variant="ghost" size="xs" onClick={resetAll} className="text-muted-foreground hover:bg-destructive-soft hover:text-destructive">
+                                                Снять все
                                             </Button>
-                                        )}
-                                    </div>
-                                    
-                                    <div className="w-full h-[320px]">
-                                        <ResponsiveContainer width="100%" height="100%">
-                                            <RadarChart cx="50%" cy="50%" outerRadius="80%" data={chartData}>
-                                                <PolarGrid stroke="hsl(var(--muted-foreground) / 0.18)" />
-                                                <PolarAngleAxis
-                                                    dataKey="category"
-                                                    tick={{ fill: 'currentColor', fontSize: 9, fontWeight: 600 }}
-                                                    className="text-muted-foreground"
-                                                />
-                                                <PolarRadiusAxis angle={30} domain={[0, 7]} tick={{ fontSize: 8 }} />
-                                                
-                                                {/* Ideal Boundary Line (7 items) */}
-                                                <Radar
-                                                    name="Максимум"
-                                                    dataKey="ideal"
-                                                    stroke="#94a3b8"
-                                                    fill="none"
-                                                    strokeDasharray="4 4"
-                                                    strokeWidth={1.5}
-                                                />
-
-                                                {/* Actual Checked Items */}
-                                                <Radar
-                                                    name="Уровень бизнеса"
-                                                    dataKey="checked"
-                                                    stroke="#6366f1"
-                                                    fill="url(#radarGradient)"
-                                                    fillOpacity={0.25}
-                                                    strokeWidth={2.5}
-                                                />
-                                                <defs>
-                                                    <linearGradient id="radarGradient" x1="0" y1="0" x2="0" y2="1">
-                                                        <stop offset="0%" stopColor="#4f46e5" stopOpacity={0.4} />
-                                                        <stop offset="100%" stopColor="#c084fc" stopOpacity={0.1} />
-                                                    </linearGradient>
-                                                </defs>
-                                                <Tooltip
-                                                    contentStyle={{
-                                                        backgroundColor: 'hsl(var(--background))',
-                                                        borderColor: 'hsl(var(--border))',
-                                                        borderRadius: '12px',
-                                                        fontSize: '11px',
-                                                        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.08)'
-                                                    }}
-                                                />
-                                                <Legend wrapperStyle={{ fontSize: '9px', marginTop: '10px', fontWeight: 600 }} />
-                                            </RadarChart>
-                                        </ResponsiveContainer>
-                                    </div>
-
-                                    {/* Overall Dynamic Circular Progress */}
-                                    <div className="w-full mt-4 border-t border-border/50 pt-5 flex flex-col items-center">
-                                        <div className="relative flex items-center justify-center w-28 h-28 my-1">
-                                            <svg className="w-28 h-28 transform -rotate-90">
-                                                <circle
-                                                    cx="56"
-                                                    cy="56"
-                                                    r="32"
-                                                    className="stroke-muted/30 dark:stroke-muted/10 fill-none"
-                                                    strokeWidth="6"
-                                                />
-                                                <circle
-                                                    cx="56"
-                                                    cy="56"
-                                                    r="32"
-                                                    className="fill-none transition-all duration-700 ease-in-out"
-                                                    strokeWidth="7"
-                                                    strokeDasharray="201.06"
-                                                    strokeDashoffset={overallStrokeDashoffset}
-                                                    stroke="url(#progressGradient)"
-                                                    strokeLinecap="round"
-                                                />
-                                                <defs>
-                                                    <linearGradient id="progressGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                                                        <stop offset="0%" stopColor="#6366f1" />
-                                                        <stop offset="100%" stopColor="#a855f7" />
-                                                    </linearGradient>
-                                                </defs>
-                                            </svg>
-                                            <div className="absolute text-center">
-                                                <div className="text-2xl font-extrabold text-indigo-600 dark:text-indigo-400 leading-none">
-                                                    {totalChecked}
-                                                </div>
-                                                <div className="text-[9px] text-muted-foreground font-bold uppercase tracking-widest mt-1">
-                                                    из 70
-                                                </div>
-                                                <div className="text-[10px] font-bold text-foreground/80 leading-none mt-0.5">
-                                                    {overallPercentage}%
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        <div className="text-[10px] text-muted-foreground uppercase font-extrabold tracking-widest mt-3">
-                                            Пройдено чек-поинтов
-                                        </div>
-                                    </div>
-                                </Card>
-                            </div>
-                        </div>
-                    )}
-                </div>
-            ) : (
-                /* Report View (Admin Only) */
-                <Card className="p-5 border-border shadow-md space-y-6 bg-card">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border/50 pb-4">
-                        <div>
-                            <h2 className="text-lg font-extrabold text-foreground">Отчет по заполнению</h2>
-                            <p className="text-[11px] text-muted-foreground mt-0.5">
-                                Участники и месяцы, в которых заполнялся чек-лист колеса бизнеса в {year} году
-                            </p>
-                        </div>
-                        <div className="flex flex-col sm:flex-row gap-2.5">
-                            <div className="relative">
-                                <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground/60" />
-                                <Input
-                                    placeholder="Поиск по имени..."
-                                    value={searchTerm}
-                                    onChange={e => setSearchTerm(e.target.value)}
-                                    className="pl-8.5 w-full sm:w-[200px] h-9 text-xs border-border bg-background focus-visible:ring-indigo-500/30 rounded-lg"
+                                        )
+                                    }
                                 />
-                            </div>
-                            <select
-                                value={programFilter}
-                                onChange={e => setProgramFilter(e.target.value)}
-                                className="px-3 py-1 bg-background border border-border rounded-lg text-foreground text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/30 h-9 font-semibold shadow-sm"
-                            >
-                                <option value="all">Все программы</option>
-                                {uniquePrograms.map(p => (
-                                    <option key={p} value={p}>{p}</option>
-                                ))}
-                            </select>
-                        </div>
-                    </div>
-
-                    {isReportLoading ? (
-                        <div className="flex flex-col items-center justify-center py-20 gap-2 text-muted-foreground">
-                            <Loader2 className="w-6 h-6 animate-spin text-indigo-600" />
-                            <p className="text-xs">Загрузка данных отчета...</p>
-                        </div>
-                    ) : (
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-left border-collapse">
-                                <thead>
-                                    <tr className="border-b border-border text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
-                                        <th className="py-3 px-4">Участник</th>
-                                        <th className="py-3 px-4 text-center w-[180px]">Всего заполнено месяцев</th>
-                                        <th className="py-3 px-4">Месяцы заполнения</th>
-                                        <th className="py-3 px-4 text-right w-[100px]">Действие</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-border/60 text-xs">
-                                    {reportRows.map(({ participant, filledMonths, count }) => (
-                                        <tr key={participant.id} className="hover:bg-muted/30 transition-colors">
-                                            <td className="py-3.5 px-4">
-                                                <div className="font-bold text-foreground">{participant.name}</div>
-                                                {participant.program?.name && (
-                                                    <Badge variant="secondary" className="mt-0.5 text-[9px] px-1.5 py-0 border-none font-medium">
-                                                        {participant.program.name}
-                                                    </Badge>
-                                                )}
-                                            </td>
-                                            <td className="py-3.5 px-4 text-center">
-                                                <span className={`inline-flex items-center justify-center px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                                                    count > 0 ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400' : 'bg-muted text-muted-foreground'
-                                                }`}>
-                                                    {count} из 12
-                                                </span>
-                                            </td>
-                                            <td className="py-3.5 px-4">
-                                                {count > 0 ? (
-                                                    <div className="flex flex-wrap gap-1.5">
-                                                        {filledMonths.map(m => (
-                                                            <Badge
-                                                                key={m}
-                                                                variant="outline"
-                                                                className="text-[9px] px-1.5 py-0 font-bold bg-emerald-500/5 text-emerald-600 border-emerald-500/20"
-                                                            >
-                                                                {m}
-                                                            </Badge>
-                                                        ))}
-                                                    </div>
-                                                ) : (
-                                                    <span className="text-[10px] text-muted-foreground italic">Не заполнено</span>
-                                                )}
-                                            </td>
-                                            <td className="py-3.5 px-4 text-right">
-                                                <Button
-                                                    variant="ghost"
-                                                    size="sm"
-                                                    className="gap-1 hover:text-indigo-600 hover:bg-indigo-500/10 text-muted-foreground text-[10.5px] h-7 px-2 font-bold"
-                                                    onClick={() => {
-                                                        setSelectedParticipantId(participant.id)
-                                                        setActiveTab('editor')
-                                                        if (filledMonths.length > 0) {
-                                                            setMonth(filledMonths[filledMonths.length - 1])
-                                                        }
-                                                    }}
-                                                >
-                                                    <Eye className="w-3.5 h-3.5" /> Посмотреть
-                                                </Button>
-                                            </td>
-                                        </tr>
-                                    ))}
-
-                                    {reportRows.length === 0 && (
-                                        <tr>
-                                            <td colSpan={4} className="py-10 text-center text-muted-foreground italic text-xs">
-                                                Участники не найдены
-                                            </td>
-                                        </tr>
-                                    )}
-                                </tbody>
-                            </table>
+                                <div className="space-y-2 border-b px-4 py-3">
+                                    <div className="flex items-baseline justify-between gap-2">
+                                        <p>
+                                            <span className="num text-2xl font-semibold tracking-tight">{totalChecked}</span>
+                                            <span className="num text-muted-foreground"> из 70 пунктов</span>
+                                        </p>
+                                        <span className="num text-sm font-medium text-muted-foreground">{overallPercentage}%</span>
+                                    </div>
+                                    <Meter value={totalChecked} max={70} className="h-2" />
+                                </div>
+                                <div className="px-2 pt-2 pb-3 sm:px-4">
+                                    <WheelRadar
+                                        data={chartData}
+                                        max={7}
+                                        height={320}
+                                        series={[
+                                            { key: 'ideal', name: 'Максимум', color: 'var(--muted-foreground)', dashed: true },
+                                            { key: 'checked', name: 'Уровень бизнеса', color: 'var(--chart-1)' },
+                                        ]}
+                                    />
+                                </div>
+                            </Panel>
                         </div>
                     )}
-                </Card>
+
+                    {pid && (
+                        <SaveBar dirty={hasUnsavedChanges} saving={isSaving} disabled={!selectedParticipantId} onSave={handleSave}>
+                            <div className="min-w-0">
+                                <p className="truncate font-medium">
+                                    <span className="num">{totalChecked} из 70</span>
+                                    <span className="font-normal text-muted-foreground"> · {month} {year}</span>
+                                </p>
+                                <div className="text-xs">
+                                    <SaveStatus dirty={hasUnsavedChanges} />
+                                </div>
+                            </div>
+                        </SaveBar>
+                    )}
+                </>
             )}
-        </div>
+        </PageContainer>
     )
 }
 

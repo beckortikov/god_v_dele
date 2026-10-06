@@ -1,19 +1,34 @@
 'use client'
 
-import { useEffect, useState, useCallback, useMemo } from 'react'
-import { Plus, Trash2, Save, ChevronLeft, ChevronRight, PieChart, Loader2, CheckCircle2, AlertCircle, RefreshCw, Search, Eye, Sparkles, X } from 'lucide-react'
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
+import { toast } from 'sonner'
+import { Compass, Plus, RotateCcw, Settings2, Trash2, Wand2, History } from 'lucide-react'
+import { cn } from '@/lib/utils'
+import { MONTHS_RU, MONTHS_SHORT_RU, plural } from '@/lib/format'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Skeleton } from '@/components/ui/skeleton'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { PageContainer, PageHeader, Panel } from '@/components/erp/page-header'
+import { Segmented } from '@/components/erp/segmented'
+import { EmptyState } from '@/components/erp/empty-state'
+import { useConfirm } from '@/components/erp/confirm'
+import { wheelColor } from '@/components/wheels/colors'
+import { FillReport, type FillRow } from '@/components/wheels/fill-report'
+import { Meter, PanelHeading, ParticipantPicker, PeriodStepper, SaveBar, SaveStatus, WheelTabs, type WheelTab } from '@/components/wheels/parts'
+import {
+    TEMPLATE_ID,
+    saveErrorMessage,
+    useBeforeUnload,
+    usePersistentState,
+    useSaveShortcut,
+    type WheelParticipant,
+} from '@/components/wheels/shared'
+import { SunburstChart, buildColors, groupKey } from '@/components/wheels/sunburst-chart'
 
 // ─────────────────────────── Types ───────────────────────────
-interface Participant {
-    id: string
-    name: string
-    program?: { name: string }
-    status: string
-}
+type Participant = WheelParticipant
 
 interface WheelCategory {
     id: string
@@ -23,52 +38,39 @@ interface WheelCategory {
     color: string
 }
 
-interface WheelEntry {
-    id?: string
-    participant_id: string
-    period_type: 'weekly' | 'monthly'
-    period_label: string
-    categories: WheelCategory[]
-}
-
 // ─────────────────────────── Constants ───────────────────────────
-const TEMPLATE_ID = '00000000-0000-0000-0000-000000000000'
-
-const PALETTE = [
-    '#6366f1', '#8b5cf6', '#ec4899', '#f43f5e',
-    '#f97316', '#eab308', '#22c55e', '#14b8a6',
-    '#06b6d4', '#3b82f6', '#a855f7', '#84cc16',
-]
+// `color` is kept in the saved data for compatibility; the page itself colours
+// sectors by group with theme-aware tokens (see components/wheels/colors.ts).
+const G1 = wheelColor(0)
+const G2 = wheelColor(1)
+const G3 = wheelColor(2)
+const G4 = wheelColor(3)
+const G5 = wheelColor(4)
 
 const DEFAULT_CATEGORIES: WheelCategory[] = [
-    // 1. Здоровье и Энергия (Indigo)
-    { id: '1', group: 'Здоровье и Энергия', name: 'Здоровье', value: 0, color: '#4f46e5' },
-    { id: '2', group: 'Здоровье и Энергия', name: 'Спорт', value: 0, color: '#6366f1' },
-    { id: '3', group: 'Здоровье и Энергия', name: 'Сон', value: 0, color: '#818cf8' },
-    
-    // 2. Семья и Отношения (Pink)
-    { id: '4', group: 'Семья и Отношения', name: 'Жена', value: 0, color: '#be185d' },
-    { id: '5', group: 'Семья и Отношения', name: 'Дети', value: 0, color: '#db2777' },
-    { id: '6', group: 'Семья и Отношения', name: 'Родители', value: 0, color: '#ec4899' },
-    { id: '7', group: 'Семья и Отношения', name: 'Братья / Сестры', value: 0, color: '#f472b6' },
-    { id: '8', group: 'Семья и Отношения', name: 'Родственники', value: 0, color: '#f9a8d4' },
-    
-    // 3. Бизнес и Работа (Blue)
-    { id: '9', group: 'Бизнес и Работа', name: 'Операционка', value: 0, color: '#1d4ed8' },
-    { id: '10', group: 'Бизнес и Работа', name: 'Сотрудники', value: 0, color: '#2563eb' },
-    { id: '11', group: 'Бизнес и Работа', name: 'Стратегия', value: 0, color: '#3b82f6' },
-    { id: '12', group: 'Бизнес и Работа', name: 'Маркетинг / Продажи', value: 0, color: '#60a5fa' },
-    
-    // 4. Личность и Рост (Yellow/Amber)
-    { id: '13', group: 'Личность и Рост', name: 'Учеба / Чтение', value: 0, color: '#d97706' },
-    { id: '14', group: 'Личность и Рост', name: 'Хобби / Отдых', value: 0, color: '#f59e0b' },
-    { id: '15', group: 'Личность и Рост', name: 'Личный бренд', value: 0, color: '#fbbf24' },
-    { id: '16', group: 'Личность и Рост', name: 'Активы / Финансы', value: 0, color: '#fde047' },
-    
-    // 5. Духовность (Teal/Green)
-    { id: '17', group: 'Духовность', name: 'Духовные практики', value: 0, color: '#0d9488' },
-    { id: '18', group: 'Духовность', name: 'Благотворительность', value: 0, color: '#14b8a6' },
-    { id: '19', group: 'Духовность', name: 'Окружение / Друзья', value: 0, color: '#22c55e' }
+    { id: '1', group: 'Здоровье и Энергия', name: 'Здоровье', value: 0, color: G1 },
+    { id: '2', group: 'Здоровье и Энергия', name: 'Спорт', value: 0, color: G1 },
+    { id: '3', group: 'Здоровье и Энергия', name: 'Сон', value: 0, color: G1 },
+
+    { id: '4', group: 'Семья и Отношения', name: 'Жена', value: 0, color: G2 },
+    { id: '5', group: 'Семья и Отношения', name: 'Дети', value: 0, color: G2 },
+    { id: '6', group: 'Семья и Отношения', name: 'Родители', value: 0, color: G2 },
+    { id: '7', group: 'Семья и Отношения', name: 'Братья / Сестры', value: 0, color: G2 },
+    { id: '8', group: 'Семья и Отношения', name: 'Родственники', value: 0, color: G2 },
+
+    { id: '9', group: 'Бизнес и Работа', name: 'Операционка', value: 0, color: G3 },
+    { id: '10', group: 'Бизнес и Работа', name: 'Сотрудники', value: 0, color: G3 },
+    { id: '11', group: 'Бизнес и Работа', name: 'Стратегия', value: 0, color: G3 },
+    { id: '12', group: 'Бизнес и Работа', name: 'Маркетинг / Продажи', value: 0, color: G3 },
+
+    { id: '13', group: 'Личность и Рост', name: 'Учеба / Чтение', value: 0, color: G4 },
+    { id: '14', group: 'Личность и Рост', name: 'Хобби / Отдых', value: 0, color: G4 },
+    { id: '15', group: 'Личность и Рост', name: 'Личный бренд', value: 0, color: G4 },
+    { id: '16', group: 'Личность и Рост', name: 'Активы / Финансы', value: 0, color: G4 },
+
+    { id: '17', group: 'Духовность', name: 'Духовные практики', value: 0, color: G5 },
+    { id: '18', group: 'Духовность', name: 'Благотворительность', value: 0, color: G5 },
+    { id: '19', group: 'Духовность', name: 'Окружение / Друзья', value: 0, color: G5 },
 ]
 
 function getPeriodLabel(type: 'weekly' | 'monthly', offset: number): string {
@@ -81,38 +83,59 @@ function getPeriodLabel(type: 'weekly' | 'monthly', offset: number): string {
     } else {
         d.setDate(d.getDate() + offset * 7)
         const y = d.getFullYear()
-        
+
         // Calculate ISO Week Number
         const tempDate = new Date(d.valueOf())
         tempDate.setDate(tempDate.getDate() + 4 - (tempDate.getDay() || 7))
         const yearStart = new Date(tempDate.getFullYear(), 0, 1)
         const weekNo = Math.ceil((((tempDate.getTime() - yearStart.getTime()) / 86400000) + 1) / 7)
-        
+
         const w = String(weekNo).padStart(2, '0')
         return `${y}-W${w}`
     }
 }
 
+/** Offset (in months / weeks from now) whose label equals `label`. */
+function offsetForLabel(type: 'weekly' | 'monthly', label: string): number {
+    for (let i = 0; i <= 260; i++) {
+        if (getPeriodLabel(type, -i) === label) return -i
+        if (i > 0 && getPeriodLabel(type, i) === label) return i
+    }
+    return 0
+}
+
 function formatPeriodLabel(label: string, type: 'weekly' | 'monthly'): string {
     if (!label) return ''
-    if (label === 'template') return 'Базовый шаблон'
+    if (label === 'template') return 'Шаблон · месяц'
+    if (label === 'template_weekly') return 'Шаблон · неделя'
     if (type === 'monthly') {
         const [y, m] = label.split('-')
-        const monthNames = [
-            'Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
-            'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'
-        ]
         const idx = parseInt(m, 10) - 1
-        return `${monthNames[idx] || m} ${y}`
+        return `${MONTHS_RU[idx] || m} ${y}`
     } else {
         const [y, w] = label.split('-W')
-        return `${w} неделя ${y}`
+        return `Неделя ${Number(w)}, ${y}`
     }
+}
+
+/** «25–31 авг 2026» for the week `offset` weeks from now. */
+function weekRange(offset: number): string {
+    const d = new Date()
+    d.setDate(d.getDate() + offset * 7)
+    const mon = new Date(d)
+    mon.setDate(d.getDate() - ((d.getDay() + 6) % 7))
+    const sun = new Date(mon)
+    sun.setDate(mon.getDate() + 6)
+    return mon.getMonth() === sun.getMonth()
+        ? `${mon.getDate()}–${sun.getDate()} ${MONTHS_SHORT_RU[sun.getMonth()]} ${sun.getFullYear()}`
+        : `${mon.getDate()} ${MONTHS_SHORT_RU[mon.getMonth()]} – ${sun.getDate()} ${MONTHS_SHORT_RU[sun.getMonth()]} ${sun.getFullYear()}`
 }
 
 function balanceCategories(cats: WheelCategory[]): WheelCategory[] {
     if (!Array.isArray(cats)) return []
-    return cats.map(c => ({ ...c, value: Number(c.value) || 0 }))
+    // Some old entries have categories without an id; editing one of them used
+    // to edit all of them at once. Give them a stable id.
+    return cats.map((c, i) => ({ ...c, id: c.id ?? `legacy-${i}`, value: Number(c.value) || 0 }))
 }
 
 function scaleCategoriesToMax(cats: WheelCategory[], targetMax: number): WheelCategory[] {
@@ -146,261 +169,7 @@ function scaleCategoriesToMax(cats: WheelCategory[], targetMax: number): WheelCa
     return scaled
 }
 
-// ─────────────────────────── SVG Sunburst Chart ───────────────────────────
-function SunburstChartSVG({ categories, periodType }: { categories: WheelCategory[], periodType: 'weekly' | 'monthly' }) {
-    const width = 800
-    const height = 550
-    const cx = width / 2
-    const cy = height / 2
-    
-    // Radii
-    const rOuter = 210
-    const rMid = 140
-    const rInner = 80
-
-    const total = categories.reduce((s, c) => s + (c.value || 0), 0)
-    if (total === 0 || categories.length === 0) {
-        return (
-            <div className="flex flex-col items-center justify-center h-[350px] text-muted-foreground gap-2">
-                <AlertCircle className="w-16 h-16 opacity-30" />
-                <p className="text-sm">Нет данных для графика</p>
-            </div>
-        )
-    }
-
-    const maxHours = periodType === 'weekly' ? 168 : 720
-    const percentageOfMax = Math.min(100, Math.round((total / maxHours) * 100))
-
-    const grouped = new Map<string, { value: number; color: string; items: WheelCategory[] }>()
-    categories.filter(c => c.value > 0).forEach(c => {
-        const gName = (c.group && c.group.trim() !== '') ? c.group.trim() : 'Прочее'
-        if (!grouped.has(gName)) {
-            grouped.set(gName, { value: 0, color: c.color, items: [] })
-        }
-        const g = grouped.get(gName)!
-        g.value += c.value
-        g.items.push(c)
-    })
-
-    const createArc = (startAngle: number, angle: number, radiusInner: number, radiusOuter: number) => {
-        const safeAngle = Math.min(angle, Math.PI * 2 - 0.0001)
-        const endAngle = startAngle + safeAngle
-        
-        const x1Inner = cx + radiusInner * Math.cos(startAngle)
-        const y1Inner = cy + radiusInner * Math.sin(startAngle)
-        const x2Inner = cx + radiusInner * Math.cos(endAngle)
-        const y2Inner = cy + radiusInner * Math.sin(endAngle)
-        
-        const x1Outer = cx + radiusOuter * Math.cos(startAngle)
-        const y1Outer = cy + radiusOuter * Math.sin(startAngle)
-        const x2Outer = cx + radiusOuter * Math.cos(endAngle)
-        const y2Outer = cy + radiusOuter * Math.sin(endAngle)
-        
-        const largeArc = safeAngle > Math.PI ? 1 : 0
-        
-        return [
-            `M ${x1Inner} ${y1Inner}`,
-            `L ${x1Outer} ${y1Outer}`,
-            `A ${radiusOuter} ${radiusOuter} 0 ${largeArc} 1 ${x2Outer} ${y2Outer}`,
-            `L ${x2Inner} ${y2Inner}`,
-            `A ${radiusInner} ${radiusInner} 0 ${largeArc} 0 ${x1Inner} ${y1Inner}`,
-            'Z'
-        ].join(' ')
-    }
-
-    const slices: any[] = []
-    let cumAngle = -Math.PI / 2
-
-    grouped.forEach((g, gName) => {
-        const gAngle = (g.value / total) * 2 * Math.PI
-        const gStart = cumAngle
-        const gPercentage = total > 0 ? Math.round((g.value / total) * 100) : 0
-        
-        slices.push({
-            type: 'group', name: gName, value: g.value, percentage: gPercentage, color: g.color,
-            d: createArc(gStart, gAngle, rInner, rMid),
-            midAngle: gStart + gAngle / 2,
-            angle: gAngle,
-        })
-
-        let childCumAngle = gStart
-        g.items.forEach(child => {
-            const cAngle = (child.value / total) * 2 * Math.PI
-            const cPercentage = total > 0 ? Math.round((child.value / total) * 100) : 0
-            if (cAngle > 0) {
-                slices.push({
-                    type: 'child', name: child.name, value: child.value, percentage: cPercentage, color: child.color, parent: gName,
-                    d: createArc(childCumAngle, cAngle, rMid + 3, rOuter), // Gap between circles
-                    midAngle: childCumAngle + cAngle / 2,
-                    angle: cAngle,
-                })
-            }
-            childCumAngle += cAngle
-        })
-
-        cumAngle += gAngle
-    })
-
-    const [hoveredNode, setHoveredNode] = useState<any>(null)
-
-    const labels: any[] = []
-    slices.forEach((s) => {
-        if (s.type === 'child' && s.angle >= 0.05) {
-            const isRight = Math.cos(s.midAngle) >= 0;
-            labels.push({ s, isRight, y1: 0, x1: 0 });
-        }
-    });
-    
-    const MIN_Y_DIST = 20;
-    ['right', 'left'].forEach(side => {
-        const sideLabels = labels.filter(l => (side === 'right' ? l.isRight : !l.isRight));
-        sideLabels.sort((a, b) => {
-            const yA = cy + (rOuter + 15) * Math.sin(a.s.midAngle);
-            const yB = cy + (rOuter + 15) * Math.sin(b.s.midAngle);
-            return yA - yB;
-        });
-        
-        for (let i = 1; i < sideLabels.length; i++) {
-            const prevY = sideLabels[i-1].y1 || (cy + (rOuter + 15) * Math.sin(sideLabels[i-1].s.midAngle));
-            let currY = cy + (rOuter + 15) * Math.sin(sideLabels[i].s.midAngle);
-            if (currY - prevY < MIN_Y_DIST) {
-                currY = prevY + MIN_Y_DIST;
-            }
-            sideLabels[i].y1 = currY;
-        }
-        
-        sideLabels.forEach(l => {
-            if (!l.y1) l.y1 = cy + (rOuter + 15) * Math.sin(l.s.midAngle);
-            l.x1 = cx + (rOuter + 15) * Math.cos(l.s.midAngle);
-        });
-    });
-
-    return (
-        <div className="relative w-full flex justify-center">
-            <svg viewBox={`0 0 ${width} ${height}`} className="w-full max-w-[800px] drop-shadow-sm font-sans overflow-visible" aria-label="Солнечные лучи">
-                
-                {/* Center circle progress track (dial) */}
-                <circle 
-                    cx={cx} 
-                    cy={cy} 
-                    r={rInner - 8} 
-                    className="stroke-muted/30 dark:stroke-muted/10 fill-none" 
-                    strokeWidth="3.5" 
-                />
-                
-                {/* Center circle progress value ring */}
-                <circle 
-                    cx={cx} 
-                    cy={cy} 
-                    r={rInner - 8} 
-                    className="fill-none transition-all duration-700 ease-in-out origin-center" 
-                    strokeWidth="4.5" 
-                    strokeDasharray={2 * Math.PI * (rInner - 8)}
-                    strokeDashoffset={2 * Math.PI * (rInner - 8) - (2 * Math.PI * (rInner - 8) * Math.min(percentageOfMax, 100)) / 100}
-                    stroke={total > maxHours ? "#ef4444" : "#6366f1"}
-                    strokeLinecap="round"
-                    transform={`rotate(-90 ${cx} ${cy})`}
-                />
-
-                {slices.map((s, i) => (
-                    <path
-                        key={i}
-                        d={s.d}
-                        fill={s.color}
-                        stroke="hsl(var(--background))"
-                        strokeWidth="2"
-                        className="transition-opacity duration-200 cursor-pointer outline-none hover:brightness-110"
-                        style={{
-                            opacity: hoveredNode 
-                                ? (hoveredNode.name === s.name || hoveredNode.name === s.parent || hoveredNode.parent === s.name ? 1 : 0.25)
-                                : 1
-                        }}
-                        onMouseEnter={() => setHoveredNode(s)}
-                        onMouseLeave={() => setHoveredNode(null)}
-                    />
-                ))}
-
-                {/* Callout lines and text labels */}
-                {labels.map((l, i) => {
-                    const s = l.s;
-                    const x0 = cx + rOuter * Math.cos(s.midAngle);
-                    const y0 = cy + rOuter * Math.sin(s.midAngle);
-                    
-                    const x1 = l.x1;
-                    const y1 = l.y1;
-                    
-                    const x2 = l.isRight ? x1 + 15 : x1 - 15;
-                    const textX = l.isRight ? x2 + 5 : x2 - 5;
-                    const textAnchor = l.isRight ? "start" : "end";
-                    
-                    return (
-                        <g key={`label-${i}`} 
-                            className="transition-opacity duration-200"
-                            style={{
-                                opacity: hoveredNode 
-                                    ? (hoveredNode.name === s.name || hoveredNode.name === s.parent || hoveredNode.parent === s.name ? 1 : 0.15)
-                                    : 1
-                            }}>
-                            <polyline 
-                                points={`${x0},${y0} ${x1},${y1} ${x2},${y1}`} 
-                                fill="none" 
-                                stroke={s.color} 
-                                strokeWidth="1.5"
-                                opacity="0.6"
-                            />
-                            <text 
-                                x={textX} 
-                                y={y1} 
-                                textAnchor={textAnchor} 
-                                dominantBaseline="middle" 
-                                className="text-[13px] font-bold"
-                            >
-                                <tspan fill="hsl(var(--foreground))" opacity="0.8">
-                                    {s.name.length > 22 ? s.name.substring(0, 21) + '…' : s.name}
-                                </tspan>
-                                <tspan fill={s.color} fontWeight="bold" dx="6">
-                                    {s.percentage}%
-                                </tspan>
-                            </text>
-                        </g>
-                    )
-                })}
-            </svg>
-
-            {/* Central Info HUD inside Doughnut */}
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none transition-opacity duration-200">
-               {hoveredNode ? (
-                   <div className="bg-background/95 backdrop-blur-md border border-border shadow-lg rounded-full w-36 h-36 p-4 flex flex-col items-center justify-center animate-in zoom-in-95 duration-200">
-                       <span className="text-[8.5px] font-extrabold uppercase tracking-widest text-muted-foreground line-clamp-1 mb-0.5">
-                           {hoveredNode.type === 'group' ? 'БЛОК' : hoveredNode.parent}
-                       </span>
-                       <span className="text-[11.5px] font-extrabold text-foreground text-center line-clamp-2 w-full leading-tight">
-                           {hoveredNode.name}
-                       </span>
-                       <div className="mt-1 text-xl font-black tabular-nums" style={{ color: hoveredNode.color }}>
-                           {hoveredNode.percentage}%
-                       </div>
-                       <div className="text-[10px] font-bold text-muted-foreground mt-0.5">
-                           {hoveredNode.value} ч.
-                       </div>
-                   </div>
-               ) : (
-                   <div className="text-center bg-card/85 backdrop-blur-md rounded-full w-[130px] h-[130px] flex flex-col items-center justify-center shadow-lg border border-border/60 transition-opacity duration-300">
-                      <p className={`text-xl font-extrabold leading-none ${total > maxHours ? "text-red-500 animate-pulse" : "text-foreground"}`}>
-                           {Number.isInteger(total) ? total : total.toFixed(1)} ч
-                      </p>
-                      <p className="text-[8px] text-muted-foreground font-bold uppercase tracking-widest mt-1">Итого часов</p>
-                      <span className={`text-[9.5px] font-bold mt-1 px-1.5 py-0.5 rounded-full ${
-                          total > maxHours ? 'bg-red-500/10 text-red-500' : 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400'
-                      }`}>
-                          {percentageOfMax}%
-                      </span>
-                   </div>
-               )}
-            </div>
-        </div>
-    )
-}
+const fmtH = (v: number) => (Math.round(v * 10) / 10).toLocaleString('ru-RU', { maximumFractionDigits: 1 })
 
 // ─────────────────────────── Main Component ───────────────────────────
 interface LifeWheelPageProps {
@@ -410,6 +179,7 @@ interface LifeWheelPageProps {
 
 export function LifeWheelPage({ participantId: fixedParticipantId, participantName }: LifeWheelPageProps = {}) {
     const isParticipantMode = !!fixedParticipantId
+    const confirm = useConfirm()
 
     const [participants, setParticipants] = useState<Participant[]>([])
     const [selectedParticipantId, setSelectedParticipantId] = useState<string>(fixedParticipantId || '')
@@ -418,19 +188,16 @@ export function LifeWheelPage({ participantId: fixedParticipantId, participantNa
     const [categories, setCategories] = useState<WheelCategory[]>(() => balanceCategories(DEFAULT_CATEGORIES))
     const [isSaving, setIsSaving] = useState(false)
     const [isLoading, setIsLoading] = useState(false)
-    const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle')
+    const [historyVersion, setHistoryVersion] = useState(0)
     const [history, setHistory] = useState<Array<{ label: string; period_type: string }>>([])
     const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
-
-    // Filter query for category item highlight search
-    const [searchFilter, setSearchFilter] = useState('')
+    const [editStructure, setEditStructure] = useState(false)
 
     // Report states
-    const [activeTab, setActiveTab] = useState<'editor' | 'report'>('editor')
+    const [savedTab, setSavedTab] = usePersistentState<WheelTab>('life-wheel-tab', 'editor', ['editor', 'report'])
+    const activeTab: WheelTab = isParticipantMode ? 'editor' : savedTab
     const [allEntries, setAllEntries] = useState<Array<{ participant_id: string; period_label: string; period_type: 'weekly' | 'monthly' }>>([])
     const [isReportLoading, setIsReportLoading] = useState(false)
-    const [searchTerm, setSearchTerm] = useState('')
-    const [programFilter, setProgramFilter] = useState('all')
 
     // Fetch all entries for the report
     useEffect(() => {
@@ -447,31 +214,11 @@ export function LifeWheelPage({ participantId: fixedParticipantId, participantNa
             .finally(() => setIsReportLoading(false))
     }, [activeTab])
 
-    const uniquePrograms = Array.from(new Set(participants.map(p => p.program?.name).filter(Boolean)))
-
-    const filteredParticipants = participants.filter(p => {
-        const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase())
-        const matchesProgram = programFilter === 'all' || p.program?.name === programFilter
-        return matchesSearch && matchesProgram
-    })
-
-    const formatTimes = (count: number): string => {
-        const mod10 = count % 10;
-        const mod100 = count % 100;
-        if (mod10 === 1 && mod100 !== 11) {
-            return `${count} раз`;
-        } else if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) {
-            return `${count} раза`;
-        } else {
-            return `${count} раз`;
-        }
-    }
-
     const currentLabel = getPeriodLabel(periodType, periodOffset)
     const total = categories.reduce((s, c) => s + (c.value || 0), 0)
     const maxHours = periodType === 'weekly' ? 168 : 720
-    const isOverLimit = total > maxHours
-    const selectedParticipant = participants.find(p => p.id === selectedParticipantId)
+    const pid = fixedParticipantId || selectedParticipantId
+    const isTemplate = pid === TEMPLATE_ID
 
     // Fetch list of participants (admin mode only)
     useEffect(() => {
@@ -484,10 +231,14 @@ export function LifeWheelPage({ participantId: fixedParticipantId, participantNa
             .catch(console.error)
     }, [isParticipantMode])
 
-    // Fetch wheel entry for selected participant + period
+    // Fetch wheel entry for selected participant + period.
+    // `requestRef` drops responses that arrive after the user moved on.
+    const requestRef = useRef(0)
     const fetchEntry = useCallback(async () => {
         const pid = fixedParticipantId || selectedParticipantId
         if (!pid) return
+        const req = ++requestRef.current
+        const stale = () => req !== requestRef.current
         setIsLoading(true)
 
         const targetMax = periodType === 'weekly' ? 168 : 720
@@ -507,6 +258,7 @@ export function LifeWheelPage({ participantId: fixedParticipantId, participantNa
             })
             const res = await fetch(`/api/life-wheel?${params}`)
             const { data } = await res.json()
+            if (stale()) return
             if (data && data.length > 0 && data[0].categories?.length > 0) {
                 // Own saved entry: show exactly what the user saved, without
                 // force-scaling up to the period max (720/168h).
@@ -517,6 +269,7 @@ export function LifeWheelPage({ participantId: fixedParticipantId, participantNa
                         const tempLabel = periodType === 'weekly' ? 'template_weekly' : 'template'
                         const tempRes = await fetch(`/api/life-wheel?participant_id=${TEMPLATE_ID}&period_type=${pType}&period_label=${tempLabel}`)
                         const tempJson = await tempRes.json()
+                        if (stale()) return
                         if (tempJson.data && tempJson.data.length > 0 && tempJson.data[0].categories?.length > 0) {
                             setCategories(scaleCategoriesToMax(balanceCategories(tempJson.data[0].categories), targetMax))
                             setIsLoading(false)
@@ -525,14 +278,18 @@ export function LifeWheelPage({ participantId: fixedParticipantId, participantNa
                         }
                     } catch (err) { console.error('Failed to fetch template', err) }
                 }
+                if (stale()) return
                 setCategories(scaleCategoriesToMax(balanceCategories(DEFAULT_CATEGORIES), targetMax))
             }
         } catch (e) {
             console.error(e)
+            if (stale()) return
             setCategories(scaleCategoriesToMax(balanceCategories(DEFAULT_CATEGORIES), targetMax))
         } finally {
-            setIsLoading(false)
-            setHasUnsavedChanges(false)
+            if (!stale()) {
+                setIsLoading(false)
+                setHasUnsavedChanges(false)
+            }
         }
     }, [fixedParticipantId, selectedParticipantId, periodType, currentLabel])
 
@@ -540,7 +297,7 @@ export function LifeWheelPage({ participantId: fixedParticipantId, participantNa
         fetchEntry()
     }, [fetchEntry])
 
-    // Fetch history (last 6 periods)
+    // Fetch history of saved periods (refreshed after each save)
     useEffect(() => {
         const pid = fixedParticipantId || selectedParticipantId
         if (!pid) return
@@ -552,20 +309,23 @@ export function LifeWheelPage({ participantId: fixedParticipantId, participantNa
                 }
             })
             .catch(console.error)
-    }, [fixedParticipantId, selectedParticipantId, saveStatus])
+    }, [fixedParticipantId, selectedParticipantId, historyVersion])
+
+    const periodTitle = isTemplate
+        ? formatPeriodLabel(periodType === 'weekly' ? 'template_weekly' : 'template', periodType)
+        : formatPeriodLabel(currentLabel, periodType)
 
     // Save Logic
-    const handleSave = async (silent = false) => {
+    const handleSave = async () => {
         const pid = fixedParticipantId || selectedParticipantId
         if (!pid) return
 
         // Save exactly what the user entered. Filling the full 720/168h is
-        // encouraged (progress bar + "⚡ Авто-баланс" button) but NOT required —
+        // encouraged (progress bar + auto-scale button) but NOT required —
         // partial / under-allocated distributions are saved as-is.
         const finalCategories = categories
 
-        if (!silent) setIsSaving(true)
-        if (!silent) setSaveStatus('idle')
+        setIsSaving(true)
 
         let pType = periodType
         let pLabel = currentLabel
@@ -585,589 +345,505 @@ export function LifeWheelPage({ participantId: fixedParticipantId, participantNa
                     categories: finalCategories,
                 }),
             })
-            
-            let result;
+
+            let result
             try {
                 result = await res.json()
             } catch (err) {
                 throw new Error('Не удалось прочитать ответ сервера')
             }
-            
+
             if (!res.ok || result?.error) {
                 throw new Error(result?.error || 'Ошибка сервера при сохранении')
             }
-            
-            if (!silent) {
-                setSaveStatus('success')
-                setTimeout(() => setSaveStatus('idle'), 3000)
-            }
+
+            toast.success('Колесо сохранено', { description: periodTitle })
             setHasUnsavedChanges(false)
+            setHistoryVersion(v => v + 1)
         } catch (e: any) {
-            if (!silent) {
-                setSaveStatus('error')
-                let userMsg = e.message || 'Неизвестная ошибка'
-                if (userMsg.includes('violates foreign key constraint')) {
-                    userMsg = 'Ваш аккаунт персонала не связан с записью участника в базе данных. Пожалуйста, обратитесь к администратору или примените SQL-миграцию.'
-                }
-                alert('Ошибка сохранения: ' + userMsg)
-            }
+            toast.error('Не удалось сохранить', { description: saveErrorMessage(e) })
         } finally {
-            if (!silent) setIsSaving(false)
+            setIsSaving(false)
         }
     }
 
+    useSaveShortcut(handleSave, activeTab === 'editor' && !!pid && !isSaving)
+    useBeforeUnload(hasUnsavedChanges)
+
     const updateCategory = (id: string, key: keyof WheelCategory, val: any) => {
-        setCategories(prev => prev.map(c => {
-            if (c.id === id) {
-                const next = { ...c, [key]: val }
-                return next
-            }
-            return c
-        }))
+        setCategories(prev => prev.map(c => (c.id === id ? { ...c, [key]: val } : c)))
         setHasUnsavedChanges(true)
     }
 
     const addCategory = () => {
         const id = String(Date.now())
-        const color = PALETTE[categories.length % PALETTE.length]
+        const color = wheelColor(categories.length)
         const group = categories[categories.length - 1]?.group || ''
         setCategories(prev => [...prev, { id, name: 'Новая категория', value: 0, color, group }])
         setHasUnsavedChanges(true)
     }
 
-    const removeCategory = (id: string, name: string) => {
-        if (!confirm(`Удалить категорию "${name}"?`)) return
+    const removeCategory = async (id: string, name: string) => {
+        const ok = await confirm({
+            title: `Удалить «${name || 'без названия'}»?`,
+            description: 'Категория пропадёт из этого периода после сохранения.',
+            confirmText: 'Удалить',
+            destructive: true,
+        })
+        if (!ok) return
         setCategories(prev => prev.filter(c => c.id !== id))
         setHasUnsavedChanges(true)
     }
 
-    const resetToDefault = () => {
-        if (!confirm('Вы уверены, что хотите сбросить структуру категорий к стандартной? Все ваши изменения структуры сотрутся.')) return
+    const resetToDefault = async () => {
+        const ok = await confirm({
+            title: 'Вернуть стандартные категории?',
+            description: 'Ваши названия, сферы и добавленные категории будут заменены стандартным набором, часы обнулятся.',
+            confirmText: 'Вернуть',
+            destructive: true,
+        })
+        if (!ok) return
         setCategories(balanceCategories(DEFAULT_CATEGORIES))
         setHasUnsavedChanges(true)
     }
 
+    const autoScale = () => {
+        setCategories(prev => scaleCategoriesToMax(prev, maxHours))
+        setHasUnsavedChanges(true)
+    }
+
+    /** Run `fn` only if there is nothing to lose, or the user agrees to drop it. */
+    const guard = async (fn: () => void) => {
+        if (hasUnsavedChanges) {
+            const ok = await confirm({
+                title: 'Уйти без сохранения?',
+                description: 'Изменения в текущем периоде пропадут.',
+                confirmText: 'Не сохранять',
+                destructive: true,
+            })
+            if (!ok) return
+        }
+        fn()
+    }
+
+    const jumpTo = (type: 'weekly' | 'monthly', label: string) =>
+        guard(() => {
+            setPeriodType(type)
+            setPeriodOffset(offsetForLabel(type, label))
+        })
+
+    // ── Derived view data ──
+    const colors = useMemo(() => buildColors(categories), [categories])
+    const grouped = useMemo(() => {
+        const m = new Map<string, WheelCategory[]>()
+        categories.forEach(c => {
+            const g = groupKey(c)
+            if (!m.has(g)) m.set(g, [])
+            m.get(g)!.push(c)
+        })
+        return Array.from(m.entries())
+    }, [categories])
+
+    const diff = maxHours - total
+    const over = diff < -0.05
+    const balanced = Math.abs(diff) <= 0.05
+    const hoursTone: 'destructive' | 'success' | 'warning' = over ? 'destructive' : balanced ? 'success' : 'warning'
+    const hoursText = over
+        ? `Больше нормы на ${fmtH(Number((-diff).toFixed(1)))} ч`
+        : balanced
+            ? 'Все часы распределены'
+            : `Осталось распределить ${fmtH(Number(diff.toFixed(1)))} ч`
+
+    const periodSub = periodType === 'weekly'
+        ? weekRange(periodOffset)
+        : periodOffset === 0 ? 'текущий' : undefined
+
+    // ── Report rows ──
+    const curMonth = getPeriodLabel('monthly', 0)
+    const curWeek = getPeriodLabel('weekly', 0)
+    const reportRows: FillRow[] = useMemo(
+        () =>
+            participants.map(p => {
+                const pEntries = allEntries.filter(e => e.participant_id === p.id && e.participant_id !== TEMPLATE_ID)
+                return {
+                    participant: p,
+                    count: pEntries.length,
+                    periods: pEntries.map(e => formatPeriodLabel(e.period_label, e.period_type)),
+                    current: pEntries.some(e => e.period_label === curMonth || e.period_label === curWeek),
+                }
+            }),
+        [participants, allEntries, curMonth, curWeek]
+    )
+
+    const openFromReport = (row: FillRow) =>
+        guard(() => {
+            const pEntries = allEntries.filter(e => e.participant_id === row.participant.id && e.participant_id !== TEMPLATE_ID)
+            setSelectedParticipantId(row.participant.id)
+            setSavedTab('editor')
+            if (pEntries.length > 0) {
+                setPeriodType(pEntries[0].period_type)
+                setPeriodOffset(offsetForLabel(pEntries[0].period_type, pEntries[0].period_label))
+            } else {
+                setPeriodOffset(0)
+            }
+        })
+
+    const hoursSummary = (
+        <div className="flex min-w-0 items-center gap-3">
+            <div className="min-w-0 flex-1">
+                <div className="flex items-baseline gap-1.5">
+                    <span className={cn('num font-semibold', over && 'text-destructive')}>{fmtH(Number(total.toFixed(1)))}</span>
+                    <span className="num text-muted-foreground">из {maxHours} ч</span>
+                </div>
+                <p
+                    className={cn(
+                        'truncate text-xs',
+                        hoursTone === 'destructive' && 'text-destructive',
+                        hoursTone === 'success' && 'text-success',
+                        hoursTone === 'warning' && 'text-muted-foreground'
+                    )}
+                >
+                    {hoursText}
+                </p>
+            </div>
+        </div>
+    )
+
     return (
-        <div className="p-3 sm:p-6 space-y-4 sm:space-y-6 min-h-full bg-background/50">
-            {/* Header Title */}
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-border pb-3.5">
-                <div>
-                    <h1 className="text-xl sm:text-3xl font-extrabold tracking-tight text-foreground flex items-center gap-2">
-                        <span className="text-2xl sm:text-4xl animate-pulse">🎯</span>
-                        Колесо внимания
-                        {isParticipantMode && participantName && (
-                            <Badge variant="outline" className="ml-1.5 text-xs font-bold py-0.5 px-2 border-indigo-500/30 text-indigo-600 dark:text-indigo-400 bg-indigo-500/5">
-                                {participantName}
+        <PageContainer>
+            <PageHeader
+                title="Колесо внимания"
+                description={
+                    isParticipantMode
+                        ? `${participantName ? participantName + ' · ' : ''}Сколько часов уходит на каждую сферу жизни`
+                        : 'Распределение времени участников по сферам жизни'
+                }
+            />
+
+            {!isParticipantMode && (
+                <WheelTabs value={activeTab} onChange={t => setSavedTab(t)} dirty={hasUnsavedChanges} />
+            )}
+
+            {activeTab === 'report' ? (
+                <FillReport
+                    rows={reportRows}
+                    loading={isReportLoading}
+                    unit={['период', 'периода', 'периодов']}
+                    currentLabel="за текущий период"
+                    onOpen={openFromReport}
+                />
+            ) : (
+                <>
+                    {/* Controls */}
+                    <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+                        {!isParticipantMode && (
+                            <ParticipantPicker
+                                participants={participants}
+                                value={selectedParticipantId}
+                                onChange={id => guard(() => { setSelectedParticipantId(id); setPeriodOffset(0) })}
+                            />
+                        )}
+                        {pid && (
+                            <Segmented
+                                aria-label="Масштаб периода"
+                                value={periodType}
+                                onChange={t => guard(() => { setPeriodType(t); setPeriodOffset(0) })}
+                                options={[
+                                    { value: 'monthly', label: 'Месяц' },
+                                    { value: 'weekly', label: 'Неделя' },
+                                ]}
+                                className="max-sm:w-full max-sm:[&>button]:h-9 max-sm:[&>button]:flex-1 max-sm:[&>button]:justify-center"
+                            />
+                        )}
+                        {pid && !isTemplate && (
+                            <PeriodStepper
+                                label={periodType === 'weekly' ? `Неделя ${Number(currentLabel.split('-W')[1])}` : formatPeriodLabel(currentLabel, periodType)}
+                                sub={periodSub}
+                                onPrev={() => guard(() => setPeriodOffset(o => o - 1))}
+                                onNext={() => guard(() => setPeriodOffset(o => o + 1))}
+                                onReset={periodOffset !== 0 ? () => guard(() => setPeriodOffset(0)) : undefined}
+                            />
+                        )}
+                        {isTemplate && (
+                            <Badge variant="info" className="h-8 px-2.5 text-sm font-normal whitespace-normal">
+                                Шаблон подставляется участникам, у которых ещё нет записи за период
                             </Badge>
                         )}
-                    </h1>
-                    <p className="text-xs sm:text-sm text-muted-foreground mt-1 font-medium">Распределение времени по категориям жизни и сферам внимания</p>
-                </div>
-
-                <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto justify-end">
-                    {activeTab === 'editor' && saveStatus === 'success' && (
-                        <span className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400 bg-green-500/10 border border-green-500/20 px-3 py-1.5 rounded-lg animate-in fade-in zoom-in duration-300 font-semibold w-full sm:w-auto justify-center">
-                            <CheckCircle2 className="w-4 h-4" /> Изменения сохранены!
-                        </span>
-                    )}
-                    {activeTab === 'editor' && saveStatus === 'error' && (
-                        <span className="flex items-center gap-1 text-xs text-red-600 dark:text-red-400 bg-red-500/10 border border-red-500/20 px-3 py-1.5 rounded-lg animate-in fade-in zoom-in duration-300 font-semibold w-full sm:w-auto justify-center">
-                            <AlertCircle className="w-4 h-4" /> Ошибка сохранения
-                        </span>
-                    )}
-
-                    {activeTab === 'editor' && (
-                        <Button
-                            onClick={() => handleSave(false)}
-                            disabled={isSaving || !selectedParticipantId}
-                            size="default"
-                            className="gap-2 font-bold bg-indigo-600 hover:bg-indigo-500 text-xs shadow-md px-5 py-2.5 transition-all active:scale-95 text-white w-full sm:w-auto justify-center touch-manipulation"
-                        >
-                            {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                            {isSaving ? 'Сохранение...' : 'Сохранить изменения'}
-                        </Button>
-                    )}
-                </div>
-            </div>
-
-            {/* Tab Links (Admin Only) */}
-            {!isParticipantMode && (
-                <div className="flex border-b border-border/80 gap-1">
-                    <button
-                        onClick={() => setActiveTab('editor')}
-                        className={`px-5 py-2.5 border-b-2 text-xs font-bold transition-all relative ${activeTab === 'editor'
-                            ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400'
-                            : 'border-transparent text-muted-foreground hover:text-foreground'
-                        }`}
-                    >
-                        Колеса участников
-                        {hasUnsavedChanges && (
-                            <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
-                        )}
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('report')}
-                        className={`px-5 py-2.5 border-b-2 text-xs font-bold transition-all ${activeTab === 'report'
-                            ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400'
-                            : 'border-transparent text-muted-foreground hover:text-foreground'
-                        }`}
-                    >
-                        Отчет по заполнению
-                    </button>
-                </div>
-            )}
-
-            {activeTab === 'editor' ? (
-                <div className="space-y-4 sm:space-y-5">
-                    {/* Controls: Participant + Period */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-12 gap-3 items-end">
-                        {/* Participant selector (admin only) */}
-                        {!isParticipantMode ? (
-                            <div className="sm:col-span-2 md:col-span-4 bg-card border border-border p-3 rounded-xl shadow-sm space-y-1.5">
-                                <label className="text-[10px] font-extrabold text-muted-foreground uppercase tracking-wider">Участник</label>
-                                <select
-                                    value={selectedParticipantId}
-                                    onChange={e => { setSelectedParticipantId(e.target.value); setPeriodOffset(0) }}
-                                    className="w-full px-3 py-1.5 bg-background border border-border rounded-lg text-foreground text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/30 font-semibold touch-manipulation"
-                                >
-                                    <option value="">— Выберите участника —</option>
-                                    <option value={TEMPLATE_ID}>⚙️ Базовый шаблон (для всех)</option>
-                                    {participants.map(p => (
-                                        <option key={p.id} value={p.id}>{p.name}</option>
-                                    ))}
-                                </select>
-                            </div>
-                        ) : null}
-
-                        {/* Period type */}
-                        {selectedParticipantId && selectedParticipantId !== TEMPLATE_ID && (
-                            <div className="sm:col-span-1 md:col-span-3 bg-card border border-border p-3 rounded-xl shadow-sm space-y-1.5">
-                                <label className="text-[10px] font-extrabold text-muted-foreground uppercase tracking-wider">Масштаб периода</label>
-                                <div className="flex rounded-lg border border-border overflow-hidden p-0.5 bg-background">
-                                    {(['monthly', 'weekly'] as const).map(t => (
-                                        <button
-                                            key={t}
-                                            onClick={() => { setPeriodType(t); setPeriodOffset(0) }}
-                                            className={`flex-1 py-1 text-xs font-bold rounded-md transition-all touch-manipulation ${periodType === t
-                                                ? 'bg-indigo-600 text-white shadow-sm'
-                                                : 'text-muted-foreground hover:bg-muted/40 hover:text-foreground'
-                                                }`}
-                                        >
-                                            {t === 'monthly' ? 'Месяц' : 'Неделя'}
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Period navigation */}
-                        {selectedParticipantId && selectedParticipantId !== TEMPLATE_ID && (
-                            <div className="sm:col-span-1 md:col-span-3 bg-card border border-border p-3 rounded-xl shadow-sm space-y-1.5">
-                                <label className="text-[10px] font-extrabold text-muted-foreground uppercase tracking-wider">Текущий период</label>
-                                <div className="flex items-center gap-1">
-                                    <button
-                                        onClick={() => setPeriodOffset(o => o - 1)}
-                                        className="p-1.5 border border-border rounded-lg hover:bg-muted/50 transition-colors touch-manipulation"
-                                    >
-                                        <ChevronLeft className="w-4 h-4" />
-                                    </button>
-                                    <div className="flex-1 text-center min-w-0">
-                                        <p className="text-xs font-bold text-foreground truncate capitalize">
-                                            {formatPeriodLabel(currentLabel, periodType)}
-                                        </p>
-                                        <p className="text-[9px] text-muted-foreground font-semibold leading-none mt-0.5">
-                                            {periodOffset === 0 ? (
-                                                <span className="text-indigo-600 dark:text-indigo-400">текущий период</span>
-                                            ) : (
-                                                <span>{Math.abs(periodOffset)} {periodType === 'monthly' ? 'мес.' : 'нед.'} {periodOffset < 0 ? 'назад' : 'вперёд'}</span>
-                                            )}
-                                        </p>
-                                    </div>
-                                    <button
-                                        onClick={() => setPeriodOffset(o => o + 1)}
-                                        className="p-1.5 border border-border rounded-lg hover:bg-muted/50 transition-colors touch-manipulation"
-                                    >
-                                        <ChevronRight className="w-4 h-4" />
-                                    </button>
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Search Highlighter */}
-                        {selectedParticipantId && (
-                            <div className="md:col-span-2 bg-card border border-border p-2 rounded-xl shadow-sm flex items-center h-16">
-                                <div className="relative w-full">
-                                    <Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-muted-foreground/60" />
-                                    <Input
-                                        placeholder="Поиск..."
-                                        value={searchFilter}
-                                        onChange={e => setSearchFilter(e.target.value)}
-                                        className="pl-8.5 h-8 text-xs border-border bg-background focus-visible:ring-indigo-500/30 rounded-lg"
-                                    />
-                                    {searchFilter && (
-                                        <button 
-                                            onClick={() => setSearchFilter('')}
-                                            className="absolute right-2.5 top-2 text-muted-foreground/60 hover:text-foreground text-xs"
-                                        >
-                                            <X className="w-3.5 h-3.5" />
-                                        </button>
-                                    )}
-                                </div>
-                            </div>
-                        )}
                     </div>
 
-                    {!selectedParticipantId && !isParticipantMode ? (
-                        <div className="flex flex-col items-center justify-center py-24 gap-4 text-muted-foreground bg-card border border-dashed border-border rounded-2xl shadow-sm">
-                            <div className="p-4 bg-indigo-500/5 rounded-full border border-indigo-500/10 text-indigo-500">
-                                <PieChart className="w-12 h-12" />
-                            </div>
-                            <h3 className="text-lg font-bold text-foreground">Выберите участника</h3>
-                            <p className="text-xs text-center max-w-sm text-muted-foreground mt-0.5 leading-relaxed">
-                                Выберите студента в выпадающем списке, чтобы открыть и заполнить его колесо внимания.
-                            </p>
-                        </div>
+                    {!pid ? (
+                        <Panel>
+                            <EmptyState
+                                icon={Compass}
+                                title="Выберите участника"
+                                description="Найдите участника в списке выше, чтобы посмотреть или заполнить его колесо внимания."
+                                action={
+                                    <Button variant="outline" size="sm" onClick={() => setSavedTab('report')}>
+                                        Кто уже заполнил
+                                    </Button>
+                                }
+                            />
+                        </Panel>
                     ) : (
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                            
-                            {/* Editor List Side */}
-                            <Card className="p-4 sm:p-5 space-y-4 border-border bg-card/65 backdrop-blur-md rounded-2xl">
-                                <div className="flex items-center justify-between border-b border-border/40 pb-3">
-                                    <div>
-                                        <h2 className="font-extrabold text-sm text-foreground uppercase tracking-wider flex items-center gap-1.5">
-                                            <span>Показатели времени</span>
-                                            <Badge variant="outline" className="text-[10px] font-bold py-0 px-2 border-indigo-500/30 text-indigo-600 dark:text-indigo-400 bg-indigo-500/5">
-                                                Всего: {categories.length}
-                                            </Badge>
-                                        </h2>
-                                        <p className="text-[10px] text-muted-foreground mt-0.5">Укажите точное количество часов для каждой сферы</p>
-                                    </div>
-                                    <div className="flex items-center gap-1.5">
-                                        {isLoading && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />}
-                                        <button
-                                            onClick={resetToDefault}
-                                            className="p-2 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-all"
-                                            title="Сбросить к стандартным"
-                                        >
-                                            <RefreshCw className="w-3.5 h-3.5" />
-                                        </button>
-                                        <Button size="sm" variant="outline" onClick={addCategory} className="gap-1 text-[10px] font-bold h-8 border-indigo-600/30 text-indigo-600 dark:text-indigo-400">
-                                            <Plus className="w-3.5 h-3.5" /> Добавить
-                                        </Button>
-                                    </div>
-                                </div>
-
-                                {/* Total Hour Progress limit */}
-                                <div className="space-y-1.5 bg-muted/30 p-3 rounded-xl border border-border/50">
-                                    <div className="flex justify-between text-xs font-bold">
-                                        <span className="text-muted-foreground">Итого распределено часов:</span>
-                                        <span className={`font-extrabold ${isOverLimit ? 'text-red-500 animate-pulse' : 'text-foreground'}`}>
-                                            {Number.isInteger(total) ? total : total.toFixed(1)} / {maxHours} ч.
-                                        </span>
-                                    </div>
-                                    <div className="h-2.5 bg-background rounded-full overflow-hidden border border-border/30">
-                                        <div
-                                            className={`h-full rounded-full transition-all duration-500 ${
-                                                isOverLimit ? 'bg-red-500' : 'bg-gradient-to-r from-indigo-500 to-violet-500'
-                                            }`}
-                                            style={{ width: `${Math.min((total / maxHours) * 100, 100)}%` }}
-                                        />
-                                    </div>
-                                    {Math.abs(total - maxHours) > 0.05 && (
-                                        <div className="pt-1 flex flex-wrap items-center justify-between gap-2">
-                                            <p className="text-[10px] text-amber-500 font-bold">
-                                                {total > maxHours 
-                                                    ? `⚠️ Превышение на ${(total - maxHours).toFixed(1)} ч`
-                                                    : `ℹ️ Осталось распределить ${(maxHours - total).toFixed(1)} ч`}
-                                            </p>
-                                            <Button
-                                                size="sm"
-                                                variant="outline"
-                                                onClick={() => {
-                                                    setCategories(prev => scaleCategoriesToMax(prev, maxHours))
-                                                    setHasUnsavedChanges(true)
-                                                }}
-                                                className="h-6 text-[10px] px-2 font-extrabold border-indigo-500/30 text-indigo-600 dark:text-indigo-400 bg-indigo-500/5 hover:bg-indigo-500/15"
-                                            >
-                                                ⚡ Авто-баланс до {maxHours} ч
+                        <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-2">
+                            {/* Editor */}
+                            <Panel>
+                                <PanelHeading
+                                    title={editStructure ? 'Категории' : 'Часы по сферам'}
+                                    description={
+                                        editStructure
+                                            ? 'Переименуйте, сгруппируйте или добавьте свои категории'
+                                            : `Сколько часов в ${periodType === 'weekly' ? 'неделю' : 'месяц'} уходит на каждую категорию`
+                                    }
+                                    actions={
+                                        editStructure ? (
+                                            <>
+                                                <Button variant="ghost" size="sm" onClick={resetToDefault}>
+                                                    <RotateCcw /> Стандартные
+                                                </Button>
+                                                <Button variant="soft" size="sm" onClick={() => setEditStructure(false)}>
+                                                    Готово
+                                                </Button>
+                                            </>
+                                        ) : (
+                                            <Button variant="ghost" size="sm" onClick={() => setEditStructure(true)}>
+                                                <Settings2 /> Настроить
                                             </Button>
-                                        </div>
-                                    )}
+                                        )
+                                    }
+                                />
+
+                                {/* Hours target */}
+                                <div className="space-y-2 border-b px-4 py-3">
+                                    <div className="flex flex-wrap items-center justify-between gap-2">
+                                        {hoursSummary}
+                                        {!balanced && total > 0 && (
+                                            <Tooltip>
+                                                <TooltipTrigger asChild>
+                                                    <Button variant="soft" size="sm" onClick={autoScale}>
+                                                        <Wand2 /> Подогнать до {maxHours} ч
+                                                    </Button>
+                                                </TooltipTrigger>
+                                                <TooltipContent>Пропорционально изменит все часы, чтобы в сумме вышло {maxHours}</TooltipContent>
+                                            </Tooltip>
+                                        )}
+                                    </div>
+                                    <Meter value={total} max={maxHours} tone={over ? 'destructive' : balanced ? 'success' : 'primary'} className="h-2" />
                                 </div>
 
-                                {/* Category Rows */}
-                                <div className="space-y-2 max-h-[500px] overflow-y-auto pr-1">
-                                    {categories.map((cat, index) => {
-                                        const isHighlighted = searchFilter
-                                            ? cat.name.toLowerCase().includes(searchFilter.toLowerCase()) || (cat.group || '').toLowerCase().includes(searchFilter.toLowerCase())
-                                            : false
-                                        const isDimmed = searchFilter && !isHighlighted
-
-                                        return (
-                                            <div 
-                                                key={cat.id} 
-                                                className={`flex flex-wrap sm:flex-nowrap items-center gap-2 sm:gap-2.5 group p-2 rounded-xl transition-all border-l-3 hover:bg-muted/15 border-border ${
-                                                    isDimmed ? 'opacity-35 scale-98' : 'opacity-100'
-                                                } ${isHighlighted ? 'ring-2 ring-indigo-500/30' : ''}`}
-                                                style={{ borderLeftColor: cat.color }}
-                                            >
-                                                <div className="flex items-center gap-2 flex-shrink-0">
-                                                    <span 
-                                                        className="text-[9px] font-extrabold text-white w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 select-none shadow-sm"
-                                                        style={{ backgroundColor: cat.color }}
-                                                    >
-                                                        {index + 1}
-                                                    </span>
-                                                    
-                                                    {/* Color picker */}
-                                                    <input
-                                                        type="color"
-                                                        value={cat.color}
-                                                        onChange={e => updateCategory(cat.id, 'color', e.target.value)}
-                                                        className="w-6 h-6 rounded-[5px] border-2 border-border cursor-pointer p-0 bg-transparent"
-                                                        title="Изменить цвет"
+                                {isLoading ? (
+                                    <div className="divide-y">
+                                        {Array.from({ length: 8 }).map((_, i) => (
+                                            <div key={i} className="flex items-center gap-3 px-4 py-3">
+                                                <Skeleton className="size-2.5 rounded-full" />
+                                                <Skeleton className="h-4 flex-1" />
+                                                <Skeleton className="h-9 w-24" />
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : editStructure ? (
+                                    <div className="divide-y">
+                                        {categories.map(cat => (
+                                            <div key={cat.id} className="flex flex-col gap-2 px-4 py-2.5 sm:flex-row sm:items-center">
+                                                <div className="flex items-center gap-2 sm:w-44 sm:shrink-0">
+                                                    <span className="size-2.5 shrink-0 rounded-full" style={{ background: colors.cat(cat.id) }} />
+                                                    <Input
+                                                        aria-label="Сфера"
+                                                        placeholder="Сфера"
+                                                        value={cat.group || ''}
+                                                        onChange={e => updateCategory(cat.id, 'group', e.target.value)}
+                                                        className="h-10 text-muted-foreground sm:h-9"
                                                     />
                                                 </div>
-
-                                                {/* Group & Name Split Inputs */}
-                                                <div className="flex flex-1 min-w-[160px] -space-x-px">
-                                                     <Input
-                                                         placeholder="Сфера (Блок)"
-                                                         value={cat.group || ''}
-                                                         onChange={e => updateCategory(cat.id, 'group', e.target.value)}
-                                                         className="w-1/2 h-8 text-[11px] font-bold rounded-r-none focus-visible:z-10 bg-muted/40 border-border placeholder:text-muted-foreground/45"
-                                                     />
-                                                     <Input
-                                                         placeholder="Категория"
-                                                         value={cat.name}
-                                                         onChange={e => updateCategory(cat.id, 'name', e.target.value)}
-                                                         className="w-1/2 h-8 text-[11.5px] font-extrabold rounded-l-none focus-visible:z-10 border-border"
-                                                     />
-                                                </div>
-
-                                                {/* Value (Hours) */}
-                                                <div className="flex items-center gap-1.5 ml-auto sm:ml-0 flex-shrink-0">
-                                                    <div className="relative w-[65px]">
-                                                        <Input
-                                                            type="number"
-                                                            min={0}
-                                                            step="0.1"
-                                                            value={cat.value || ''}
-                                                            onChange={e => updateCategory(cat.id, 'value', Math.max(0, Number(e.target.value)))}
-                                                            className="h-8 text-xs pr-1.5 text-right font-extrabold border-border"
-                                                        />
-                                                    </div>
-                                                    <div className="w-[36px] text-right text-[10.5px] font-extrabold text-muted-foreground">
-                                                        {total > 0 ? Math.round((cat.value / total) * 100) : 0}%
-                                                    </div>
-
-                                                    {/* Delete button (visible on mobile touch) */}
-                                                    <button
-                                                        onClick={() => removeCategory(cat.id, cat.name)}
-                                                        className="opacity-70 sm:opacity-0 sm:group-hover:opacity-100 p-1.5 text-muted-foreground hover:text-red-500 transition-all rounded-lg hover:bg-red-500/5 flex-shrink-0 touch-manipulation"
-                                                        title="Удалить категорию"
-                                                    >
-                                                        <Trash2 className="w-3.5 h-3.5" />
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        )
-                                    })}
-
-                                    {categories.length === 0 && (
-                                        <div className="py-10 text-center text-muted-foreground">
-                                            <p className="text-xs italic">Категории не найдены. Создайте первую!</p>
-                                        </div>
-                                    )}
-                                </div>
-                            </Card>
-
-                            {/* Chart Display Side */}
-                            <div className="space-y-6">
-                                <Card className="p-4 sm:p-5 border-border flex flex-col items-center overflow-hidden bg-card/75 backdrop-blur-md rounded-2xl shadow-md">
-                                    <h2 className="font-extrabold text-sm text-foreground mb-3 self-start flex items-center gap-1.5">
-                                        <Sparkles className="w-4 h-4 text-amber-500 animate-spin" style={{ animationDuration: '7s' }} />
-                                        Диаграмма баланса времени
-                                    </h2>
-                                    <div className="w-full max-w-[800px]">
-                                        <SunburstChartSVG categories={categories} periodType={periodType} />
-                                    </div>
-                                </Card>
-
-                                {/* Saved periods history */}
-                                <Card className="p-4 sm:p-5 border-border rounded-2xl shadow-sm bg-card/60">
-                                    <h3 className="text-xs font-extrabold text-foreground mb-3 uppercase tracking-wider">История сохраненных периодов</h3>
-                                    {history.length > 0 ? (
-                                        <div className="flex flex-wrap gap-2">
-                                            {history.slice(0, 10).map((h, i) => (
-                                                <button
-                                                    key={i}
-                                                    onClick={() => {
-                                                        const now = new Date()
-                                                        if (h.period_type === 'monthly') {
-                                                            const [y, m] = h.label.split('-').map(Number)
-                                                            const nowY = now.getFullYear()
-                                                            const nowM = now.getMonth() + 1
-                                                            const diff = (y - nowY) * 12 + (m - nowM)
-                                                            setPeriodType('monthly')
-                                                            setPeriodOffset(diff)
-                                                        } else {
-                                                            const [y, w] = h.label.replace('W', '').split('-').map(Number)
-                                                            const nowWeek = Math.ceil((((now.getTime() - new Date(now.getFullYear(), 0, 1).getTime()) / 86400000) + new Date(now.getFullYear(), 0, 1).getDay() + 1) / 7)
-                                                            const diff = (y - now.getFullYear()) * 52 + (w - nowWeek)
-                                                            setPeriodOffset(diff)
-                                                        }
-                                                    }}
-                                                    className="px-2.5 py-1 text-[10px] font-bold rounded-lg border border-border bg-background hover:bg-muted text-foreground transition-all shadow-sm"
-                                                >
-                                                    {formatPeriodLabel(h.label, h.period_type as any)}
-                                                </button>
-                                            ))}
-                                        </div>
-                                    ) : (
-                                        <p className="text-xs text-muted-foreground italic">История записей за текущий год отсутствует</p>
-                                    )}
-                                </Card>
-                            </div>
-                        </div>
-                    )}
-                </div>
-            ) : (
-                /* Report View (Admin Only) */
-                <Card className="p-5 border-border shadow-md space-y-6 bg-card rounded-2xl">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border/50 pb-4">
-                        <div>
-                            <h2 className="text-lg font-extrabold text-foreground">Сводный отчет по заполнению</h2>
-                            <p className="text-[11px] text-muted-foreground mt-0.5">
-                                Количество сохраненных периодов внимания у каждого участника
-                            </p>
-                        </div>
-                        <div className="flex flex-col sm:flex-row gap-2.5">
-                            <div className="relative">
-                                <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground/60" />
-                                <Input
-                                    placeholder="Поиск..."
-                                    value={searchTerm}
-                                    onChange={e => setSearchTerm(e.target.value)}
-                                    className="pl-8.5 w-full sm:w-[200px] h-9 text-xs border-border bg-background focus-visible:ring-indigo-500/30 rounded-lg"
-                                />
-                            </div>
-                            <select
-                                value={programFilter}
-                                onChange={e => setProgramFilter(e.target.value)}
-                                className="px-3 py-1 bg-background border border-border rounded-lg text-foreground text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/30 h-9 font-semibold shadow-sm"
-                            >
-                                <option value="all">Все программы</option>
-                                {uniquePrograms.map(p => (
-                                    <option key={p} value={p}>{p}</option>
-                                ))}
-                            </select>
-                        </div>
-                    </div>
-
-                    {isReportLoading ? (
-                        <div className="flex flex-col items-center justify-center py-20 gap-2 text-muted-foreground">
-                            <Loader2 className="w-6 h-6 animate-spin text-indigo-600" />
-                            <p className="text-xs">Загрузка данных отчета...</p>
-                        </div>
-                    ) : (
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-left border-collapse">
-                                <thead>
-                                    <tr className="border-b border-border text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
-                                        <th className="py-3 px-4">Участник</th>
-                                        <th className="py-3 px-4 text-center w-[180px]">Всего записей</th>
-                                        <th className="py-3 px-4">Месяцы/Недели заполнения</th>
-                                        <th className="py-3 px-4 text-right w-[100px]">Действие</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-border/60 text-xs">
-                                    {filteredParticipants.map(p => {
-                                        const pEntries = allEntries.filter(e => e.participant_id === p.id && e.participant_id !== TEMPLATE_ID)
-                                        const count = pEntries.length
-                                        return (
-                                            <tr key={p.id} className="hover:bg-muted/30 transition-colors">
-                                                <td className="py-3.5 px-4">
-                                                    <div className="font-bold text-foreground">{p.name}</div>
-                                                    {p.program?.name && (
-                                                        <Badge variant="secondary" className="mt-0.5 text-[9px] px-1.5 py-0 border-none font-medium">
-                                                            {p.program.name}
-                                                        </Badge>
-                                                    )}
-                                                </td>
-                                                <td className="py-3.5 px-4 text-center">
-                                                    <span className={`inline-flex items-center justify-center px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                                                        count > 0 ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400' : 'bg-muted text-muted-foreground'
-                                                    }`}>
-                                                        {formatTimes(count)}
-                                                    </span>
-                                                </td>
-                                                <td className="py-3.5 px-4">
-                                                    {count > 0 ? (
-                                                        <div className="flex flex-wrap gap-1">
-                                                            {pEntries.slice(0, 10).map((e, idx) => (
-                                                                <Badge
-                                                                    key={idx}
-                                                                    variant="outline"
-                                                                    className="text-[9px] px-1.5 py-0 font-bold bg-indigo-500/5 text-indigo-600 border-indigo-500/20"
-                                                                >
-                                                                    {formatPeriodLabel(e.period_label, e.period_type)}
-                                                                </Badge>
-                                                            ))}
-                                                            {count > 10 && <span className="text-[10px] text-muted-foreground font-semibold">+{count - 10}</span>}
-                                                        </div>
-                                                    ) : (
-                                                        <span className="text-[10px] text-muted-foreground italic">Нет сохраненных периодов</span>
-                                                    )}
-                                                </td>
-                                                <td className="py-3.5 px-4 text-right">
+                                                <div className="flex flex-1 items-center gap-2 max-sm:pl-[18px]">
+                                                    <Input
+                                                        aria-label="Категория"
+                                                        placeholder="Название категории"
+                                                        value={cat.name}
+                                                        onChange={e => updateCategory(cat.id, 'name', e.target.value)}
+                                                        aria-invalid={!cat.name.trim() || undefined}
+                                                        className="h-10 min-w-0 flex-1 sm:h-9"
+                                                    />
+                                                    <HoursInput
+                                                        id={`h-${cat.id}`}
+                                                        value={cat.value}
+                                                        onChange={v => updateCategory(cat.id, 'value', v)}
+                                                    />
                                                     <Button
                                                         variant="ghost"
-                                                        size="sm"
-                                                        className="gap-1 hover:text-indigo-600 hover:bg-indigo-500/10 text-muted-foreground text-[10.5px] h-7 px-2 font-bold"
-                                                        onClick={() => {
-                                                            setSelectedParticipantId(p.id)
-                                                            setActiveTab('editor')
-                                                            if (count > 0) {
-                                                                setPeriodType(pEntries[0].period_type)
-                                                                // Set offset based on the latest entry label
-                                                                const label = pEntries[0].period_label
-                                                                const now = new Date()
-                                                                if (pEntries[0].period_type === 'monthly') {
-                                                                    const [y, m] = label.split('-').map(Number)
-                                                                    const nowY = now.getFullYear()
-                                                                    const nowM = now.getMonth() + 1
-                                                                    const diff = (y - nowY) * 12 + (m - nowM)
-                                                                    setPeriodOffset(diff)
-                                                                } else {
-                                                                    const [y, w] = label.replace('W', '').split('-').map(Number)
-                                                                    const nowWeek = Math.ceil((((now.getTime() - new Date(now.getFullYear(), 0, 1).getTime()) / 86400000) + new Date(now.getFullYear(), 0, 1).getDay() + 1) / 7)
-                                                                    const diff = (y - now.getFullYear()) * 52 + (w - nowWeek)
-                                                                    setPeriodOffset(diff)
-                                                                }
-                                                            }
-                                                        }}
+                                                        size="icon"
+                                                        aria-label={`Удалить ${cat.name}`}
+                                                        onClick={() => removeCategory(cat.id, cat.name)}
+                                                        className="size-10 shrink-0 text-muted-foreground hover:bg-destructive-soft hover:text-destructive sm:size-9"
                                                     >
-                                                        <Eye className="w-3.5 h-3.5" /> Посмотреть
+                                                        <Trash2 />
                                                     </Button>
-                                                </td>
-                                            </tr>
-                                        )
-                                    })}
+                                                </div>
+                                            </div>
+                                        ))}
+                                        <div className="px-4 py-3">
+                                            <Button variant="outline" onClick={addCategory} className="w-full max-sm:h-11">
+                                                <Plus /> Добавить категорию
+                                            </Button>
+                                        </div>
+                                    </div>
+                                ) : categories.length === 0 ? (
+                                    <EmptyState
+                                        title="Категорий нет"
+                                        description="Добавьте свои категории или верните стандартный набор"
+                                        action={
+                                            <Button size="sm" onClick={() => setEditStructure(true)}>
+                                                <Settings2 /> Настроить
+                                            </Button>
+                                        }
+                                    />
+                                ) : (
+                                    <div>
+                                        {grouped.map(([g, items]) => {
+                                            const sub = items.reduce((s, c) => s + (c.value || 0), 0)
+                                            return (
+                                                <section key={g}>
+                                                    <div className="flex items-center gap-2 border-b bg-muted/40 px-4 py-2 text-sm">
+                                                        <span className="size-2.5 shrink-0 rounded-sm" style={{ background: colors.group(g) }} />
+                                                        <h3 className="min-w-0 flex-1 truncate font-medium">{g}</h3>
+                                                        <span className="num text-muted-foreground">
+                                                            {fmtH(Number(sub.toFixed(1)))} ч
+                                                            <span className="max-sm:hidden"> · {total > 0 ? Math.round((sub / total) * 100) : 0}%</span>
+                                                        </span>
+                                                    </div>
+                                                    <div className="divide-y border-b last:border-b-0">
+                                                        {items.map(cat => (
+                                                            <div key={cat.id} className="flex items-center gap-3 px-4 py-1.5 sm:py-1">
+                                                                <label htmlFor={`h-${cat.id}`} className="min-w-0 flex-1 py-1.5 text-sm">
+                                                                    {cat.name || <span className="text-muted-foreground">Без названия</span>}
+                                                                </label>
+                                                                <span className="num w-9 text-right text-xs text-muted-foreground">
+                                                                    {total > 0 ? Math.round((cat.value / total) * 100) : 0}%
+                                                                </span>
+                                                                <HoursInput
+                                                                    id={`h-${cat.id}`}
+                                                                    value={cat.value}
+                                                                    onChange={v => updateCategory(cat.id, 'value', v)}
+                                                                />
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </section>
+                                            )
+                                        })}
+                                    </div>
+                                )}
+                            </Panel>
 
-                                    {filteredParticipants.length === 0 && (
-                                        <tr>
-                                            <td colSpan={4} className="py-10 text-center text-muted-foreground italic text-xs">
-                                                Участники не найдены
-                                            </td>
-                                        </tr>
+                            {/* Chart + history */}
+                            <div className="space-y-4">
+                                <Panel>
+                                    <PanelHeading title="Диаграмма" description={periodTitle} />
+                                    <div className="px-2 py-4 sm:px-4">
+                                        <SunburstChart categories={categories} maxHours={maxHours} />
+                                    </div>
+                                    {total > 0 && (
+                                        <ul className="grid grid-cols-1 gap-x-6 gap-y-1.5 border-t px-4 py-3 text-sm sm:grid-cols-2">
+                                            {grouped.map(([g, items]) => {
+                                                const sub = items.reduce((s, c) => s + (c.value || 0), 0)
+                                                if (sub <= 0) return null
+                                                return (
+                                                    <li key={g} className="flex items-center gap-2">
+                                                        <span className="size-2.5 shrink-0 rounded-sm" style={{ background: colors.group(g) }} />
+                                                        <span className="min-w-0 flex-1 truncate">{g}</span>
+                                                        <span className="num text-muted-foreground">{Math.round((sub / total) * 100)}%</span>
+                                                        <span className="num w-14 text-right font-medium">{fmtH(Number(sub.toFixed(1)))} ч</span>
+                                                    </li>
+                                                )
+                                            })}
+                                        </ul>
                                     )}
-                                </tbody>
-                            </table>
+                                </Panel>
+
+                                <Panel>
+                                    <PanelHeading
+                                        title="Сохранённые периоды"
+                                        description={
+                                            history.length
+                                                ? `${history.length} ${plural(history.length, ['запись', 'записи', 'записей'])} · нажмите, чтобы открыть`
+                                                : undefined
+                                        }
+                                    />
+                                    {history.length > 0 ? (
+                                        <div className="flex flex-wrap gap-1.5 px-4 py-3">
+                                            {history.slice(0, 16).map((h, i) => {
+                                                const type = h.period_type === 'weekly' ? 'weekly' : 'monthly'
+                                                const isTemplateLabel = h.label === 'template' || h.label === 'template_weekly'
+                                                const active = isTemplateLabel
+                                                    ? isTemplate && type === periodType
+                                                    : type === periodType && h.label === currentLabel
+                                                return (
+                                                    <button
+                                                        key={`${h.period_type}-${h.label}-${i}`}
+                                                        type="button"
+                                                        onClick={() => (isTemplateLabel ? guard(() => setPeriodType(type)) : jumpTo(type, h.label))}
+                                                        className={cn(
+                                                            'h-9 rounded-md border px-3 text-sm transition-colors sm:h-8',
+                                                            active
+                                                                ? 'border-transparent bg-primary-soft font-medium text-primary-soft-foreground'
+                                                                : 'bg-card hover:bg-accent'
+                                                        )}
+                                                    >
+                                                        {formatPeriodLabel(h.label, type)}
+                                                    </button>
+                                                )
+                                            })}
+                                        </div>
+                                    ) : (
+                                        <EmptyState
+                                            icon={History}
+                                            title="Пока ничего не сохранено"
+                                            description="Сохранённые недели и месяцы появятся здесь"
+                                            className="py-8"
+                                        />
+                                    )}
+                                </Panel>
+                            </div>
                         </div>
                     )}
-                </Card>
+
+                    {pid && (
+                        <SaveBar dirty={hasUnsavedChanges} saving={isSaving} disabled={!selectedParticipantId} onSave={handleSave}>
+                            <div className="flex items-center gap-3">
+                                <div className="hidden min-w-0 sm:block">
+                                    <p className="truncate font-medium">{periodTitle}</p>
+                                    <div className="text-xs">
+                                        <SaveStatus dirty={hasUnsavedChanges} />
+                                    </div>
+                                </div>
+                                <div className="hidden h-8 w-px bg-border sm:block" />
+                                {hoursSummary}
+                            </div>
+                        </SaveBar>
+                    )}
+                </>
             )}
+        </PageContainer>
+    )
+}
+
+function HoursInput({ id, value, onChange }: { id: string; value: number; onChange: (v: number) => void }) {
+    return (
+        <div className="relative w-24 shrink-0">
+            <Input
+                id={id}
+                type="number"
+                inputMode="decimal"
+                enterKeyHint="next"
+                min={0}
+                step="0.1"
+                placeholder="0"
+                value={value || ''}
+                onChange={e => onChange(Math.max(0, Number(e.target.value)))}
+                onFocus={e => e.currentTarget.select()}
+                className="num h-10 [appearance:textfield] pr-7 text-right sm:h-8 [&::-webkit-inner-spin-button]:appearance-none"
+            />
+            <span className="pointer-events-none absolute top-1/2 right-2.5 -translate-y-1/2 text-xs text-muted-foreground">ч</span>
         </div>
     )
 }

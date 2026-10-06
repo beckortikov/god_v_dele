@@ -1,325 +1,164 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { Card } from '@/components/ui/card'
+import * as React from 'react'
+import { toast } from 'sonner'
+import { Archive, Inbox, MoreHorizontal, Pencil, Plus, Trash2, Users } from 'lucide-react'
+
+import { cn } from '@/lib/utils'
+import { formatMoney, formatNumber, plural } from '@/lib/format'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Plus, Edit2, Archive, ChevronDown, Search, X, AlertCircle, Trash2, MessageSquare } from 'lucide-react'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { PageContainer, PageHeader, Panel, PanelToolbar } from '@/components/erp/page-header'
+import { StatStrip } from '@/components/erp/stat-strip'
+import { SearchInput } from '@/components/erp/search-input'
+import { EmptyState } from '@/components/erp/empty-state'
+import { TablePagination } from '@/components/erp/pagination'
+import { TotalsBar, TableSkeleton, rowActionsCls } from '@/components/erp/table-parts'
+import { useConfirm } from '@/components/erp/confirm'
+import { useNavAction } from '@/components/app-shell/nav-context'
+import { ParticipantFormSheet } from '@/components/participants/participant-form-sheet'
+import { ParticipantDetailSheet } from '@/components/participants/participant-detail-sheet'
+import {
+  PARTICIPANT_STATUS,
+  monthlyTariff,
+  readPref,
+  summarize,
+  writePref,
+  type MonthlyPayment,
+  type Participant,
+  type ParticipantSummary,
+  type Program,
+} from '@/components/participants/types'
 
-interface Program {
-  id: string
-  name: string
-  price_per_month: number
-  duration_months: number
-}
+type PaymentFilter = 'all' | 'overdue' | 'partial' | 'paid'
 
-interface Participant {
-  id: string
-  name: string
-  email?: string
-  phone?: string
-  program_id: string
-  start_date: string
-  status: 'active' | 'completed' | 'archived'
-  tariff?: number
-  program?: Program
-}
+const PAGE_SIZE = 25
+const PREFS_KEY = 'participants-page-prefs'
+const NO_PAYMENTS: MonthlyPayment[] = []
 
-interface MonthlyPayment {
-  id: string
-  month_number: number
-  year: number
-  amount: number
-  fact_amount: number
-  status: string
-  participant_id: string
-  payment_month?: string
-  notes?: string
-}
-
-// Helper to check if participant has overdue payments (past months unpaid)
-const checkOverdue = (participant: any, payments: any[]) => {
-  if (!participant.start_date) return false
-
-  const start = new Date(participant.start_date)
-  const now = new Date()
-  const pPayments = payments.filter((p: any) => p.participant_id === participant.id)
-
-  // Normalize dates to start of month
-  let currentDate = new Date(start.getFullYear(), start.getMonth(), 1)
-  const firstDayCurrentMonth = new Date(now.getFullYear(), now.getMonth(), 1)
-
-  // Iterate through past months up to (but not including) current month
-  while (currentDate < firstDayCurrentMonth) {
-    const month = currentDate.getMonth() + 1
-    const year = currentDate.getFullYear()
-
-    const payment = pPayments.find((p: any) => p.month_number === month && p.year === year)
-    const plan = payment?.amount || participant.tariff || participant.program?.price_per_month || 0
-    const fact = payment?.fact_amount || 0
-
-    // Condition 1: No payment record for past month
-    // Condition 2: Payment exists but not fully paid (fact < plan)
-    if (!payment || (fact < plan)) {
-      return true
-    }
-
-    currentDate.setMonth(currentDate.getMonth() + 1)
-  }
-
-  return false
-}
-
-// Helper to check partial payment in ANY month
-const checkPartial = (participant: any, payments: any[]) => {
-  const pPayments = payments.filter((p: any) => p.participant_id === participant.id)
-
-  return pPayments.some((p: any) => {
-    const plan = p.amount || participant.tariff || participant.program?.price_per_month || 0
-    const fact = p.fact_amount || 0
-
-    // Check if partial: paid something but less than plan
-    return fact > 0 && fact < plan
-  })
-}
+const PAYMENT_FILTERS: { value: PaymentFilter; label: string }[] = [
+  { value: 'all', label: 'Все оплаты' },
+  { value: 'overdue', label: 'С просрочкой' },
+  { value: 'partial', label: 'С недоплатой' },
+  { value: 'paid', label: 'Оплатили этот месяц' },
+]
 
 export function ParticipantsPage() {
-  const [participants, setParticipants] = useState<Participant[]>([])
-  const [programs, setPrograms] = useState<Program[]>([])
-  const [payments, setPayments] = useState<MonthlyPayment[]>([]) // Store payments
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [isOpen, setIsOpen] = useState(false)
-  const [expandedId, setExpandedId] = useState<string | null>(null)
-  const [searchQuery, setSearchQuery] = useState('')
-  const [filterStatus, setFilterStatus] = useState<'all' | 'overdue' | 'partial' | 'paid'>('all')
-  const [filterProgram, setFilterProgram] = useState<string>('all')
-  const [formData, setFormData] = useState({
-    name: '',
-    email: '',
-    phone: '',
-    program_id: '',
-    tariff: '',
-    start_date: ''
-  })
-  const [isEditMode, setIsEditMode] = useState(false)
-  const [editingId, setEditingId] = useState<string | null>(null)
+  const confirm = useConfirm()
 
-  useEffect(() => {
-    Promise.all([
-      fetch('/api/participants').then(res => res.json()),
-      fetch('/api/programs').then(res => res.json()),
-      fetch('/api/monthly-payments').then(res => res.json()) // Fetch payments
-    ])
-      .then(([participantsRes, programsRes, paymentsRes]) => {
-        if (participantsRes.error) throw new Error(participantsRes.error)
-        if (programsRes.error) throw new Error(programsRes.error)
-        if (paymentsRes.error) throw new Error(paymentsRes.error)
+  const [participants, setParticipants] = React.useState<Participant[]>([])
+  const [programs, setPrograms] = React.useState<Program[]>([])
+  const [payments, setPayments] = React.useState<MonthlyPayment[]>([])
+  const [loading, setLoading] = React.useState(true)
+  const [error, setError] = React.useState<string | null>(null)
 
-        setParticipants(participantsRes.data || [])
-        setPrograms(programsRes.data || [])
-        setPayments(paymentsRes.data || [])
-        setLoading(false)
-      })
-      .catch(err => {
-        setError(err.message)
-        setLoading(false)
-      })
+  // Filters
+  const [query, setQuery] = React.useState('')
+  const [filterStatus, setFilterStatus] = React.useState<PaymentFilter>('all')
+  const [filterProgram, setFilterProgram] = React.useState('all')
+  const [page, setPage] = React.useState(1)
+
+  // Sheets
+  const [detailId, setDetailId] = React.useState<string | null>(null)
+  const [detailOpen, setDetailOpen] = React.useState(false)
+  const [formOpen, setFormOpen] = React.useState(false)
+  const [editing, setEditing] = React.useState<Participant | null>(null)
+
+  const fetchData = React.useCallback(async () => {
+    try {
+      const [participantsRes, programsRes, paymentsRes] = await Promise.all([
+        fetch('/api/participants').then(res => res.json()),
+        fetch('/api/programs').then(res => res.json()),
+        fetch('/api/monthly-payments').then(res => res.json()),
+      ])
+      if (participantsRes.error) throw new Error(participantsRes.error)
+      if (programsRes.error) throw new Error(programsRes.error)
+      if (paymentsRes.error) throw new Error(paymentsRes.error)
+
+      setParticipants(participantsRes.data || [])
+      setPrograms(programsRes.data || [])
+      setPayments(paymentsRes.data || [])
+      setError(null)
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
   }, [])
 
+  React.useEffect(() => {
+    fetchData()
+  }, [fetchData])
 
-
-  // ... (inside the component)
-
-  const handleAddParticipant = async () => {
+  // Program filter is remembered between visits
+  React.useEffect(() => {
     try {
-      const payload = {
-        ...formData,
-        tariff: formData.tariff ? Number(formData.tariff) : null
-      }
+      const saved = JSON.parse(readPref(PREFS_KEY) || '{}')
+      if (saved.program) setFilterProgram(saved.program)
+    } catch {}
+  }, [])
+  React.useEffect(() => {
+    writePref(PREFS_KEY, JSON.stringify({ program: filterProgram }))
+  }, [filterProgram])
 
-      const response = await fetch('/api/participants', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      })
+  React.useEffect(() => setPage(1), [query, filterStatus, filterProgram])
 
-      const result = await response.json()
-      if (result.error) throw new Error(result.error)
+  // A remembered program that no longer exists falls back to «all»
+  React.useEffect(() => {
+    if (!loading && filterProgram !== 'all' && !programs.some(p => p.id === filterProgram)) setFilterProgram('all')
+  }, [loading, programs, filterProgram])
 
-      setParticipants([...participants, result.data[0]])
-      setIsOpen(false)
-      setFormData({ name: '', email: '', phone: '', program_id: '', tariff: '', start_date: '' })
-    } catch (err: any) {
-      alert('Ошибка при добавлении участника: ' + err.message)
+  const openCreate = () => {
+    setEditing(null)
+    setFormOpen(true)
+  }
+  const openEdit = (p: Participant) => {
+    setEditing(p)
+    setFormOpen(true)
+  }
+  const openDetail = (p: Participant) => {
+    setDetailId(p.id)
+    setDetailOpen(true)
+  }
+
+  useNavAction('new-participant', openCreate)
+
+  // ---------- Derived data ----------
+  const paymentsBy = React.useMemo(() => {
+    const map = new Map<string, MonthlyPayment[]>()
+    for (const pay of payments) {
+      const list = map.get(pay.participant_id)
+      if (list) list.push(pay)
+      else map.set(pay.participant_id, [pay])
     }
-  }
+    return map
+  }, [payments])
 
-  const handleEditClick = (participant: Participant) => {
-    setFormData({
-      name: participant.name,
-      email: participant.email || '',
-      phone: participant.phone || '',
-      program_id: participant.program_id,
-      tariff: participant.tariff ? String(participant.tariff) : '',
-      start_date: participant.start_date.split('T')[0]
-    })
-    setEditingId(participant.id)
-    setIsEditMode(true)
-    setIsOpen(true)
-  }
+  const summaries = React.useMemo(() => {
+    const map = new Map<string, ParticipantSummary>()
+    for (const p of participants) map.set(p.id, summarize(p, paymentsBy.get(p.id) ?? NO_PAYMENTS))
+    return map
+  }, [participants, paymentsBy])
 
-  const handleSaveParticipant = async () => {
-    if (isEditMode && editingId) {
-      await handleUpdateParticipant()
-    } else {
-      await handleAddParticipant()
-    }
-  }
-
-  const handleUpdateParticipant = async () => {
-    if (!editingId) return
-
-    try {
-      const payload = {
-        id: editingId,
-        ...formData,
-        tariff: formData.tariff ? Number(formData.tariff) : undefined
-      }
-
-      const response = await fetch('/api/participants', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      })
-
-      const result = await response.json()
-      if (result.error) throw new Error(result.error)
-
-      // Update local state with server response
-      if (result.data && result.data[0]) {
-        setParticipants(participants.map(p => p.id === editingId ? result.data[0] : p))
-      }
-
-      setIsOpen(false)
-      setIsEditMode(false)
-      setEditingId(null)
-      setFormData({ name: '', email: '', phone: '', program_id: '', tariff: '', start_date: '' })
-    } catch (err: any) {
-      alert('Ошибка при обновлении: ' + err.message)
-    }
-  }
-
-  const handleArchive = async (participantId: string) => {
-    if (!confirm('Вы уверены, что хотите архивировать этого участника?')) return
-
-    try {
-      const response = await fetch('/api/participants', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: participantId, status: 'archived' })
-      })
-
-      const result = await response.json()
-      if (result.error) throw new Error(result.error)
-
-      // Update local state
-      if (result.data && result.data[0]) {
-        setParticipants(participants.map(p => p.id === participantId ? result.data[0] : p))
-      }
-    } catch (err: any) {
-      alert('Ошибка при архивировании: ' + err.message)
-    }
-  }
-
-  const handleDelete = async (participantId: string) => {
-    if (!confirm('⚠️ ВНИМАНИЕ! Вы уверены, что хотите УДАЛИТЬ этого участника?\n\nЭто действие нельзя отменить. Все данные участника и его платежи будут удалены навсегда.')) return
-
-    try {
-      const response = await fetch('/api/participants', {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: participantId })
-      })
-
-      const result = await response.json()
-      if (result.error) throw new Error(result.error)
-
-      // Remove from local state
-      setParticipants(participants.filter(p => p.id !== participantId))
-
-      // Close expanded view if this participant was expanded
-      if (expandedId === participantId) {
-        setExpandedId(null)
-      }
-    } catch (err: any) {
-      alert('Ошибка при удалении: ' + err.message)
-    }
-  }
-
-
-  // ... (Update the Dialog trigger and content to handle both modes) ...
-  // In the JSX where the Dialog is defined:
-  // <Dialog open={isOpen} onOpenChange={(open) => { setIsOpen(open); if (!open) { setIsEditMode(false); setEditingId(null); setFormData(...) } }}>
-  //   <DialogTitle>{isEditMode ? 'Редактировать участника' : 'Добавить нового участника'}</DialogTitle>
-  //   <DialogDescription>{isEditMode ? 'Измените данные участника' : 'Заполните информацию о новом участнике'}</DialogDescription>
-  //   ...
-  //   <Button onClick={handleSaveParticipant}>{isEditMode ? 'Сохранить изменения' : 'Создать участника'}</Button>
-
-  // ... (Update the Edit button in the list) ...
-  // <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); handleEditClick(participant); }}>
-  //   <Edit2 ... /> Редактировать
-  // </Button>
-
-  if (loading) {
-    return (
-      <div className="p-6 flex items-center justify-center h-full">
-        <div className="text-center">
-          <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-muted-foreground">Загрузка данных...</p>
-        </div>
-      </div>
-    )
-  }
-
-  if (error) {
-    return (
-      <div className="p-6">
-        <Card className="p-6 bg-destructive/5 border-destructive">
-          <div className="flex gap-3">
-            <AlertCircle className="w-5 h-5 text-destructive flex-shrink-0 mt-0.5" />
-            <div>
-              <p className="font-medium text-foreground">Ошибка загрузки данных</p>
-              <p className="text-sm text-muted-foreground">{error}</p>
-            </div>
-          </div>
-        </Card>
-      </div>
-    )
-  }
-
+  const q = query.trim().toLowerCase()
   const filteredParticipants = participants.filter(p => {
-    const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase())
+    const s = summaries.get(p.id)
+    const matchesSearch =
+      !q || p.name.toLowerCase().includes(q) || p.phone?.toLowerCase().includes(q) || p.email?.toLowerCase().includes(q)
 
-    // Filter by payment status
     let matchesStatus = true
-    if (filterStatus !== 'all') {
-      if (filterStatus === 'overdue') {
-        matchesStatus = checkOverdue(p, payments)
-      } else if (filterStatus === 'partial') {
-        matchesStatus = checkPartial(p, payments)
-      } else if (filterStatus === 'paid') {
-        const now = new Date()
-        const currentMonth = now.getMonth() + 1
-        const currentYear = now.getFullYear()
-        const payment = payments.find(pay => pay.participant_id === p.id && pay.month_number === currentMonth && pay.year === currentYear)
-        matchesStatus = payment?.status === 'paid'
-      }
-    }
+    if (filterStatus === 'overdue') matchesStatus = !!s?.overdue
+    else if (filterStatus === 'partial') matchesStatus = !!s?.partial
+    else if (filterStatus === 'paid') matchesStatus = !!s?.paidThisMonth
 
     const matchesProgram = filterProgram === 'all' || p.program_id === filterProgram
     return matchesSearch && matchesStatus && matchesProgram
@@ -329,569 +168,358 @@ export function ParticipantsPage() {
   const totalMonthlyPlanned = filteredParticipants
     .filter(p => p.status === 'active')
     .reduce((sum, p) => sum + (p.tariff || p.program?.price_per_month || 0), 0)
+  const overdueCount = filteredParticipants.filter(p => summaries.get(p.id)?.overdue).length
+  const partialCount = filteredParticipants.filter(p => summaries.get(p.id)?.partial).length
+  const visibleCollected = filteredParticipants.reduce((sum, p) => sum + (summaries.get(p.id)?.collected ?? 0), 0)
 
-  const statusVariants: Record<string, 'default' | 'secondary' | 'destructive'> = {
-    active: 'default',
-    completed: 'secondary',
-    archived: 'destructive',
+  const pageRows = filteredParticipants.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+  const filtersActive = !!query || filterStatus !== 'all' || filterProgram !== 'all'
+  const resetFilters = () => {
+    setQuery('')
+    setFilterStatus('all')
+    setFilterProgram('all')
   }
 
-  const statusLabels: Record<string, string> = {
-    active: 'Активный',
-    completed: 'Завершено',
-    archived: 'Архив',
+  const detail = participants.find(p => p.id === detailId) ?? null
+
+  // ---------- Actions ----------
+  const handleSaved = (saved: Participant, mode: 'create' | 'update') => {
+    if (mode === 'create') setParticipants(list => [saved, ...list])
+    else setParticipants(list => list.map(p => (p.id === saved.id ? saved : p)))
   }
+
+  const handleArchive = async (participant: Participant) => {
+    const ok = await confirm({
+      title: 'Перевести в архив?',
+      description: `${participant.name} перестанет считаться активным участником. История платежей сохранится.`,
+      confirmText: 'В архив',
+    })
+    if (!ok) return
+
+    try {
+      const response = await fetch('/api/participants', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: participant.id, status: 'archived' }),
+      })
+      const result = await response.json()
+      if (result.error) throw new Error(result.error)
+
+      if (result.data && result.data[0]) {
+        setParticipants(list => list.map(p => (p.id === participant.id ? result.data[0] : p)))
+      }
+      toast.success('Участник в архиве', { description: participant.name })
+    } catch (err: any) {
+      toast.error('Не удалось перевести в архив', { description: err.message })
+    }
+  }
+
+  const handleDelete = async (participant: Participant) => {
+    const ok = await confirm({
+      title: `Удалить участника «${participant.name}»?`,
+      description: 'Данные участника и все его платежи будут удалены навсегда. Если человек просто закончил обучение, лучше перевести его в архив.',
+      confirmText: 'Удалить',
+      destructive: true,
+    })
+    if (!ok) return
+
+    try {
+      const response = await fetch('/api/participants', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: participant.id }),
+      })
+      const result = await response.json()
+      if (result.error) throw new Error(result.error)
+
+      setParticipants(list => list.filter(p => p.id !== participant.id))
+      if (detailId === participant.id) setDetailOpen(false)
+      toast.success('Участник удалён', { description: participant.name })
+    } catch (err: any) {
+      toast.error('Не удалось удалить участника', { description: err.message })
+    }
+  }
+
+  // ---------- Render ----------
+  if (error) {
+    return (
+      <PageContainer>
+        <PageHeader title="Участники" />
+        <Panel>
+          <EmptyState
+            icon={Inbox}
+            title="Не удалось загрузить участников"
+            description={error}
+            action={
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setLoading(true)
+                  setError(null)
+                  fetchData()
+                }}
+              >
+                Повторить
+              </Button>
+            }
+          />
+        </Panel>
+      </PageContainer>
+    )
+  }
+
+  const participantsWord = (n: number) => plural(n, ['участник', 'участника', 'участников'])
 
   return (
-    <div className="p-3 sm:p-6 space-y-4 sm:space-y-6 bg-background">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
-        <div>
-          <h2 className="text-xl sm:text-2xl font-bold text-foreground">Участники</h2>
-          <p className="text-xs sm:text-sm text-muted-foreground mt-1">Управление участниками программ обучения</p>
-        </div>
-        <Dialog open={isOpen} onOpenChange={(open) => {
-          setIsOpen(open)
-          if (!open) {
-            setIsEditMode(false)
-            setEditingId(null)
-            setFormData({ name: '', email: '', phone: '', program_id: '', tariff: '', start_date: '' })
-          }
-        }}>
-          <DialogTrigger asChild>
-            <Button className="gap-2 w-full sm:w-auto touch-manipulation">
-              <Plus className="w-4 h-4" />
-              <span className="hidden sm:inline">Добавить участника</span>
-              <span className="sm:hidden">Добавить</span>
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>{isEditMode ? 'Редактировать участника' : 'Добавить нового участника'}</DialogTitle>
-              <DialogDescription>
-                {isEditMode ? 'Измените данные участника' : 'Заполните информацию о новом участнике программы обучения'}
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4">
-              <div>
-                <Label htmlFor="name">ФИО</Label>
-                <Input
-                  id="name"
-                  placeholder="Введите ФИО"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                />
-              </div>
-              <div>
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="email@example.com"
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                />
-              </div>
-              <div>
-                <Label htmlFor="phone">Телефон</Label>
-                <Input
-                  id="phone"
-                  placeholder="+7 (999) 123-45-67"
-                  value={formData.phone}
-                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                />
-              </div>
-              <div>
-                <Label htmlFor="program">Программа</Label>
-                <select
-                  id="program"
-                  value={formData.program_id}
-                  onChange={(e) => setFormData({ ...formData, program_id: e.target.value })}
-                  className="w-full px-3 py-2 bg-background border border-border rounded-md text-foreground"
-                >
-                  <option value="">Выберите программу</option>
-                  {programs.map(prog => (
-                    <option key={prog.id} value={prog.id}>{prog.name}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <Label htmlFor="tariff">Индивидуальный тариф ($)</Label>
-                <Input
-                  id="tariff"
-                  type="number"
-                  placeholder="Оставьте пустым для цены программы"
-                  value={formData.tariff}
-                  onChange={(e) => setFormData({ ...formData, tariff: e.target.value })}
-                />
-              </div>
-              <div>
-                <Label htmlFor="startDate">Дата начала</Label>
-                <Input
-                  id="startDate"
-                  type="date"
-                  value={formData.start_date}
-                  onChange={(e) => setFormData({ ...formData, start_date: e.target.value })}
-                />
-              </div>
-              <Button onClick={handleSaveParticipant} className="w-full">
-                {isEditMode ? 'Сохранить изменения' : 'Создать участника'}
+    <PageContainer>
+      <PageHeader
+        title="Участники"
+        description="Кто учится, по какому тарифу и как платит"
+        actions={
+          <Button size="sm" onClick={openCreate}>
+            <Plus /> Новый участник
+          </Button>
+        }
+      />
+
+      <StatStrip
+        loading={loading}
+        className="mb-6 grid-cols-2"
+        stats={[
+          {
+            label: 'Активных участников',
+            value: formatNumber(activeCount),
+            sub: `из ${formatNumber(filteredParticipants.length)} в списке`,
+          },
+          {
+            label: 'Плановый доход в месяц',
+            value: formatMoney(totalMonthlyPlanned),
+            sub: 'по тарифам активных',
+          },
+          {
+            label: 'С просрочкой',
+            value: formatNumber(overdueCount),
+            tone: overdueCount ? 'destructive' : 'default',
+            sub: filterStatus === 'overdue' ? 'Фильтр включён' : 'Показать только их',
+            onClick: () => setFilterStatus(s => (s === 'overdue' ? 'all' : 'overdue')),
+          },
+          {
+            label: 'С недоплатой',
+            value: formatNumber(partialCount),
+            tone: partialCount ? 'warning' : 'default',
+            sub: filterStatus === 'partial' ? 'Фильтр включён' : 'Показать только их',
+            onClick: () => setFilterStatus(s => (s === 'partial' ? 'all' : 'partial')),
+          },
+        ]}
+      />
+
+      {loading ? (
+        <TableSkeleton />
+      ) : (
+        <Panel>
+          <PanelToolbar>
+            <SearchInput value={query} onChange={setQuery} placeholder="Имя, телефон или email" className="sm:w-72" />
+            <Select value={filterStatus} onValueChange={v => setFilterStatus(v as PaymentFilter)}>
+              <SelectTrigger size="sm" className="min-w-40 max-sm:flex-1" aria-label="Оплата">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {PAYMENT_FILTERS.map(f => (
+                  <SelectItem key={f.value} value={f.value}>
+                    {f.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={filterProgram} onValueChange={setFilterProgram}>
+              <SelectTrigger size="sm" className="min-w-40 max-sm:flex-1" aria-label="Программа">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Все программы</SelectItem>
+                {programs.map(p => (
+                  <SelectItem key={p.id} value={p.id}>
+                    {p.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {filtersActive && (
+              <Button size="sm" variant="ghost" className="text-muted-foreground" onClick={resetFilters}>
+                Сбросить
               </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
-      </div>
+            )}
+          </PanelToolbar>
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        <Card className="p-3 sm:p-4 bg-card border-border">
-          <p className="text-xs text-muted-foreground mb-1">Активных участников</p>
-          <p className="text-lg sm:text-2xl font-bold text-foreground mb-1">{activeCount}</p>
-          <p className="text-[10px] text-muted-foreground">на программах</p>
-        </Card>
-
-        <Card className="p-3 sm:p-4 bg-card border-border">
-          <p className="text-xs text-muted-foreground mb-1">Ежемесячный доход</p>
-          <p className="text-lg sm:text-2xl font-bold text-foreground mb-1">${totalMonthlyPlanned.toLocaleString()}</p>
-          <p className="text-[10px] text-muted-foreground">плановая сумма</p>
-        </Card>
-
-        <Card className="p-3 sm:p-4 bg-card border-border">
-          <p className="text-xs text-muted-foreground mb-1">Просроченные платежи</p>
-          <p className="text-lg sm:text-2xl font-bold text-red-600 mb-1">
-            {filteredParticipants.filter(p => checkOverdue(p, payments)).length}
-          </p>
-          <p className="text-[10px] text-muted-foreground">участников</p>
-        </Card>
-
-        <Card className="p-3 sm:p-4 bg-card border-border">
-          <p className="text-xs text-muted-foreground mb-1">Неполные платежи</p>
-          <p className="text-lg sm:text-2xl font-bold text-orange-600 mb-1">
-            {filteredParticipants.filter(p => checkPartial(p, payments)).length}
-          </p>
-          <p className="text-[10px] text-muted-foreground">участников</p>
-        </Card>
-      </div>
-
-      {/* Filters */}
-      <div className="bg-card border border-border rounded-lg p-3 sm:p-4 space-y-3 sm:space-y-4">
-        <div className="flex gap-3 sm:gap-4 flex-wrap items-end">
-          <div className="flex-1 min-w-full sm:min-w-64">
-            <label className="text-xs sm:text-sm font-medium text-foreground block mb-2">Поиск по имени</label>
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input
-                placeholder="Начните вводить имя..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10 touch-manipulation"
+          {filteredParticipants.length === 0 ? (
+            participants.length === 0 ? (
+              <EmptyState
+                icon={Users}
+                title="Участников пока нет"
+                description="Добавьте первого участника, чтобы отслеживать его оплаты"
+                action={
+                  <Button size="sm" onClick={openCreate}>
+                    <Plus /> Новый участник
+                  </Button>
+                }
               />
-              {searchQuery && (
-                <button
-                  onClick={() => setSearchQuery('')}
-                  className="absolute right-3 top-1/2 transform -translate-y-1/2"
-                >
-                  <X className="w-4 h-4 text-muted-foreground hover:text-foreground" />
-                </button>
-              )}
-            </div>
-          </div>
-
-          <div className="w-full sm:w-48">
-            <label className="text-xs sm:text-sm font-medium text-foreground block mb-2">Статус платежей</label>
-            <select
-              value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value as any)}
-              className="w-full px-3 py-2 bg-background border border-border rounded-md text-foreground text-sm touch-manipulation"
-            >
-              <option value="all">Все</option>
-              <option value="overdue">Просрочено</option>
-              <option value="partial">Частично оплачено</option>
-              <option value="paid">Оплачено</option>
-            </select>
-          </div>
-
-          <div className="w-full sm:w-48">
-            <label className="text-xs sm:text-sm font-medium text-foreground block mb-2">Программа</label>
-            <select
-              value={filterProgram}
-              onChange={(e) => setFilterProgram(e.target.value)}
-              className="w-full px-3 py-2 bg-background border border-border rounded-md text-foreground text-sm touch-manipulation"
-            >
-              <option value="all">Все программы</option>
-              {programs.map(prog => (
-                <option key={prog.id} value={prog.id}>{prog.name}</option>
-              ))}
-            </select>
-          </div>
-
-          {(searchQuery || filterStatus !== 'all' || filterProgram !== 'all') && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                setSearchQuery('')
-                setFilterStatus('all')
-                setFilterProgram('all')
-              }}
-              className="w-full sm:w-auto touch-manipulation"
-            >
-              Сбросить фильтры
-            </Button>
-          )}
-        </div>
-        <div className="text-xs text-muted-foreground">
-          Найдено: <span className="font-semibold text-foreground">{filteredParticipants.length}</span> из {participants.length} участников
-        </div>
-      </div>
-
-
-
-      {/* Participants List */}
-      <div className="space-y-2">
-        {filteredParticipants.length === 0 ? (
-          <Card className="bg-card border-border p-8 text-center">
-            <p className="text-muted-foreground">Участники не найдены</p>
-          </Card>
-        ) : (
-          filteredParticipants.map((participant) => {
-            const isExpanded = expandedId === participant.id
-
-            return (
-              <Card key={participant.id} className="bg-card border-border overflow-hidden">
-                <div
-                  className="p-3 sm:p-4 cursor-pointer hover:bg-muted/20 transition-colors"
-                  onClick={() => setExpandedId(isExpanded ? null : participant.id)}
-                >
-                  {/* Mobile Layout */}
-                  <div className="flex flex-wrap gap-2 items-start sm:hidden">
-                    <div className="flex items-start gap-2 flex-1 min-w-0">
-                      <ChevronDown
-                        className={`w-4 h-4 text-muted-foreground transition-transform flex-shrink-0 mt-0.5 ${isExpanded ? 'rotate-180' : ''}`}
-                      />
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <p className="font-semibold text-foreground text-sm">{participant.name}</p>
-                          {(() => {
-                            const badges = []
-
-                            if (checkOverdue(participant, payments)) {
-                              badges.push(
-                                <Badge key="overdue" variant="destructive" className="text-[10px] h-5 px-2">
-                                  Просрочено
-                                </Badge>
-                              )
-                            }
-
-                            if (checkPartial(participant, payments)) {
-                              badges.push(
-                                <Badge key="partial" variant="secondary" className="text-[10px] h-5 px-2 bg-orange-100 text-orange-700 hover:bg-orange-200 border-orange-200">
-                                  Частично
-                                </Badge>
-                              )
-                            }
-
-                            const now = new Date()
-                            const currentMonth = now.getMonth() + 1
-                            const currentYear = now.getFullYear()
-                            const payment = payments.find(p => p.participant_id === participant.id && p.month_number === currentMonth && p.year === currentYear)
-
-                            if (payment && payment.status === 'paid') {
-                              badges.push(
-                                <Badge key="paid" className="text-[10px] h-5 px-2 bg-teal-600 hover:bg-teal-700">
-                                  Оплачено
-                                </Badge>
-                              )
-                            }
-
-                            if (badges.length === 0) return null
-
-                            return <div className="flex gap-1 flex-wrap">{badges}</div>
-                          })()}
-                        </div>
-                        <p className="text-xs text-muted-foreground mt-0.5 truncate">{participant.program?.name || 'Программа не указана'}</p>
-                      </div>
-                    </div>
-
-                    <div className="flex gap-2 w-full justify-between pl-6">
-                      <div className="text-left">
-                        <p className="text-[10px] text-muted-foreground mb-0.5">Платежи</p>
-                        <p className="font-semibold text-foreground text-xs">
-                          {(() => {
-                            const pPayments = payments.filter(p => p.participant_id === participant.id)
-                            const paidCount = pPayments.filter(p => p.status === 'paid' || (p.fact_amount || 0) >= (p.amount || 0)).length
-                            return `${paidCount}/${pPayments.length}`
-                          })()}
-                        </p>
-                      </div>
-                      <div className="text-left">
-                        <p className="text-[10px] text-muted-foreground mb-0.5">Собрано</p>
-                        <p className="font-semibold text-foreground text-xs">
-                          {(() => {
-                            const pPayments = payments.filter(p => p.participant_id === participant.id)
-                            const totalPaid = pPayments.reduce((acc, curr) => acc + (curr.fact_amount || 0), 0)
-                            return `$${totalPaid.toLocaleString()}`
-                          })()}
-                        </p>
-                      </div>
-                      <div className="text-left">
-                        <p className="text-[10px] text-muted-foreground mb-0.5">Статус</p>
-                        <Badge variant={participant.status === 'active' ? 'default' : 'secondary'} className="text-[10px] h-5 px-2 whitespace-nowrap">
-                          {statusLabels[participant.status]}
-                        </Badge>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Desktop Layout */}
-                  <div className="hidden sm:flex justify-between items-center">
-                    <div className="flex items-center gap-2 flex-1 min-w-0">
-                      <ChevronDown
-                        className={`w-4 h-4 text-muted-foreground transition-transform flex-shrink-0 ${isExpanded ? 'rotate-180' : ''}`}
-                      />
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <p className="font-semibold text-foreground">{participant.name}</p>
-                          {(() => {
-                            const badges = []
-
-                            if (checkOverdue(participant, payments)) {
-                              badges.push(
-                                <Badge key="overdue" variant="destructive" className="text-[10px] h-5 px-2">
-                                  Просрочено
-                                </Badge>
-                              )
-                            }
-
-                            if (checkPartial(participant, payments)) {
-                              badges.push(
-                                <Badge key="partial" variant="secondary" className="text-[10px] h-5 px-2 bg-orange-100 text-orange-700 hover:bg-orange-200 border-orange-200">
-                                  Частично
-                                </Badge>
-                              )
-                            }
-
-                            const now = new Date()
-                            const currentMonth = now.getMonth() + 1
-                            const currentYear = now.getFullYear()
-                            const payment = payments.find(p => p.participant_id === participant.id && p.month_number === currentMonth && p.year === currentYear)
-
-                            if (payment && payment.status === 'paid') {
-                              badges.push(
-                                <Badge key="paid" className="text-[10px] h-5 px-2 bg-teal-600 hover:bg-teal-700">
-                                  Оплачено
-                                </Badge>
-                              )
-                            }
-
-                            if (badges.length === 0) return null
-
-                            return <div className="flex gap-1 flex-wrap">{badges}</div>
-                          })()}
-
-                        </div>
-                        <p className="text-xs text-muted-foreground truncate">{participant.program?.name || 'Программа не указана'}</p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-3 md:gap-4 flex-shrink-0">
-                      <div className="text-right">
-                        <p className="text-xs text-muted-foreground mb-1">Платежи</p>
-                        <p className="font-semibold text-foreground text-sm">
-                          {(() => {
-                            const pPayments = payments.filter(p => p.participant_id === participant.id)
-                            const paidCount = pPayments.filter(p => p.status === 'paid' || (p.fact_amount || 0) >= (p.amount || 0)).length
-                            return `${paidCount}/${pPayments.length}`
-                          })()}
-                        </p>
-                      </div>
-
-                      <div className="text-right">
-                        <p className="text-xs text-muted-foreground mb-1">Собрано</p>
-                        <p className="font-semibold text-foreground text-sm">
-                          {(() => {
-                            const pPayments = payments.filter(p => p.participant_id === participant.id)
-                            const totalPaid = pPayments.reduce((acc, curr) => acc + (curr.fact_amount || 0), 0)
-                            return `$${totalPaid.toLocaleString()}`
-                          })()}
-                        </p>
-                      </div>
-
-                      <div className="text-right">
-                        <p className="text-xs text-muted-foreground mb-1">Статус</p>
-                        <Badge variant={participant.status === 'active' ? 'default' : 'secondary'} className="text-[10px] h-6 px-3 whitespace-nowrap">
-                          {statusLabels[participant.status]}
-                        </Badge>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {isExpanded && (
-                  <div className="border-t border-border p-4 bg-muted/10">
-                    <div className="mb-6">
-                      <h4 className="text-sm font-semibold text-foreground mb-3">Информация об участнике</h4>
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <div>
-                          <p className="text-xs text-muted-foreground">Email</p>
-                          <p className="text-sm text-foreground">{participant.email || 'Не указан'}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-muted-foreground">Телефон</p>
-                          <p className="text-sm text-foreground">{participant.phone || 'Не указан'}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-muted-foreground">Дата начала</p>
-                          <p className="text-sm text-foreground">{new Date(participant.start_date).toLocaleDateString('ru-RU')}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-muted-foreground">Длительность</p>
-                          <p className="text-sm text-foreground">{participant.program?.duration_months || 0} месяцев</p>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="mb-6">
-                      <h4 className="text-sm font-semibold text-foreground mb-3">Месячные платежи</h4>
-                      <div className="bg-background rounded-md border border-border overflow-hidden">
-                        <Table>
-                          <TableHeader>
-                            <TableRow className="h-8 bg-muted/50 hover:bg-muted/50">
-                              <TableHead className="text-xs">Месяц</TableHead>
-                              <TableHead className="text-xs">План</TableHead>
-                              <TableHead className="text-xs">Факт</TableHead>
-                              <TableHead className="text-xs">Отклонение</TableHead>
-                              <TableHead className="text-xs">Статус</TableHead>
-                              <TableHead className="text-xs w-10"></TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {(() => {
-                              const pPayments = payments
-                                .filter(p => p.participant_id === participant.id)
-                                .sort((a, b) => {
-                                  if (a.year !== b.year) return b.year - a.year
-                                  return b.month_number - a.month_number
-                                })
-
-                              if (pPayments.length === 0) {
-                                return <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-4">Нет платежей</TableCell></TableRow>
-                              }
-
-                              return pPayments.map(payment => {
-                                const plan = payment.amount || participant.tariff || participant.program?.price_per_month || 0
-                                const fact = payment.fact_amount || 0
-                                const deviation = fact - plan
-
-                                return (
-                                  <TableRow key={payment.id} className="h-9 hover:bg-muted/20">
-                                    <TableCell className="text-sm">{payment.payment_month || `${payment.month_number}.${payment.year}`}</TableCell>
-                                    <TableCell className="text-sm">${plan.toLocaleString()}</TableCell>
-                                    <TableCell className="text-sm">${fact.toLocaleString()}</TableCell>
-                                    <TableCell className={`text-sm ${deviation < 0 ? 'text-destructive' : 'text-green-600'}`}>
-                                      {deviation === 0 ? '$0' : (deviation > 0 ? '+' : '') + deviation.toLocaleString()}
-                                    </TableCell>
-                                    <TableCell>
-                                      {(() => {
-                                        const plan = payment.amount || participant.tariff || participant.program?.price_per_month || 0
-                                        const fact = payment.fact_amount || 0
-
-                                        let statusText = 'Ожидается'
-                                        let statusVariant: 'default' | 'secondary' | 'destructive' = 'secondary'
-
-                                        if (payment.status === 'overdue') {
-                                          statusText = 'Просрочено'
-                                          statusVariant = 'destructive'
-                                        } else if (fact >= plan && fact > 0) {
-                                          statusText = 'Оплачено'
-                                          statusVariant = 'default'
-                                        } else if (fact > 0 && fact < plan) {
-                                          statusText = 'Частично'
-                                          statusVariant = 'secondary'
-                                        }
-
-                                        return (
-                                          <Badge variant={statusVariant} className="text-[10px] px-2 py-0 h-5">
-                                            {statusText}
-                                          </Badge>
-                                        )
-                                      })()}
-                                    </TableCell>
-                                    <TableCell>
-                                      {payment.notes && (
-                                        <Dialog>
-                                          <DialogTrigger asChild>
-                                            <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
-                                              <MessageSquare className="h-3.5 w-3.5 text-blue-600" />
-                                            </Button>
-                                          </DialogTrigger>
-                                          <DialogContent className="max-w-md">
-                                            <DialogHeader>
-                                              <DialogTitle>Комментарий к платежу</DialogTitle>
-                                              <DialogDescription>
-                                                {participant.name} • {payment.payment_month || `${payment.month_number}.${payment.year}`}
-                                              </DialogDescription>
-                                            </DialogHeader>
-                                            <div className="bg-blue-50 dark:bg-blue-950/20 p-4 rounded-lg border border-blue-200 dark:border-blue-800">
-                                              <p className="text-sm text-foreground whitespace-pre-wrap">{payment.notes}</p>
-                                            </div>
-                                          </DialogContent>
-                                        </Dialog>
-                                      )}
-                                    </TableCell>
-                                  </TableRow>
-                                )
-                              })
-                            })()}
-                          </TableBody>
-                        </Table>
-                      </div>
-                    </div>
-
-                    <div className="flex gap-2">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleEditClick(participant);
-                        }}
-                      >
-                        <Edit2 className="w-4 h-4 mr-2" />
-                        Редактировать
-                      </Button>
-                      {participant.status !== 'archived' && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleArchive(participant.id)
-                          }}
-                        >
-                          <Archive className="w-4 h-4 mr-2" />
-                          В архив
-                        </Button>
-                      )}
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          handleDelete(participant.id)
-                        }}
-                        className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                      >
-                        <Trash2 className="w-4 h-4 mr-2" />
-                        Удалить
-                      </Button>
-                    </div>
-                  </div>
-                )}
-              </Card>
+            ) : (
+              <EmptyState
+                icon={Users}
+                title="Никого не нашли"
+                description="Измените поиск или фильтры"
+                action={
+                  <Button size="sm" variant="outline" onClick={resetFilters}>
+                    Сбросить фильтры
+                  </Button>
+                }
+              />
             )
-          }))}
+          ) : (
+            <>
+              <Table>
+                <TableHeader>
+                  <TableRow className="hover:bg-transparent">
+                    <TableHead>Участник</TableHead>
+                    <TableHead className="text-right max-md:hidden">Тариф</TableHead>
+                    <TableHead className="w-40 max-sm:hidden">Платежи</TableHead>
+                    <TableHead className="text-right">Собрано</TableHead>
+                    <TableHead className="max-sm:hidden">Оплата</TableHead>
+                    <TableHead className="max-lg:hidden">Статус</TableHead>
+                    <TableHead className="w-12" />
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {pageRows.map(p => {
+                    const s = summaries.get(p.id)
+                    return (
+                      <TableRow
+                        key={p.id}
+                        tabIndex={0}
+                        className="group cursor-pointer outline-none focus-visible:bg-accent"
+                        onClick={() => openDetail(p)}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter' && e.target === e.currentTarget) openDetail(p)
+                        }}
+                      >
+                        <TableCell className="max-w-72">
+                          <div className="truncate font-medium">{p.name}</div>
+                          <div className="truncate text-xs text-muted-foreground">
+                            {p.program?.name || 'Программа не указана'}
+                          </div>
+                          {s && <PaymentBadges summary={s} className="mt-1 sm:hidden" />}
+                        </TableCell>
+                        <TableCell className="text-right max-md:hidden">
+                          <span className="num">{formatMoney(monthlyTariff(p))}</span>
+                        </TableCell>
+                        <TableCell className="max-sm:hidden">{s && <PaymentsProgress summary={s} />}</TableCell>
+                        <TableCell className="num text-right font-medium">{formatMoney(s?.collected ?? 0)}</TableCell>
+                        <TableCell className="max-sm:hidden">
+                          {s && <PaymentBadges summary={s} empty={<span className="text-muted-foreground">—</span>} />}
+                        </TableCell>
+                        <TableCell className="max-lg:hidden">
+                          <Badge variant={PARTICIPANT_STATUS[p.status]?.variant ?? 'secondary'}>
+                            {PARTICIPANT_STATUS[p.status]?.label ?? p.status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right" onClick={e => e.stopPropagation()}>
+                          <div className={rowActionsCls}>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="icon-sm" aria-label="Действия" className="text-muted-foreground">
+                                  <MoreHorizontal />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem onSelect={() => openEdit(p)}>
+                                  <Pencil /> Изменить
+                                </DropdownMenuItem>
+                                {p.status !== 'archived' && (
+                                  <DropdownMenuItem onSelect={() => handleArchive(p)}>
+                                    <Archive /> В архив
+                                  </DropdownMenuItem>
+                                )}
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem variant="destructive" onSelect={() => handleDelete(p)}>
+                                  <Trash2 /> Удалить
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })}
+                </TableBody>
+              </Table>
+              <TotalsBar
+                label={`${formatNumber(filteredParticipants.length)} ${participantsWord(filteredParticipants.length)}${
+                  filtersActive ? ` из ${formatNumber(participants.length)}` : ''
+                } · собрано`}
+                value={formatMoney(visibleCollected)}
+              />
+              <TablePagination page={page} pageSize={PAGE_SIZE} total={filteredParticipants.length} onPageChange={setPage} />
+            </>
+          )}
+        </Panel>
+      )}
+
+      <ParticipantDetailSheet
+        open={detailOpen}
+        participant={detail}
+        payments={(detail && paymentsBy.get(detail.id)) || NO_PAYMENTS}
+        summary={(detail && summaries.get(detail.id)) || null}
+        onOpenChange={setDetailOpen}
+        onEdit={openEdit}
+        onArchive={handleArchive}
+        onDelete={handleDelete}
+      />
+
+      <ParticipantFormSheet
+        open={formOpen}
+        onOpenChange={setFormOpen}
+        editing={editing}
+        programs={programs}
+        onSaved={handleSaved}
+      />
+    </PageContainer>
+  )
+}
+
+function PaymentBadges({
+  summary,
+  className,
+  empty = null,
+}: {
+  summary: ParticipantSummary
+  className?: string
+  empty?: React.ReactNode
+}) {
+  if (!summary.overdue && !summary.partial && !summary.paidThisMonth) return <>{empty}</>
+  return (
+    <div className={cn('flex flex-wrap gap-1', className)}>
+      {summary.overdue && <Badge variant="destructive">Просрочено</Badge>}
+      {summary.partial && <Badge variant="warning">Частично</Badge>}
+      {summary.paidThisMonth && <Badge variant="success">Оплачен месяц</Badge>}
+    </div>
+  )
+}
+
+function PaymentsProgress({ summary }: { summary: ParticipantSummary }) {
+  const { paidCount, totalCount } = summary
+  if (!totalCount) return <span className="text-xs text-muted-foreground">Нет платежей</span>
+  const pct = Math.min(100, Math.round((paidCount / totalCount) * 100))
+  return (
+    <div className="flex items-center gap-2.5">
+      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
+        <div
+          className={cn('h-full rounded-full transition-[width] duration-200', pct === 100 ? 'bg-success' : 'bg-success/70')}
+          style={{ width: `${pct}%` }}
+        />
       </div>
-    </div >
+      <span className="num shrink-0 text-xs text-muted-foreground">
+        <span className="font-medium text-foreground">{paidCount}</span>/{totalCount}
+      </span>
+    </div>
   )
 }

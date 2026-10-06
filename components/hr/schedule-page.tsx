@@ -1,396 +1,324 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { Calendar, ChevronLeft, ChevronRight, Clock, Plus, Trash2 } from 'lucide-react'
+import * as React from 'react'
+import { toast } from 'sonner'
+import { CalendarClock, Plus } from 'lucide-react'
+import { cn } from '@/lib/utils'
+import { formatNumber, plural, todayISO } from '@/lib/format'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Skeleton } from '@/components/ui/skeleton'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { PageContainer, PageHeader, Panel, PanelToolbar } from '@/components/erp/page-header'
+import { StatStrip } from '@/components/erp/stat-strip'
+import { EmptyState } from '@/components/erp/empty-state'
+import { useConfirm } from '@/components/erp/confirm'
 import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from '@/components/ui/select'
-import {
-    Dialog,
-    DialogContent,
-    DialogHeader,
-    DialogTitle,
-    DialogTrigger,
-} from '@/components/ui/dialog'
-import { Label } from '@/components/ui/label'
+  MonthSwitcher,
+  SHIFTS,
+  SHIFT_ORDER,
+  WEEKDAYS_SHORT,
+  Avatar,
+  currentYearMonth,
+  dateRange,
+  formatDay,
+  fullName,
+  hhmm,
+  isWeekend,
+  monthBounds,
+  monthLabel,
+  weekday,
+  type HrEmployee,
+  type ScheduleItem,
+  type YearMonth,
+} from '@/components/hr/shared'
+import { ShiftSheet } from '@/components/hr/shift-sheet'
 
-interface Employee {
-    id: string
-    first_name: string
-    last_name: string
-    position: string
-}
-
-interface ScheduleItem {
-    id?: string
-    employee_id: string
-    work_date: string
-    shift_type: 'work' | 'day_off' | 'sick_leave' | 'vacation' | 'unpaid_leave'
-    start_time?: string
-    end_time?: string
-    employees?: Employee
+/** "09:00" → "9", "09:30" → "9:30" */
+const compactTime = (t?: string | null) => {
+  const v = hhmm(t)
+  if (!v) return ''
+  const [h, m] = v.split(':')
+  return m === '00' ? String(Number(h)) : `${Number(h)}:${m}`
 }
 
 export function SchedulePage() {
-    const [currentDate, setCurrentDate] = useState(new Date())
-    const [employees, setEmployees] = useState<Employee[]>([])
-    const [schedules, setSchedules] = useState<ScheduleItem[]>([])
-    const [isLoading, setIsLoading] = useState(true)
-    const [isAssignOpen, setIsAssignOpen] = useState(false)
-    const [editingSchedule, setEditingSchedule] = useState<ScheduleItem | null>(null)
+  const confirm = useConfirm()
+  const [ym, setYm] = React.useState<YearMonth>(currentYearMonth)
+  const [employees, setEmployees] = React.useState<HrEmployee[]>([])
+  const [schedules, setSchedules] = React.useState<ScheduleItem[]>([])
+  const [isLoading, setIsLoading] = React.useState(true)
 
-    // Form state for assigning schedule
-    const [formData, setFormData] = useState<{
-        employee_id: string;
-        shift_type: ScheduleItem['shift_type'];
-        start_time: string;
-        end_time: string;
-    }>({
-        employee_id: '',
-        shift_type: 'work',
-        start_time: '09:00',
-        end_time: '18:00',
+  const [sheetOpen, setSheetOpen] = React.useState(false)
+  const [editing, setEditing] = React.useState<ScheduleItem | null>(null)
+  const [defaults, setDefaults] = React.useState<{ employee_id?: string; date: string }>({ date: todayISO() })
+
+  const [from, to] = monthBounds(ym.year, ym.month)
+  const days = React.useMemo(() => dateRange(from, to), [from, to])
+  const today = todayISO()
+
+  const fetchData = React.useCallback(async () => {
+    setIsLoading(true)
+    try {
+      const [empRes, scheduleRes] = await Promise.all([
+        fetch('/api/hr/employees'),
+        fetch(`/api/hr/schedule?start_date=${from}&end_date=${to}`),
+      ])
+      if (empRes.ok) setEmployees(await empRes.json())
+      if (scheduleRes.ok) setSchedules(await scheduleRes.json())
+    } catch (error) {
+      console.error('Error fetching schedule data:', error)
+      toast.error('Не удалось загрузить график', { description: 'Проверьте соединение и обновите страницу' })
+    } finally {
+      setIsLoading(false)
+    }
+  }, [from, to])
+
+  React.useEffect(() => {
+    fetchData()
+  }, [fetchData])
+
+  // employee_id → work_date → record
+  const byCell = React.useMemo(() => {
+    const map = new Map<string, Map<string, ScheduleItem>>()
+    for (const s of schedules) {
+      if (!map.has(s.employee_id)) map.set(s.employee_id, new Map())
+      map.get(s.employee_id)!.set(s.work_date, s)
+    }
+    return map
+  }, [schedules])
+
+  // Active employees plus anyone who already has a record this month
+  const rows = React.useMemo(
+    () => (Array.isArray(employees) ? employees : []).filter(e => e.status === 'active' || byCell.has(e.id)),
+    [employees, byCell]
+  )
+
+  const totals = React.useMemo(() => {
+    const t = { work: 0, day_off: 0, vacation: 0, sick_leave: 0, unpaid_leave: 0 }
+    schedules.forEach(s => (t[s.shift_type] = (t[s.shift_type] ?? 0) + 1))
+    return t
+  }, [schedules])
+
+  const workingPerDay = React.useMemo(() => {
+    const m = new Map<string, number>()
+    schedules.forEach(s => s.shift_type === 'work' && m.set(s.work_date, (m.get(s.work_date) ?? 0) + 1))
+    return m
+  }, [schedules])
+
+  const openCell = (employeeId: string | undefined, date: string) => {
+    const existing = employeeId ? byCell.get(employeeId)?.get(date) ?? null : null
+    setEditing(existing)
+    setDefaults({ employee_id: employeeId, date })
+    setSheetOpen(true)
+  }
+
+  const openNew = () => {
+    const inMonth = today >= from && today <= to
+    openCell(undefined, inMonth ? today : from)
+  }
+
+  const handleDelete = async (schedule: ScheduleItem) => {
+    if (!schedule.id) return
+    const name = fullName(schedule.employees ?? employees.find(e => e.id === schedule.employee_id))
+    const ok = await confirm({
+      title: 'Удалить запись из графика?',
+      description: `${name} · ${formatDay(schedule.work_date, true)} · ${SHIFTS[schedule.shift_type].label}`,
+      confirmText: 'Удалить',
+      destructive: true,
     })
+    if (!ok) return
+    try {
+      const res = await fetch(`/api/hr/schedule/${schedule.id}`, { method: 'DELETE' })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.error || `Ошибка ${res.status}`)
+      }
+      toast.success('Запись удалена', { description: name })
+      setSheetOpen(false)
+      fetchData()
+    } catch (error: any) {
+      toast.error('Не удалось удалить запись', { description: error.message })
+    }
+  }
 
-    useEffect(() => {
-        fetchData()
-    }, [currentDate])
+  const sheetEmployees = React.useMemo(
+    () => (Array.isArray(employees) ? employees : []).filter(e => e.status === 'active' || e.id === editing?.employee_id),
+    [employees, editing]
+  )
 
-    const fetchData = async () => {
-        setIsLoading(true)
-        try {
-            const dateStr = currentDate.toISOString().split('T')[0]
+  const dayWord = (n: number) => plural(n, ['день', 'дня', 'дней'])
 
-            const [empRes, scheduleRes] = await Promise.all([
-                fetch('/api/hr/employees'),
-                fetch(`/api/hr/schedule?start_date=${dateStr}&end_date=${dateStr}`)
-            ])
-
-            if (empRes.ok) setEmployees(await empRes.json())
-            if (scheduleRes.ok) setSchedules(await scheduleRes.json())
-        } catch (error) {
-            console.error('Error fetching schedule data:', error)
-        } finally {
-            setIsLoading(false)
+  return (
+    <PageContainer>
+      <PageHeader
+        title="График работы"
+        description="Смены и отсутствия по дням. Нажмите на клетку, чтобы назначить или изменить"
+        actions={
+          <>
+            <MonthSwitcher value={ym} onChange={setYm} />
+            <Button size="sm" onClick={openNew}>
+              <Plus /> Назначить смену
+            </Button>
+          </>
         }
-    }
+      />
 
-    const handlePrevDay = () => {
-        const newDate = new Date(currentDate)
-        newDate.setDate(currentDate.getDate() - 1)
-        setCurrentDate(newDate)
-    }
+      <StatStrip
+        className="max-sm:grid-cols-2 max-sm:[&>*]:px-4"
+        loading={isLoading}
+        stats={[
+          { label: 'Рабочих смен', value: formatNumber(totals.work), sub: monthLabel(ym), dot: 'var(--primary)' },
+          { label: 'Отпуск', value: formatNumber(totals.vacation), sub: dayWord(totals.vacation), dot: 'var(--success)' },
+          { label: 'Больничный', value: formatNumber(totals.sick_leave), sub: dayWord(totals.sick_leave), dot: 'var(--warning)' },
+          {
+            label: 'Отгулы б/с',
+            value: formatNumber(totals.unpaid_leave),
+            sub: 'удерживаются из зарплаты',
+            dot: 'var(--destructive)',
+          },
+        ]}
+      />
 
-    const handleNextDay = () => {
-        const newDate = new Date(currentDate)
-        newDate.setDate(currentDate.getDate() + 1)
-        setCurrentDate(newDate)
-    }
+      <Panel className="mt-6">
+        <PanelToolbar className="gap-x-4 gap-y-1.5 text-xs text-muted-foreground">
+          {SHIFT_ORDER.map(t => (
+            <span key={t} className="inline-flex items-center gap-1.5">
+              <span className={cn('inline-flex h-5 min-w-5 items-center justify-center rounded px-1 text-[10px] font-semibold', SHIFTS[t].cell)}>
+                {t === 'work' ? '9' : SHIFTS[t].code}
+              </span>
+              {SHIFTS[t].label}
+            </span>
+          ))}
+        </PanelToolbar>
 
-    const handleAddNew = () => {
-        setEditingSchedule(null)
-        setFormData({
-            employee_id: '',
-            shift_type: 'work',
-            start_time: '09:00',
-            end_time: '18:00',
-        })
-        setIsAssignOpen(true)
-    }
+        {isLoading ? (
+          <div className="space-y-2 p-4">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="flex items-center gap-3">
+                <Skeleton className="h-8 w-40" />
+                <Skeleton className="h-8 flex-1" />
+              </div>
+            ))}
+          </div>
+        ) : rows.length === 0 ? (
+          <EmptyState icon={CalendarClock} title="Нет активных сотрудников" description="Добавьте сотрудников в разделе «Сотрудники», чтобы составить график" />
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full border-separate border-spacing-0 text-sm">
+              <thead>
+                <tr>
+                  <th className="sticky left-0 z-20 w-36 min-w-36 border-b bg-card px-3 py-2 text-left text-xs font-medium text-muted-foreground sm:w-52 sm:min-w-52">
+                    Сотрудник
+                  </th>
+                  {days.map(d => {
+                    const isToday = d === today
+                    const wknd = isWeekend(d)
+                    return (
+                      <th
+                        key={d}
+                        className={cn('min-w-9 border-b px-0.5 py-1.5 text-center font-normal', wknd && 'bg-muted/50')}
+                        aria-label={formatDay(d, true)}
+                      >
+                        <div className={cn('text-[10px] leading-none', wknd ? 'text-muted-foreground/80' : 'text-muted-foreground')}>
+                          {WEEKDAYS_SHORT[weekday(d)]}
+                        </div>
+                        <div
+                          className={cn(
+                            'num mx-auto mt-1 flex size-6 items-center justify-center rounded-full text-xs font-medium',
+                            isToday ? 'bg-primary text-primary-foreground' : wknd ? 'text-muted-foreground' : 'text-foreground'
+                          )}
+                        >
+                          {Number(d.slice(8))}
+                        </div>
+                      </th>
+                    )
+                  })}
+                  <th className="min-w-14 border-b border-l px-2 py-2 text-right text-xs font-medium text-muted-foreground">Смен</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map(emp => {
+                  const cells = byCell.get(emp.id)
+                  let workCount = 0
+                  cells?.forEach(c => c.shift_type === 'work' && workCount++)
+                  return (
+                    <tr key={emp.id} className="group">
+                      <td className="sticky left-0 z-10 border-b bg-card px-3 py-1.5 group-hover:bg-muted">
+                        <div className="flex items-center gap-2.5">
+                          <Avatar person={emp} className="size-7 text-[11px] max-sm:hidden" />
+                          <div className="min-w-0">
+                            <div className="truncate text-[13px] font-medium">{fullName(emp)}</div>
+                            <div className="truncate text-xs text-muted-foreground max-sm:hidden">{emp.position}</div>
+                          </div>
+                        </div>
+                      </td>
+                      {days.map(d => {
+                        const s = cells?.get(d)
+                        const wknd = isWeekend(d)
+                        const label = s
+                          ? s.shift_type === 'work'
+                            ? `${compactTime(s.start_time)}–${compactTime(s.end_time)}`
+                            : SHIFTS[s.shift_type].code
+                          : ''
+                        const title = s
+                          ? `${SHIFTS[s.shift_type].label}${s.shift_type === 'work' && s.start_time ? `, ${hhmm(s.start_time)}–${hhmm(s.end_time)}` : ''}`
+                          : 'Назначить'
+                        return (
+                          <td key={d} className={cn('border-b p-0.5', wknd && 'bg-muted/50', d === today && 'bg-primary-soft/40')}>
+                            <Tooltip delayDuration={400}>
+                              <TooltipTrigger asChild>
+                                <button
+                                  type="button"
+                                  onClick={() => openCell(emp.id, d)}
+                                  aria-label={`${fullName(emp)}, ${formatDay(d)}: ${title}`}
+                                  className={cn(
+                                    'num flex h-8 w-full min-w-8 items-center justify-center rounded-md text-[10.5px] leading-none font-medium tracking-tight transition-[background-color,box-shadow] outline-none focus-visible:ring-[3px] focus-visible:ring-ring/30',
+                                    s ? cn(SHIFTS[s.shift_type].cell, 'hover:ring-1 hover:ring-ring/40') : 'text-transparent hover:bg-accent hover:text-muted-foreground'
+                                  )}
+                                >
+                                  {label || '+'}
+                                </button>
+                              </TooltipTrigger>
+                              <TooltipContent side="top">
+                                {formatDay(d)} · {title}
+                              </TooltipContent>
+                            </Tooltip>
+                          </td>
+                        )
+                      })}
+                      <td className="num border-b border-l px-2 text-right font-medium">{workCount || <span className="text-muted-foreground">—</span>}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+              <tfoot>
+                <tr>
+                  <td className="sticky left-0 z-10 bg-card px-3 py-2 text-xs text-muted-foreground">На работе</td>
+                  {days.map(d => {
+                    const n = workingPerDay.get(d) ?? 0
+                    return (
+                      <td key={d} className="num px-0.5 py-2 text-center text-xs text-muted-foreground">
+                        {n ? <span className="font-medium text-foreground">{n}</span> : '·'}
+                      </td>
+                    )
+                  })}
+                  <td className="num border-l px-2 py-2 text-right text-sm font-semibold">{formatNumber(totals.work)}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        )}
+      </Panel>
 
-    const handleEdit = (schedule: ScheduleItem) => {
-        setEditingSchedule(schedule)
-        setFormData({
-            employee_id: schedule.employee_id,
-            shift_type: schedule.shift_type,
-            start_time: schedule.start_time || '09:00',
-            end_time: schedule.end_time || '18:00',
-        })
-        setIsAssignOpen(true)
-    }
-
-    const handleDelete = async (schedule: ScheduleItem) => {
-        if (!confirm('Вы уверены, что хотите удалить эту смену?')) return;
-
-        // Assuming we need a DELETE endpoint or handle delete via POST/PUT with special flag? 
-        // Or if we don't have a DELETE endpoint, we might need to create one or use the supabase ID logic.
-        // Let's assume for now we use the same UPSERT logic but maybe there's a way.
-        // Actually, the previous implementation plan didn't specify DELETE.
-        // Let's add a proper DELETE by ID support in the API if not present.
-        // Checking the API file (viewed previously) - it only had GET and POST (upsert).
-        // I should probably add a DELETE route or handle it.
-        // Wait, I see the file contents for api/hr/schedule/route.ts in previous turn.
-        // It has GET and POST. It does NOT have DELETE.
-        // I will need to update the API route to support DELETE. 
-        // Or I can send a "shift_type: null" or "deleted: true" if the DB supported it, but DELETE is cleaner.
-        // I'll try to use a DELETE method. I need to update the API route first? 
-        // Let's optimistic UI update for now, but I really should check the API.
-
-        // For now let's assume I will add DELETE support to `app/api/hr/schedule/route.ts` or make a new one.
-        // But wait, the SCHEDULE table has an ID.
-        // Let's try to call DELETE with ID.
-
-        if (!schedule.id) {
-            alert('Cannot delete schedule without ID');
-            return;
-        }
-
-        try {
-            // Upserting with same composite key but maybe a "delete" flag? No.
-            // Best to add a DELETE method to the route or a specific route for ID.
-            // I'll assume I'll add `app/api/hr/schedule/[id]/route.ts` or handle DELETE in main route with query param?
-            // Main route with query param is messy.
-            // I'll use a new dynamic route `app/api/hr/schedule/[id]/route.ts` which I will Create.
-            const res = await fetch(`/api/hr/schedule/${schedule.id}`, { method: 'DELETE' });
-            if (res.ok) {
-                fetchData();
-            }
-        } catch (error) {
-            console.error('Error deleting schedule:', error);
-        }
-    }
-
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault()
-        try {
-            const dateStr = currentDate.toISOString().split('T')[0]
-            const payload = {
-                id: editingSchedule?.id, // include ID for update if exists
-                employee_id: formData.employee_id,
-                work_date: dateStr,
-                shift_type: formData.shift_type,
-                start_time: formData.shift_type === 'work' ? formData.start_time : null,
-                end_time: formData.shift_type === 'work' ? formData.end_time : null,
-            }
-
-            const res = await fetch('/api/hr/schedule', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            })
-
-            if (res.ok) {
-                setIsAssignOpen(false)
-                fetchData()
-                setFormData({ ...formData, employee_id: '' })
-                setEditingSchedule(null)
-            }
-        } catch (error) {
-            console.error('Error saving schedule:', error)
-        }
-    }
-
-    const getShiftTypeLabel = (type: string) => {
-        switch (type) {
-            case 'work': return 'Рабочий день';
-            case 'day_off': return 'Выходной';
-            case 'sick_leave': return 'Больничный';
-            case 'vacation': return 'Отпуск';
-            case 'unpaid_leave': return 'Отгул (б/с)';
-            default: return type;
-        }
-    }
-
-    const getShiftColor = (type: string) => {
-        switch (type) {
-            case 'work': return 'bg-blue-100 text-blue-700';
-            case 'day_off': return 'bg-gray-100 text-gray-700';
-            case 'sick_leave': return 'bg-orange-100 text-orange-700';
-            case 'vacation': return 'bg-green-100 text-green-700';
-            case 'unpaid_leave': return 'bg-red-100 text-red-700';
-            default: return 'bg-gray-100';
-        }
-    }
-
-    return (
-        <div className="p-3 sm:p-6 space-y-4 sm:space-y-6 min-h-full">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-border pb-3.5">
-                <h1 className="text-xl sm:text-2xl font-bold">График работы</h1>
-                <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-                    <Button variant="outline" size="icon" onClick={handlePrevDay} className="touch-manipulation">
-                        <ChevronLeft className="w-4 h-4" />
-                    </Button>
-                    <div className="font-medium text-xs sm:text-sm min-w-[130px] sm:min-w-[150px] text-center">
-                        {currentDate.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })}
-                    </div>
-                    <Button variant="outline" size="icon" onClick={handleNextDay} className="touch-manipulation">
-                        <ChevronRight className="w-4 h-4" />
-                    </Button>
-                </div>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div className="lg:col-span-2 space-y-6">
-                    <div className="flex justify-between items-center flex-wrap gap-2">
-                        <h2 className="text-base sm:text-lg font-semibold">Расписание на сегодня</h2>
-                        <Dialog open={isAssignOpen} onOpenChange={setIsAssignOpen}>
-                            <DialogTrigger asChild>
-                                <Button size="sm" onClick={handleAddNew} className="touch-manipulation">
-                                    <Plus className="w-4 h-4 mr-2" /> Назначить смену
-                                </Button>
-                            </DialogTrigger>
-                            <DialogContent className="max-w-[95vw] sm:max-w-md max-h-[90vh] overflow-y-auto p-4 sm:p-6">
-                                <DialogHeader>
-                                    <DialogTitle>{editingSchedule ? 'Редактировать смену' : 'Назначение смены'}</DialogTitle>
-                                </DialogHeader>
-                                <form onSubmit={handleSubmit} className="space-y-4 py-4">
-                                    <div className="space-y-2">
-                                        <Label>Сотрудник</Label>
-                                        <Select
-                                            value={formData.employee_id}
-                                            onValueChange={(val) => setFormData({ ...formData, employee_id: val })}
-                                        >
-                                            <SelectTrigger>
-                                                <SelectValue placeholder="Выберите сотрудника" />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                {employees.map(emp => (
-                                                    <SelectItem key={emp.id} value={emp.id}>
-                                                        {emp.first_name} {emp.last_name}
-                                                    </SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
-                                    <div className="space-y-2">
-                                        <Label>Тип смены</Label>
-                                        <Select
-                                            value={formData.shift_type}
-                                            onValueChange={(val: any) => setFormData({ ...formData, shift_type: val })}
-                                        >
-                                            <SelectTrigger>
-                                                <SelectValue />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="work">Рабочий день</SelectItem>
-                                                <SelectItem value="day_off">Выходной</SelectItem>
-                                                <SelectItem value="vacation">Отпуск</SelectItem>
-                                                <SelectItem value="sick_leave">Больничный</SelectItem>
-                                                <SelectItem value="unpaid_leave">Отгул (б/с)</SelectItem>
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
-                                    {formData.shift_type === 'work' && (
-                                        <div className="grid grid-cols-2 gap-4">
-                                            <div className="space-y-2">
-                                                <Label>Начало</Label>
-                                                <input
-                                                    type="time"
-                                                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                                                    value={formData.start_time}
-                                                    onChange={e => setFormData({ ...formData, start_time: e.target.value })}
-                                                />
-                                            </div>
-                                            <div className="space-y-2">
-                                                <Label>Конец</Label>
-                                                <input
-                                                    type="time"
-                                                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                                                    value={formData.end_time}
-                                                    onChange={e => setFormData({ ...formData, end_time: e.target.value })}
-                                                />
-                                            </div>
-                                        </div>
-                                    )}
-                                    <Button type="submit" className="w-full">Сохранить</Button>
-                                </form>
-                            </DialogContent>
-                        </Dialog>
-                    </div>
-
-                    <Card>
-                        <CardContent className="p-0">
-                            {isLoading ? (
-                                <div className="p-4 text-center text-muted-foreground">Загрузка...</div>
-                            ) : schedules.length > 0 ? (
-                                <div className="divide-y">
-                                    {schedules.map(schedule => (
-                                        <div
-                                            key={schedule.id || schedule.employee_id}
-                                            className="p-4 flex items-center justify-between hover:bg-muted/50 cursor-pointer group"
-                                            onClick={() => handleEdit(schedule)}
-                                        >
-                                            <div className="flex items-center gap-3">
-                                                <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm ${getShiftColor(schedule.shift_type)}`}>
-                                                    {schedule.employees?.first_name[0]}{schedule.employees?.last_name[0]}
-                                                </div>
-                                                <div>
-                                                    <p className="font-medium">{schedule.employees?.first_name} {schedule.employees?.last_name}</p>
-                                                    <p className="text-xs text-muted-foreground">{schedule.employees?.position}</p>
-                                                </div>
-                                            </div>
-                                            <div className="flex items-center gap-4">
-                                                <div className="text-right">
-                                                    <div className={`inline-flex px-2 py-1 rounded text-xs font-medium ${getShiftColor(schedule.shift_type)}`}>
-                                                        {getShiftTypeLabel(schedule.shift_type)}
-                                                    </div>
-                                                    {schedule.shift_type === 'work' && schedule.start_time && (
-                                                        <div className="flex items-center justify-end text-xs text-muted-foreground mt-1">
-                                                            <Clock className="w-3 h-3 mr-1" />
-                                                            {schedule.start_time.slice(0, 5)} - {schedule.end_time?.slice(0, 5)}
-                                                        </div>
-                                                    )}
-                                                </div>
-                                                <div className="opacity-0 group-hover:opacity-100 transition-opacity">
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="icon"
-                                                        className="text-red-500 hover:text-red-600 hover:bg-red-50"
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            handleDelete(schedule);
-                                                        }}
-                                                    >
-                                                        <Trash2 className="w-4 h-4" />
-                                                    </Button>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            ) : (
-                                <div className="p-8 text-center text-muted-foreground">
-                                    На эту дату смен не назначено
-                                </div>
-                            )}
-                        </CardContent>
-                    </Card>
-                </div>
-
-                <div>
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Сводка</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="space-y-2">
-                                <div className="flex justify-between text-sm">
-                                    <span className="text-muted-foreground">Всего сотрудников:</span>
-                                    <span className="font-medium">{employees.length}</span>
-                                </div>
-                                <div className="flex justify-between text-sm">
-                                    <span className="text-muted-foreground">В смене:</span>
-                                    <span className="font-medium">{schedules.filter(s => s.shift_type === 'work').length}</span>
-                                </div>
-                                <div className="flex justify-between text-sm">
-                                    <span className="text-muted-foreground">В отпуске:</span>
-                                    <span className="font-medium">{schedules.filter(s => s.shift_type === 'vacation').length}</span>
-                                </div>
-                                <div className="flex justify-between text-sm">
-                                    <span className="text-muted-foreground">Болеют:</span>
-                                    <span className="font-medium">{schedules.filter(s => s.shift_type === 'sick_leave').length}</span>
-                                </div>
-                            </div>
-                        </CardContent>
-                    </Card>
-                </div>
-            </div>
-        </div>
-    )
+      <ShiftSheet
+        open={sheetOpen}
+        onOpenChange={setSheetOpen}
+        employees={sheetEmployees}
+        editing={editing}
+        defaults={defaults}
+        onSaved={fetchData}
+        onDelete={handleDelete}
+      />
+    </PageContainer>
+  )
 }

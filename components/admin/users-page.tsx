@@ -1,20 +1,31 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import React, { useState, useEffect, useMemo } from 'react'
+import { toast } from 'sonner'
+import { Briefcase, GraduationCap, Pencil, Plus, ShieldCheck, Trash2, Users } from 'lucide-react'
+import { cn } from '@/lib/utils'
+import { formatDate, formatNumber, plural } from '@/lib/format'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Plus, Trash2, Edit2, Shield, User, X, ArrowLeft } from 'lucide-react'
+import { Sheet, SheetBody, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet'
+import { PageContainer, PageHeader, Panel, PanelToolbar } from '@/components/erp/page-header'
+import { SearchInput } from '@/components/erp/search-input'
+import { EmptyState } from '@/components/erp/empty-state'
+import { TablePagination } from '@/components/erp/pagination'
+import { TableSkeleton, rowActionsCls, dangerIconCls } from '@/components/erp/table-parts'
+import { Field, FieldGroup } from '@/components/erp/field'
+import { Combobox, type ComboOption } from '@/components/erp/combobox'
+import { useConfirm } from '@/components/erp/confirm'
+
+type Role = 'admin' | 'finance' | 'participant' | 'employee' | 'manager' | 'wheels_manager'
 
 type AppUser = {
     id: string
     username: string
-    role: 'admin' | 'finance' | 'participant' | 'employee' | 'manager' | 'wheels_manager'
+    role: Role
     full_name: string
     employee_id?: string
     employee?: {
@@ -24,27 +35,69 @@ type AppUser = {
     }
     participant_id?: string
     participant?: {
+        id?: string
         name: string
     }
     last_login_at?: string
     created_at: string
 }
 
+const ROLES: Record<Role, { label: string; description: string; variant: 'default' | 'secondary' | 'outline' | 'info' }> = {
+    admin: { label: 'Администратор', description: 'Полный доступ: финансы, участники, персонал и пользователи', variant: 'default' },
+    manager: { label: 'Руководитель', description: 'Свой кабинет, задачи сотрудников, заявки на отгул, колёса баланса', variant: 'info' },
+    finance: { label: 'Финансист', description: 'Участники, финансы, отчёты и колёса баланса. Без раздела «Персонал»', variant: 'secondary' },
+    wheels_manager: { label: 'Менеджер колёс', description: 'Колёса баланса и список участников', variant: 'secondary' },
+    employee: { label: 'Сотрудник', description: 'Свой кабинет: задачи, учёт времени, заявки на отгул; колёса баланса', variant: 'secondary' },
+    participant: { label: 'Участник', description: 'Только свои колёса баланса', variant: 'outline' },
+}
+
+const ROLE_ORDER: Role[] = ['admin', 'manager', 'finance', 'wheels_manager', 'employee', 'participant']
+const EMPLOYEE_ROLES: Role[] = ['employee', 'finance', 'manager']
+const PAGE_SIZE = 50
+
+function initials(name: string) {
+    return name
+        .split(/\s+/)
+        .filter(Boolean)
+        .slice(0, 2)
+        .map(w => w[0]?.toUpperCase())
+        .join('')
+}
+
+/** "только что", "12 мин назад", "сегодня в 09:31", "вчера в 18:02", "3 дня назад", "14.07.2026" */
+function lastSeen(iso?: string) {
+    if (!iso) return null
+    const d = new Date(iso)
+    if (Number.isNaN(d.getTime())) return null
+    const now = new Date()
+    const mins = Math.floor((now.getTime() - d.getTime()) / 60000)
+    const time = d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
+    if (mins < 1) return 'только что'
+    if (mins < 60) return `${mins} мин назад`
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
+    if (d.getTime() >= startOfToday) return `сегодня в ${time}`
+    if (d.getTime() >= startOfToday - 86400000) return `вчера в ${time}`
+    const days = Math.floor((startOfToday - d.getTime()) / 86400000) + 1
+    if (days < 7) return `${days} ${plural(days, ['день', 'дня', 'дней'])} назад`
+    return formatDate(d)
+}
+
 export function UsersPage() {
+    const confirm = useConfirm()
+
     const [users, setUsers] = useState<AppUser[]>([])
     const [isLoading, setIsLoading] = useState(true)
     const [isFormOpen, setIsFormOpen] = useState(false)
     const [editingUser, setEditingUser] = useState<AppUser | null>(null)
     const [employees, setEmployees] = useState<any[]>([])
     const [participants, setParticipants] = useState<any[]>([])
+    const [saving, setSaving] = useState(false)
+    const [errors, setErrors] = useState<Record<string, string>>({})
 
-    // States for searchable selectors
-    const [participantSearchQuery, setParticipantSearchQuery] = useState('')
-    const [participantFilterProgramId, setParticipantFilterProgramId] = useState('all')
-    const [isParticipantSelectOpen, setIsParticipantSelectOpen] = useState(false)
-
-    const [employeeSearchQuery, setEmployeeSearchQuery] = useState('')
-    const [isEmployeeSelectOpen, setIsEmployeeSelectOpen] = useState(false)
+    // List view state
+    const [query, setQuery] = useState('')
+    const [roleFilter, setRoleFilter] = useState<'all' | Role>('all')
+    const [page, setPage] = useState(1)
 
     // Form state
     const [formData, setFormData] = useState({
@@ -73,6 +126,7 @@ export function UsersPage() {
             }
         } catch (error) {
             console.error('Failed to fetch data:', error)
+            toast.error('Не удалось загрузить пользователей', { description: 'Обновите страницу' })
         } finally {
             setIsLoading(false)
         }
@@ -82,8 +136,16 @@ export function UsersPage() {
         fetchUsersAndEmployees()
     }, [])
 
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault()
+    useEffect(() => setPage(1), [query, roleFilter])
+
+    const handleSubmit = async () => {
+        const errs: Record<string, string> = {}
+        if (!formData.username.trim()) errs.username = 'Придумайте логин'
+        if (!editingUser && !formData.password) errs.password = 'Задайте пароль для входа'
+        setErrors(errs)
+        if (Object.keys(errs).length) return
+
+        setSaving(true)
         try {
             const url = editingUser ? `/api/admin/users/${editingUser.id}` : '/api/admin/users'
             const method = editingUser ? 'PUT' : 'POST'
@@ -99,34 +161,51 @@ export function UsersPage() {
             })
 
             if (res.ok) {
+                toast.success(editingUser ? 'Изменения сохранены' : 'Пользователь создан', {
+                    description: `${formData.full_name || formData.username} · ${ROLES[formData.role as Role]?.label ?? formData.role}`,
+                })
                 setIsFormOpen(false)
                 fetchUsersAndEmployees()
-                resetForm()
             } else {
-                alert('Ошибка при сохранении')
+                const err = await res.json().catch(() => ({}))
+                toast.error('Не удалось сохранить', { description: err.error || 'Проверьте, что логин не занят' })
             }
         } catch (error) {
             console.error('Error saving user:', error)
+            toast.error('Не удалось сохранить', { description: 'Сервер не ответил, попробуйте ещё раз' })
+        } finally {
+            setSaving(false)
         }
     }
 
-    const handleDelete = async (id: string) => {
-        if (!confirm('Вы уверены, что хотите удалить этого пользователя?')) return
+    const handleDelete = async (user: AppUser) => {
+        const ok = await confirm({
+            title: `Удалить пользователя ${user.full_name || user.username}?`,
+            description: 'Он больше не сможет войти в систему. Карточки сотрудника и участника останутся.',
+            confirmText: 'Удалить',
+            destructive: true,
+        })
+        if (!ok) return
 
         try {
-            const res = await fetch(`/api/admin/users/${id}`, { method: 'DELETE' })
+            const res = await fetch(`/api/admin/users/${user.id}`, { method: 'DELETE' })
             if (res.ok) {
+                toast.success('Пользователь удалён', { description: user.username })
+                setIsFormOpen(false)
                 fetchUsersAndEmployees()
             } else {
-                alert('Ошибка удаления')
+                const err = await res.json().catch(() => ({}))
+                toast.error('Не удалось удалить', { description: err.error })
             }
         } catch (error) {
             console.error('Error deleting user:', error)
+            toast.error('Не удалось удалить', { description: 'Сервер не ответил, попробуйте ещё раз' })
         }
     }
 
     const handleEdit = (user: AppUser) => {
         setEditingUser(user)
+        setErrors({})
         setFormData({
             username: user.username,
             password: '', // Password not shown for security, user can enter new one to change
@@ -140,428 +219,364 @@ export function UsersPage() {
 
     const resetForm = () => {
         setEditingUser(null)
+        setErrors({})
         setFormData({ username: '', password: '', role: 'finance', full_name: '', employee_id: 'none', participant_id: 'none' })
-        setParticipantSearchQuery('')
-        setParticipantFilterProgramId('all')
-        setIsParticipantSelectOpen(false)
-        setEmployeeSearchQuery('')
-        setIsEmployeeSelectOpen(false)
-        setIsFormOpen(false)
     }
 
-    // Filter participants by search and program/group
-    const filteredParticipants = participants.filter(p => {
-        const matchesSearch = p.name.toLowerCase().includes(participantSearchQuery.toLowerCase()) ||
-            (p.email && p.email.toLowerCase().includes(participantSearchQuery.toLowerCase())) ||
-            (p.phone && p.phone.toLowerCase().includes(participantSearchQuery.toLowerCase()))
-        
-        const matchesProgram = participantFilterProgramId === 'all' || p.program_id === participantFilterProgramId
-        
-        return matchesSearch && matchesProgram
-    })
+    const openNew = () => {
+        resetForm()
+        setIsFormOpen(true)
+    }
 
-    // Filter employees by search
-    const filteredEmployees = employees.filter(emp => {
-        const fullName = `${emp.first_name} ${emp.last_name}`.toLowerCase()
-        const matchesSearch = fullName.includes(employeeSearchQuery.toLowerCase()) ||
-            (emp.position && emp.position.toLowerCase().includes(employeeSearchQuery.toLowerCase()))
-        return matchesSearch
-    })
+    // ----- Linking options -------------------------------------------------
+
+    const employeeOptions: ComboOption[] = useMemo(
+        () => [
+            { value: 'none', label: 'Без привязки' },
+            ...employees.map(emp => ({
+                value: emp.id,
+                label: `${emp.first_name} ${emp.last_name}`,
+                hint: emp.position || undefined,
+            })),
+        ],
+        [employees]
+    )
+
+    const participantOptions: ComboOption[] = useMemo(() => {
+        const opts: ComboOption[] = participants.map(p => ({
+            value: p.id,
+            label: p.name,
+            hint: p.phone || undefined,
+            group: p.program?.name || 'Без программы',
+            keywords: [p.email, p.program?.name].filter(Boolean).join(' '),
+        }))
+        opts.sort((x, y) => (x.group ?? '').localeCompare(y.group ?? '', 'ru') || x.label.localeCompare(y.label, 'ru'))
+        // Keep the current link visible even if that participant is no longer active
+        const current = editingUser?.participant_id
+        if (current && !opts.some(o => o.value === current)) {
+            opts.unshift({ value: current, label: editingUser?.participant?.name || 'Текущий участник', group: 'Сейчас привязан' })
+        }
+        return [{ value: 'none', label: 'Без привязки' }, ...opts]
+    }, [participants, editingUser])
+
+    const setEmployeeLink = (id: string) => {
+        if (id === 'none') {
+            setFormData({ ...formData, employee_id: 'none', full_name: editingUser ? editingUser.full_name : '' })
+            return
+        }
+        const emp = employees.find(x => x.id === id)
+        if (emp) setFormData({ ...formData, employee_id: emp.id, full_name: `${emp.first_name} ${emp.last_name}` })
+    }
+
+    const setParticipantLink = (id: string) => {
+        if (id === 'none') {
+            setFormData({ ...formData, participant_id: 'none', full_name: editingUser ? editingUser.full_name : '' })
+            return
+        }
+        const p = participants.find(x => x.id === id)
+        if (p) setFormData({ ...formData, participant_id: p.id, full_name: p.name })
+    }
+
+    // ----- List ------------------------------------------------------------
+
+    const roleCounts = useMemo(() => {
+        const c: Partial<Record<Role, number>> = {}
+        for (const u of users) c[u.role] = (c[u.role] ?? 0) + 1
+        return c
+    }, [users])
+
+    const visible = useMemo(() => {
+        const q = query.trim().toLowerCase()
+        return users
+            .filter(u => roleFilter === 'all' || u.role === roleFilter)
+            .filter(u => {
+                if (!q) return true
+                const linked = u.employee ? `${u.employee.first_name} ${u.employee.last_name} ${u.employee.position ?? ''}` : u.participant?.name ?? ''
+                return [u.full_name, u.username, linked].some(s => s?.toLowerCase().includes(q))
+            })
+            .sort((a, b) => {
+                const r = ROLE_ORDER.indexOf(a.role) - ROLE_ORDER.indexOf(b.role)
+                return r !== 0 ? r : (a.full_name || a.username).localeCompare(b.full_name || b.username, 'ru')
+            })
+    }, [users, query, roleFilter])
+
+    const staffCount = users.filter(u => u.role !== 'participant').length
+
+    const role = formData.role as Role
+    const showEmployeeLink = EMPLOYEE_ROLES.includes(role)
+    const showParticipantLink = role === 'participant'
+    const err = (k: string) => errors[k] && <span className="text-destructive">{errors[k]}</span>
 
     return (
-        <div className="p-3 sm:p-6 space-y-4 sm:space-y-6 min-h-full">
-            {/* Header */}
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 border-b border-border pb-3.5">
-                <div>
-                    <h1 className="text-xl sm:text-2xl font-bold">Управление пользователями</h1>
-                    <p className="text-xs sm:text-sm text-muted-foreground mt-1">
-                        {isFormOpen 
-                            ? (editingUser ? 'Изменение учетной записи и привязок' : 'Создание нового пользователя')
-                            : 'Управление учетными записями, ролями и привязками к сотрудникам/участникам'
-                        }
-                    </p>
-                </div>
-                {!isFormOpen ? (
-                    <Button onClick={() => { resetForm(); setIsFormOpen(true) }} className="w-full sm:w-auto touch-manipulation">
-                        <Plus className="w-4 h-4 mr-2" /> Добавить пользователя
+        <PageContainer>
+            <PageHeader
+                title="Пользователи"
+                description={
+                    isLoading
+                        ? 'Учётные записи, роли и доступы'
+                        : `${formatNumber(users.length)} ${plural(users.length, ['учётная запись', 'учётные записи', 'учётных записей'])}: ${staffCount} в команде, ${users.length - staffCount} ${plural(users.length - staffCount, ['участник', 'участника', 'участников'])}`
+                }
+                actions={
+                    <Button size="sm" onClick={openNew}>
+                        <Plus /> Новый пользователь
                     </Button>
-                ) : (
-                    <Button variant="outline" onClick={resetForm} className="gap-2 w-full sm:w-auto touch-manipulation">
-                        <ArrowLeft className="w-4 h-4" /> Назад к списку
-                    </Button>
-                )}
-            </div>
+                }
+            />
 
-            {/* Main Content Area */}
-            {!isFormOpen ? (
-                /* Fullscreen: Users List */
-                <div className="w-full animate-in fade-in duration-200">
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Список пользователей</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="overflow-x-auto">
-                                <Table>
-                                    <TableHeader>
-                                        <TableRow>
-                                            <TableHead>Пользователь</TableHead>
-                                            <TableHead>Логин</TableHead>
-                                            <TableHead>Роль</TableHead>
-                                            <TableHead className="text-right">Действия</TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        {isLoading ? (
-                                            <TableRow>
-                                                <TableCell colSpan={4} className="text-center h-24">Загрузка...</TableCell>
-                                            </TableRow>
-                                        ) : users.map(user => (
-                                            <TableRow key={user.id} className={editingUser?.id === user.id ? "bg-muted/50" : ""}>
-                                                <TableCell className="font-medium">
-                                                    <div className="flex items-center gap-2">
-                                                        <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold">
-                                                            <User className="w-4 h-4" />
+            {isLoading ? (
+                <TableSkeleton rows={10} />
+            ) : (
+                <Panel>
+                    <PanelToolbar>
+                        <SearchInput value={query} onChange={setQuery} placeholder="Имя, логин или привязка" className="sm:w-72" />
+                        <Select value={roleFilter} onValueChange={v => setRoleFilter(v as 'all' | Role)}>
+                            <SelectTrigger size="sm" className="min-w-40 max-sm:flex-1" aria-label="Роль">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">
+                                    Все роли <span className="num text-muted-foreground">{users.length}</span>
+                                </SelectItem>
+                                {ROLE_ORDER.filter(r => roleCounts[r]).map(r => (
+                                    <SelectItem key={r} value={r}>
+                                        {ROLES[r].label} <span className="num text-muted-foreground">{roleCounts[r]}</span>
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </PanelToolbar>
+
+                    {visible.length === 0 ? (
+                        <EmptyState
+                            icon={Users}
+                            title={users.length ? 'Никого не нашли' : 'Пользователей пока нет'}
+                            description={users.length ? 'Измените поиск или фильтр по роли' : 'Создайте первую учётную запись'}
+                            action={!users.length && <Button size="sm" onClick={openNew}><Plus /> Новый пользователь</Button>}
+                        />
+                    ) : (
+                        <>
+                            <Table>
+                                <TableHeader>
+                                    <TableRow className="hover:bg-transparent">
+                                        <TableHead>Пользователь</TableHead>
+                                        <TableHead className="max-sm:hidden">Роль</TableHead>
+                                        <TableHead className="max-md:hidden">Привязка</TableHead>
+                                        <TableHead className="max-lg:hidden">Последний вход</TableHead>
+                                        <TableHead className="w-20" />
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {visible.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE).map(user => {
+                                        const name = user.full_name || user.username
+                                        const seen = lastSeen(user.last_login_at)
+                                        const r = ROLES[user.role] ?? { label: user.role, variant: 'secondary' as const }
+                                        return (
+                                            <TableRow key={user.id} className="group cursor-pointer" onClick={() => handleEdit(user)}>
+                                                <TableCell>
+                                                    <div className="flex items-center gap-2.5">
+                                                        <span
+                                                            aria-hidden
+                                                            className={cn(
+                                                                'flex size-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold',
+                                                                user.role === 'admin' ? 'bg-primary-soft text-primary-soft-foreground' : 'bg-muted text-muted-foreground'
+                                                            )}
+                                                        >
+                                                            {initials(name) || '?'}
+                                                        </span>
+                                                        <div className="min-w-0">
+                                                            <div className="truncate font-medium">{name}</div>
+                                                            <div className="truncate text-xs text-muted-foreground">
+                                                                <span className="font-mono">{user.username}</span>
+                                                                <span className="sm:hidden"> · {r.label}</span>
+                                                            </div>
                                                         </div>
-                                                        <div className="flex flex-col">
-                                                            <span>{user.full_name || user.username}</span>
-                                                            {user.last_login_at ? (
-                                                                <span className="text-xs text-muted-foreground font-normal">
-                                                                    Был(а) в сети: {new Date(user.last_login_at).toLocaleString('ru-RU')}
-                                                                </span>
-                                                            ) : (
-                                                                <span className="text-xs text-muted-foreground font-normal opacity-50">
-                                                                    Никогда не заходил(а)
-                                                                </span>
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell className="max-sm:hidden">
+                                                    <Badge variant={r.variant}>
+                                                        {user.role === 'admin' && <ShieldCheck />}
+                                                        {r.label}
+                                                    </Badge>
+                                                </TableCell>
+                                                <TableCell className="max-md:hidden">
+                                                    {user.employee ? (
+                                                        <div className="flex items-center gap-1.5 text-sm">
+                                                            <Briefcase className="size-3.5 shrink-0 text-muted-foreground" />
+                                                            <span className="truncate">
+                                                                {user.employee.first_name} {user.employee.last_name}
+                                                            </span>
+                                                            {user.employee.position && (
+                                                                <span className="truncate text-xs text-muted-foreground max-xl:hidden">· {user.employee.position}</span>
                                                             )}
                                                         </div>
-                                                    </div>
-                                                </TableCell>
-                                                <TableCell>{user.username}</TableCell>
-                                                <TableCell>
-                                                    {user.role === 'admin' && (
-                                                        <Badge variant="default">
-                                                            <Shield className="w-3 h-3 mr-1" />
-                                                            Администратор
-                                                        </Badge>
-                                                    )}
-                                                    {user.role === 'wheels_manager' && (
-                                                        <Badge className="bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 border border-indigo-500/30 font-semibold">
-                                                            🎯 Менеджер колес
-                                                        </Badge>
-                                                    )}
-                                                    {user.role === 'manager' && (
-                                                        <Badge variant="secondary">Руководитель</Badge>
-                                                    )}
-                                                    {user.role === 'finance' && (
-                                                        <Badge variant="secondary">Финансист</Badge>
-                                                    )}
-                                                    {user.role === 'employee' && (
-                                                        <Badge variant="secondary">Сотрудник</Badge>
-                                                    )}
-                                                    {user.role === 'participant' && (
-                                                        <Badge variant="secondary">Участник</Badge>
-                                                    )}
-                                                    {user.employee && (
-                                                        <Badge variant="outline" className="ml-2">
-                                                            HR: {user.employee.first_name} {user.employee.last_name}
-                                                        </Badge>
-                                                    )}
-                                                    {user.participant && (
-                                                        <Badge variant="outline" className="ml-2 border-primary/30 text-primary">
-                                                            🎯 {user.participant.name}
-                                                        </Badge>
+                                                    ) : user.participant ? (
+                                                        <div className="flex items-center gap-1.5 text-sm">
+                                                            <GraduationCap className="size-3.5 shrink-0 text-muted-foreground" />
+                                                            <span className="truncate">{user.participant.name}</span>
+                                                        </div>
+                                                    ) : (
+                                                        <span className="text-muted-foreground">—</span>
                                                     )}
                                                 </TableCell>
-                                                <TableCell className="text-right">
-                                                    <div className="flex justify-end gap-2">
-                                                        <Button size="icon" variant="ghost" onClick={() => handleEdit(user)}>
-                                                            <Edit2 className="h-4 w-4 text-gray-500" />
+                                                <TableCell className="max-lg:hidden">
+                                                    {seen ? (
+                                                        <span className="num text-muted-foreground" title={new Date(user.last_login_at!).toLocaleString('ru-RU')}>
+                                                            {seen}
+                                                        </span>
+                                                    ) : (
+                                                        <span className="text-muted-foreground/80">Не входил</span>
+                                                    )}
+                                                </TableCell>
+                                                <TableCell className="text-right" onClick={e => e.stopPropagation()}>
+                                                    <div className={rowActionsCls}>
+                                                        <Button variant="ghost" size="icon-sm" aria-label="Изменить" className="text-muted-foreground" onClick={() => handleEdit(user)}>
+                                                            <Pencil />
                                                         </Button>
-                                                        <Button size="icon" variant="ghost" onClick={() => handleDelete(user.id)}>
-                                                            <Trash2 className="h-4 w-4 text-red-500" />
+                                                        <Button variant="ghost" size="icon-sm" aria-label="Удалить" className={dangerIconCls} onClick={() => handleDelete(user)}>
+                                                            <Trash2 />
                                                         </Button>
                                                     </div>
                                                 </TableCell>
                                             </TableRow>
-                                        ))}
-                                    </TableBody>
-                                </Table>
-                            </div>
-                        </CardContent>
-                    </Card>
-                </div>
-            ) : (
-                /* Fullscreen: Form panel */
-                <div className="w-full animate-in slide-in-from-bottom-4 duration-200">
-                    <Card className="border-primary/20 shadow-lg max-w-4xl mx-auto">
-                        <CardHeader className="flex flex-row items-center justify-between pb-4 border-b">
-                            <div>
-                                <CardTitle className="text-xl font-bold text-foreground">
-                                    {editingUser ? 'Редактировать пользователя' : 'Создать пользователя'}
-                                </CardTitle>
-                                <p className="text-xs text-muted-foreground mt-1">
-                                    Заполните учетные данные и настройте привязку к сотрудникам или участникам
-                                </p>
-                            </div>
-                            <Button variant="ghost" size="sm" onClick={resetForm} className="gap-1 text-xs">
-                                <ArrowLeft className="w-3.5 h-3.5" /> Вернуться к списку
-                            </Button>
-                        </CardHeader>
-                        <CardContent className="pt-6">
-                            <form onSubmit={handleSubmit} className="space-y-6">
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                    <div className="space-y-2">
-                                        <Label className="text-sm font-semibold">Имя Фамилия (Описание)</Label>
-                                        <Input
-                                            value={formData.full_name}
-                                            onChange={e => setFormData({ ...formData, full_name: e.target.value })}
-                                            placeholder="Например: Иван Иванов"
-                                            className="h-10"
+                                        )
+                                    })}
+                                </TableBody>
+                            </Table>
+                            <TablePagination page={page} pageSize={PAGE_SIZE} total={visible.length} onPageChange={setPage} />
+                        </>
+                    )}
+                </Panel>
+            )}
+
+            <Sheet open={isFormOpen} onOpenChange={setIsFormOpen}>
+                <SheetContent>
+                    <form
+                        className="flex h-full flex-col"
+                        onSubmit={e => {
+                            e.preventDefault()
+                            handleSubmit()
+                        }}
+                        onKeyDown={e => {
+                            if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+                                e.preventDefault()
+                                handleSubmit()
+                            }
+                        }}
+                    >
+                        <SheetHeader>
+                            <SheetTitle>{editingUser ? 'Пользователь' : 'Новый пользователь'}</SheetTitle>
+                            <SheetDescription>
+                                {editingUser ? 'Доступ, роль и привязка к сотруднику или участнику' : 'Выберите роль, и мы подскажем, что заполнить'}
+                            </SheetDescription>
+                        </SheetHeader>
+                        <SheetBody>
+                            <FieldGroup>
+                                <Field label="Роль" hint={ROLES[role]?.description}>
+                                    <Select value={formData.role} onValueChange={val => setFormData({ ...formData, role: val })}>
+                                        <SelectTrigger className="w-full">
+                                            <SelectValue>{ROLES[role]?.label ?? formData.role}</SelectValue>
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {ROLE_ORDER.map(r => (
+                                                <SelectItem key={r} value={r} className="py-2">
+                                                    <div className="flex flex-col gap-0.5">
+                                                        <span className="font-medium">{ROLES[r].label}</span>
+                                                        <span className="text-xs whitespace-normal text-muted-foreground">{ROLES[r].description}</span>
+                                                    </div>
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </Field>
+
+                                {showEmployeeLink && (
+                                    <Field label="Сотрудник" hint="Необязательно. Имя заполнится из карточки сотрудника">
+                                        <Combobox
+                                            value={formData.employee_id || 'none'}
+                                            onChange={setEmployeeLink}
+                                            options={employeeOptions}
+                                            placeholder="Без привязки"
+                                            searchPlaceholder="Имя или должность…"
                                         />
-                                    </div>
-                                    <div className="space-y-2">
-                                        <Label className="text-sm font-semibold">Логин</Label>
+                                    </Field>
+                                )}
+
+                                {showParticipantLink && (
+                                    <Field label="Участник" hint="Поиск по имени, телефону, почте или группе. Имя заполнится автоматически">
+                                        <Combobox
+                                            value={formData.participant_id || 'none'}
+                                            onChange={setParticipantLink}
+                                            options={participantOptions}
+                                            placeholder="Без привязки"
+                                            searchPlaceholder="Имя, телефон или группа…"
+                                        />
+                                    </Field>
+                                )}
+
+                                <Field label="Имя" htmlFor="user-name">
+                                    <Input
+                                        id="user-name"
+                                        value={formData.full_name}
+                                        onChange={e => setFormData({ ...formData, full_name: e.target.value })}
+                                        placeholder="Например: Иван Иванов"
+                                    />
+                                </Field>
+
+                                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                                    <Field label="Логин" htmlFor="user-login" required hint={err('username')}>
                                         <Input
+                                            id="user-login"
                                             value={formData.username}
                                             onChange={e => setFormData({ ...formData, username: e.target.value })}
                                             placeholder="login"
-                                            required
-                                            className="h-10"
+                                            autoComplete="off"
+                                            autoCapitalize="none"
+                                            spellCheck={false}
+                                            aria-invalid={!!errors.username || undefined}
                                         />
-                                    </div>
-                                    <div className="space-y-2">
-                                        <Label className="text-sm font-semibold">Пароль {editingUser && '(оставьте пустым чтобы не менять)'}</Label>
+                                    </Field>
+                                    <Field
+                                        label="Пароль"
+                                        htmlFor="user-password"
+                                        required={!editingUser}
+                                        hint={err('password') || (editingUser && 'Оставьте пустым, чтобы не менять')}
+                                    >
                                         <Input
+                                            id="user-password"
                                             type="password"
                                             value={formData.password}
                                             onChange={e => setFormData({ ...formData, password: e.target.value })}
                                             placeholder="******"
-                                            required={!editingUser}
-                                            className="h-10"
+                                            autoComplete="new-password"
+                                            aria-invalid={!!errors.password || undefined}
                                         />
-                                    </div>
-                                    <div className="space-y-2">
-                                        <Label className="text-sm font-semibold">Роль</Label>
-                                        <Select
-                                            value={formData.role}
-                                            onValueChange={val => setFormData({ ...formData, role: val })}
-                                        >
-                                            <SelectTrigger className="h-10">
-                                                <SelectValue />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="admin">Администратор (Admin)</SelectItem>
-                                                <SelectItem value="wheels_manager">🎯 Менеджер колес (Контроль колес)</SelectItem>
-                                                <SelectItem value="manager">Руководитель (Manager)</SelectItem>
-                                                <SelectItem value="finance">Финансист (Finance)</SelectItem>
-                                                <SelectItem value="employee">Сотрудник (Employee)</SelectItem>
-                                                <SelectItem value="participant">Участник (Participant)</SelectItem>
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
+                                    </Field>
                                 </div>
-
-                                <hr className="border-border my-6" />
-
-                                {/* Linked entities - wider size for maximum comfort on fullscreen */}
-                                {(formData.role === 'employee' || formData.role === 'finance' || formData.role === 'manager') && (
-                                    <div className="space-y-3 animate-in fade-in duration-200">
-                                        <Label className="text-sm font-semibold block">Привязка к сотруднику (Необязательно)</Label>
-                                        <div className="relative w-full">
-                                            {/* Trigger button */}
-                                            <div 
-                                                onClick={() => setIsEmployeeSelectOpen(!isEmployeeSelectOpen)}
-                                                className="flex h-12 w-full items-center justify-between rounded-md border border-input bg-background px-4 py-3 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer hover:bg-muted/30 transition-colors"
-                                            >
-                                                <span className="font-medium text-foreground">
-                                                    {formData.employee_id === 'none' || !formData.employee_id
-                                                        ? 'Без привязки'
-                                                        : (() => {
-                                                            const emp = employees.find(x => x.id === formData.employee_id);
-                                                            return emp ? `${emp.first_name} ${emp.last_name} (${emp.position})` : 'Без привязки';
-                                                          })()
-                                                    }
-                                                </span>
-                                                <span className="text-xs text-muted-foreground ml-2 shrink-0">Выбрать другого сотрудника</span>
-                                            </div>
-
-                                            {/* Dropdown panel */}
-                                            {isEmployeeSelectOpen && (
-                                                <div className="absolute z-50 mt-1 w-full rounded-md border border-border bg-popover p-3 text-popover-foreground shadow-lg animate-in fade-in duration-100 space-y-3">
-                                                    <Input
-                                                        type="text"
-                                                        placeholder="Поиск сотрудника по имени или должности..."
-                                                        value={employeeSearchQuery}
-                                                        onChange={e => setEmployeeSearchQuery(e.target.value)}
-                                                        className="h-10 text-sm"
-                                                    />
-
-                                                    <div className="max-h-60 overflow-y-auto space-y-1 pr-1">
-                                                        <div
-                                                            onClick={() => {
-                                                                setFormData({
-                                                                    ...formData,
-                                                                    employee_id: 'none',
-                                                                    full_name: editingUser ? editingUser.full_name : ''
-                                                                })
-                                                                setIsEmployeeSelectOpen(false)
-                                                            }}
-                                                            className="flex items-center justify-between p-2.5 text-sm rounded-md hover:bg-muted cursor-pointer transition-colors"
-                                                        >
-                                                            <span className="font-semibold text-muted-foreground">Без привязки</span>
-                                                        </div>
-                                                        {filteredEmployees.map(emp => {
-                                                            const isSelected = formData.employee_id === emp.id;
-                                                            const name = `${emp.first_name} ${emp.last_name}`;
-                                                            return (
-                                                                <div
-                                                                    key={emp.id}
-                                                                    onClick={() => {
-                                                                        setFormData({
-                                                                            ...formData,
-                                                                            employee_id: emp.id,
-                                                                            full_name: name
-                                                                        })
-                                                                        setIsEmployeeSelectOpen(false)
-                                                                    }}
-                                                                    className={`flex items-center justify-between p-2.5 text-sm rounded-md hover:bg-muted cursor-pointer transition-colors ${
-                                                                        isSelected ? 'bg-primary/10 text-primary font-medium' : ''
-                                                                    }`}
-                                                                >
-                                                                    <span>{name}</span>
-                                                                    {emp.position && (
-                                                                        <Badge variant="outline" className="text-xs py-0.5 px-2 truncate max-w-[200px]">
-                                                                            {emp.position}
-                                                                        </Badge>
-                                                                    )}
-                                                                </div>
-                                                            )
-                                                        })}
-                                                        {filteredEmployees.length === 0 && (
-                                                            <div className="text-center py-6 text-sm text-muted-foreground">
-                                                                Ничего не найдено
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-                                )}
-
-                                {formData.role === 'participant' && (
-                                    <div className="space-y-3 animate-in fade-in slide-in-from-top-2">
-                                        <Label className="text-sm font-semibold block">Привязка к Участнику</Label>
-                                        <div className="relative w-full">
-                                            {/* Trigger button */}
-                                            <div 
-                                                onClick={() => setIsParticipantSelectOpen(!isParticipantSelectOpen)}
-                                                className="flex h-12 w-full items-center justify-between rounded-md border border-primary/50 bg-background px-4 py-3 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer hover:bg-muted/30 transition-colors"
-                                            >
-                                                <span className="font-semibold text-foreground truncate">
-                                                    {formData.participant_id === 'none' || !formData.participant_id
-                                                        ? 'Без привязки'
-                                                        : `🎯 ${participants.find(p => p.id === formData.participant_id)?.name || 'Без привязки'}`
-                                                    }
-                                                </span>
-                                                <span className="text-xs text-muted-foreground ml-2 shrink-0">Выбрать другого участника</span>
-                                            </div>
-
-                                            {/* Dropdown panel */}
-                                            {isParticipantSelectOpen && (
-                                                <div className="absolute z-50 mt-1 w-full rounded-md border border-border bg-popover p-3 text-popover-foreground shadow-lg animate-in fade-in duration-100 space-y-3">
-                                                    {/* Filters */}
-                                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                                        <Input
-                                                            type="text"
-                                                            placeholder="Поиск по имени, телефону или почте..."
-                                                            value={participantSearchQuery}
-                                                            onChange={e => setParticipantSearchQuery(e.target.value)}
-                                                            className="h-10 text-sm"
-                                                        />
-                                                        <select
-                                                            value={participantFilterProgramId}
-                                                            onChange={e => setParticipantFilterProgramId(e.target.value)}
-                                                            className="h-10 px-3 py-2 bg-background border border-input rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-primary text-foreground"
-                                                        >
-                                                            <option value="all">Все группы</option>
-                                                            {Array.from(new Set(participants.map(p => p.program?.id).filter(Boolean))).map(id => {
-                                                                const name = participants.find(p => p.program?.id === id)?.program?.name;
-                                                                return <option key={id} value={id}>{name}</option>;
-                                                            })}
-                                                        </select>
-                                                    </div>
-
-                                                    {/* List */}
-                                                    <div className="max-h-60 overflow-y-auto space-y-1 pr-1">
-                                                        <div
-                                                            onClick={() => {
-                                                                setFormData({
-                                                                    ...formData,
-                                                                    participant_id: 'none',
-                                                                    full_name: editingUser ? editingUser.full_name : ''
-                                                                })
-                                                                setIsParticipantSelectOpen(false)
-                                                            }}
-                                                            className="flex items-center justify-between p-2.5 text-sm rounded-md hover:bg-muted cursor-pointer transition-colors"
-                                                        >
-                                                            <span className="font-semibold text-muted-foreground">Без привязки</span>
-                                                        </div>
-                                                        {filteredParticipants.map(p => {
-                                                            const isSelected = formData.participant_id === p.id;
-                                                            return (
-                                                                <div
-                                                                    key={p.id}
-                                                                    onClick={() => {
-                                                                        setFormData({
-                                                                            ...formData,
-                                                                            participant_id: p.id,
-                                                                            full_name: p.name
-                                                                        })
-                                                                        setIsParticipantSelectOpen(false)
-                                                                    }}
-                                                                    className={`flex items-center justify-between p-2.5 text-sm rounded-md hover:bg-muted cursor-pointer transition-colors ${
-                                                                        isSelected ? 'bg-primary/10 text-primary font-medium' : ''
-                                                                    }`}
-                                                                >
-                                                                    <div className="flex flex-col min-w-0 mr-4">
-                                                                        <span className="font-medium text-foreground">{p.name}</span>
-                                                                        {p.phone && <span className="text-xs text-muted-foreground">{p.phone}</span>}
-                                                                    </div>
-                                                                    {p.program?.name && (
-                                                                        <Badge variant="outline" className="text-xs py-0.5 px-2 truncate max-w-[250px] shrink-0">
-                                                                            {p.program.name}
-                                                                        </Badge>
-                                                                    )}
-                                                                </div>
-                                                            )
-                                                        })}
-                                                        {filteredParticipants.length === 0 && (
-                                                            <div className="text-center py-6 text-sm text-muted-foreground">
-                                                                Ничего не найдено
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-                                )}
-
-                                <div className="flex justify-end gap-3 pt-6 border-t mt-6">
-                                    <Button type="button" variant="outline" onClick={resetForm} className="h-10 px-6">
-                                        Отмена
-                                    </Button>
-                                    <Button type="submit" className="h-10 px-8">
-                                        {editingUser ? 'Обновить данные' : 'Создать пользователя'}
-                                    </Button>
-                                </div>
-                            </form>
-                        </CardContent>
-                    </Card>
-                </div>
-            )}
-        </div>
+                            </FieldGroup>
+                        </SheetBody>
+                        <SheetFooter>
+                            <Button type="submit" disabled={saving}>
+                                {saving ? 'Сохранение…' : editingUser ? 'Сохранить' : 'Создать'}
+                            </Button>
+                            <Button type="button" variant="ghost" onClick={() => setIsFormOpen(false)}>
+                                Отмена
+                            </Button>
+                            {editingUser ? (
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    className="ml-auto text-destructive hover:bg-destructive-soft hover:text-destructive"
+                                    onClick={() => handleDelete(editingUser)}
+                                >
+                                    Удалить
+                                </Button>
+                            ) : (
+                                <span className="ml-auto hidden text-xs text-muted-foreground sm:inline">⌘/Ctrl + Enter</span>
+                            )}
+                        </SheetFooter>
+                    </form>
+                </SheetContent>
+            </Sheet>
+        </PageContainer>
     )
 }

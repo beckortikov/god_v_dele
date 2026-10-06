@@ -1,11 +1,19 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { Card } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
+import * as React from 'react'
+import { AlertCircle, ArrowRight, CheckCircle2, ChevronDown, Receipt } from 'lucide-react'
+import { Bar, BarChart, CartesianGrid, ComposedChart, Line, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+
+import { cn } from '@/lib/utils'
+import { MONTHS_RU, MONTHS_SHORT_RU, formatDate, formatMoney, formatNumber, plural } from '@/lib/format'
 import { Button } from '@/components/ui/button'
-import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
-import { TrendingUp, TrendingDown, AlertCircle, Zap, X } from 'lucide-react'
+import { Skeleton } from '@/components/ui/skeleton'
+import { PageContainer, PageHeader, Panel } from '@/components/erp/page-header'
+import { StatStrip, type Stat } from '@/components/erp/stat-strip'
+import { EmptyState } from '@/components/erp/empty-state'
+import { ChartLegend, ChartTooltip, axisProps, compactTick, gridProps } from '@/components/erp/chart'
+import { useNav } from '@/components/app-shell/nav-context'
+import { ChartSkeleton, LoadError, PanelHead, ProgramSelect, cents, usePref } from '@/components/analytics/parts'
 
 interface DashboardData {
   metrics: {
@@ -38,340 +46,367 @@ interface DashboardData {
   }>
 }
 
-export function Dashboard() {
-  const [data, setData] = useState<DashboardData | null>(null)
-  const [programs, setPrograms] = useState<{ id: string; name: string }[]>([])
-  const [filterProgram, setFilterProgram] = useState<string>('all')
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [showOverdueModal, setShowOverdueModal] = useState(false)
-  const [showRecentModal, setShowRecentModal] = useState(false)
+const LIST_LIMIT = 5
 
-  useEffect(() => {
-    // Fetch programs first
+const MONTHS_PREP = ['январе', 'феврале', 'марте', 'апреле', 'мае', 'июне', 'июле', 'августе', 'сентябре', 'октябре', 'ноябре', 'декабре']
+
+/** «в сентябре — $9 578» : the real previous-month figure for context. */
+function prevMonthNote(previous: number | undefined, prevMonthIdx: number) {
+  if (previous === undefined) return null
+  return (
+    <span>
+      в {MONTHS_PREP[prevMonthIdx]} — <span className="num">{formatMoney(previous)}</span>
+    </span>
+  )
+}
+
+export function Dashboard() {
+  const { navigate } = useNav()
+  const [data, setData] = React.useState<DashboardData | null>(null)
+  const [programs, setPrograms] = React.useState<{ id: string; name: string }[]>([])
+  const [filterProgram, setFilterProgram] = usePref<string>('dashboard-program', 'all')
+  const [loading, setLoading] = React.useState(true)
+  const [refreshing, setRefreshing] = React.useState(false)
+  const [error, setError] = React.useState<string | null>(null)
+  const [reloadKey, setReloadKey] = React.useState(0)
+
+  React.useEffect(() => {
     fetch('/api/programs')
       .then(res => res.json())
       .then(result => {
-        if (!result.error) {
-          setPrograms(result.data || [])
-        }
+        if (!result.error) setPrograms(result.data || [])
       })
       .catch(err => console.error('Error fetching programs:', err))
   }, [])
 
-  useEffect(() => {
-    const url = filterProgram === 'all'
-      ? '/api/dashboard'
-      : `/api/dashboard?program_id=${filterProgram}`
+  // A remembered program that no longer exists falls back to «all»
+  React.useEffect(() => {
+    if (programs.length && filterProgram !== 'all' && !programs.some(p => p.id === filterProgram)) setFilterProgram('all')
+  }, [programs, filterProgram, setFilterProgram])
+
+  React.useEffect(() => {
+    let cancelled = false
+    const url = filterProgram === 'all' ? '/api/dashboard' : `/api/dashboard?program_id=${filterProgram}`
+    setRefreshing(true)
 
     fetch(url)
       .then(res => res.json())
       .then(result => {
+        if (cancelled) return
         if (result.error) {
           setError(result.error)
         } else {
           setData(result.data)
+          setError(null)
         }
-        setLoading(false)
       })
       .catch(err => {
-        setError(err.message)
-        setLoading(false)
+        if (!cancelled) setError(err.message)
       })
-  }, [filterProgram])
+      .finally(() => {
+        if (cancelled) return
+        setLoading(false)
+        setRefreshing(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [filterProgram, reloadKey])
 
-  if (loading) {
+  if (error && !data) {
     return (
-      <div className="p-6 flex items-center justify-center h-full">
-        <div className="text-center">
-          <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-muted-foreground">Загрузка данных...</p>
-        </div>
-      </div>
+      <LoadError
+        message={error}
+        onRetry={() => {
+          setLoading(true)
+          setReloadKey(k => k + 1)
+        }}
+      />
     )
   }
 
-  if (error || !data) {
-    return (
-      <div className="p-6">
-        <Card className="p-6 bg-destructive/5 border-destructive">
-          <div className="flex gap-3">
-            <AlertCircle className="w-5 h-5 text-destructive flex-shrink-0 mt-0.5" />
-            <div>
-              <p className="font-medium text-foreground">Ошибка загрузки данных</p>
-              <p className="text-sm text-muted-foreground">{error || 'Неизвестная ошибка'}</p>
-            </div>
-          </div>
-        </Card>
-      </div>
-    )
-  }
+  const now = new Date()
+  const monthIdx = now.getMonth()
+  const prevMonthIdx = (monthIdx + 11) % 12
+  const chart = data?.chartData ?? []
+  const prev = chart.length >= 2 ? chart[chart.length - 2] : undefined
 
-  const metrics = [
-    {
-      title: 'Текущий баланс',
-      value: `$${data.metrics.currentBalance.toLocaleString()}`,
-      change: '+12%',
-      icon: TrendingUp,
-      color: 'text-green-600',
-    },
-    {
-      title: 'Месячный доход',
-      value: `$${data.metrics.monthlyRevenue.toLocaleString()}`,
-      change: '+15%',
-      icon: TrendingUp,
-      color: 'text-green-600',
-    },
-    {
-      title: 'Месячные расходы',
-      value: `$${data.metrics.monthlyExpenses.toLocaleString()}`,
-      change: '+8%',
-      icon: TrendingDown,
-      color: 'text-red-600',
-    },
-    {
-      title: 'Cash Runway',
-      value: `${data.metrics.cashRunway.toFixed(1)} мес.`,
-      change: 'стабильно',
-      icon: Zap,
-      color: 'text-amber-600',
-    },
-  ]
+  // Float noise like 1e-13 means «paid in full», not overdue
+  const overdue = (data?.overduePayments ?? []).filter(p => cents(p.amount) > 0)
+  const overdueSum = overdue.reduce((s, p) => s + p.amount, 0)
+  const recent = data?.recentPayments ?? []
+
+  const m = data?.metrics
+  const stats: Stat[] = m
+    ? [
+        {
+          label: 'Баланс с начала года',
+          value: formatMoney(m.currentBalance),
+          tone: m.currentBalance < 0 ? 'destructive' : 'default',
+          sub: 'поступления минус расходы',
+          onClick: () => navigate('income'),
+        },
+        {
+          label: `Поступления · ${MONTHS_RU[monthIdx].toLowerCase()}`,
+          dot: 'var(--chart-income)',
+          value: formatMoney(m.monthlyRevenue),
+          sub: prevMonthNote(prev?.income, prevMonthIdx) ?? 'с начала месяца',
+        },
+        {
+          label: `Расходы · ${MONTHS_RU[monthIdx].toLowerCase()}`,
+          dot: 'var(--chart-expense)',
+          value: formatMoney(m.monthlyExpenses),
+          sub: prevMonthNote(prev?.expenses, prevMonthIdx) ?? 'с начала месяца',
+        },
+        m.currentBalance > 0 && m.cashRunway > 0
+          ? {
+              label: 'Запас денег',
+              value: `${m.cashRunway.toLocaleString('ru-RU', { maximumFractionDigits: 1 })} мес.`,
+              sub: 'при текущем темпе расходов',
+            }
+          : {
+              label: 'Запас денег',
+              value: '—',
+              sub: 'баланс не положительный',
+            },
+      ]
+    : [
+        { label: 'Баланс с начала года', value: '' },
+        { label: 'Поступления', value: '' },
+        { label: 'Расходы', value: '' },
+        { label: 'Запас денег', value: '' },
+      ]
+
+  const chartData = chart.map(c => ({ ...c, rate: c.paymentRate }))
 
   return (
-    <div className="p-3 sm:p-6 space-y-4 sm:space-y-6 bg-background">
-      {/* Header with Program Filter */}
-      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 sm:gap-0">
-        <div>
-          <h2 className="text-xl sm:text-2xl font-bold text-foreground">Дашборд</h2>
-          <p className="text-xs sm:text-sm text-muted-foreground mt-1">Обзор финансовых показателей</p>
-        </div>
-        <div className="w-full sm:w-64">
-          <select
-            value={filterProgram}
-            onChange={(e) => setFilterProgram(e.target.value)}
-            className="w-full px-3 py-2 bg-background border border-border rounded-md text-foreground text-sm touch-manipulation"
+    <PageContainer>
+      <PageHeader
+        title="Дашборд"
+        description={`Ключевые показатели на ${formatDate(now, 'long')}`}
+        actions={<ProgramSelect value={filterProgram} onChange={setFilterProgram} programs={programs} />}
+      />
+
+      <div className={cn('flex flex-col gap-3 transition-opacity duration-200', refreshing && !loading && 'opacity-60')}>
+        <StatStrip stats={stats} loading={loading} />
+
+        {!loading && overdue.length > 0 && (
+          <button
+            type="button"
+            onClick={() => navigate('participants')}
+            className="group flex w-full items-center gap-3 rounded-xl border border-destructive/20 bg-destructive-soft px-4 py-3 text-left transition-colors hover:border-destructive/40 focus-visible:ring-[3px] focus-visible:ring-destructive/25 focus-visible:outline-none"
           >
-            <option value="all">Все программы</option>
-            {programs.map(prog => (
-              <option key={prog.id} value={prog.id}>{prog.name}</option>
-            ))}
-          </select>
-        </div>
-      </div>
+            <AlertCircle className="size-5 shrink-0 text-destructive" />
+            <span className="min-w-0 flex-1 text-sm">
+              <span className="font-medium text-foreground">
+                {overdue.length} {plural(overdue.length, ['просроченный платёж', 'просроченных платежа', 'просроченных платежей'])} на{' '}
+                <span className="num">{formatMoney(overdueSum)}</span>
+              </span>
+              <span className="block text-muted-foreground sm:inline sm:before:content-['_·_']">Участники не оплатили прошлые месяцы</span>
+            </span>
+            <span className="flex shrink-0 items-center gap-1 text-sm font-medium text-destructive max-sm:sr-only">К участникам</span>
+            <ArrowRight className="size-4 shrink-0 text-destructive transition-transform duration-150 group-hover:translate-x-0.5" />
+          </button>
+        )}
 
-      {/* Metrics Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        {metrics.map((metric) => {
-          const Icon = metric.icon
-          return (
-            <Card key={metric.title} className="p-6 bg-card border-border">
-              <div className="flex justify-between items-start mb-4">
-                <div>
-                  <p className="text-xs text-muted-foreground mb-1">{metric.title}</p>
-                  <h3 className="text-2xl font-bold text-foreground">{metric.value}</h3>
-                </div>
-                <Icon className={`w-5 h-5 ${metric.color}`} />
-              </div>
-              <Badge variant="secondary" className="text-xs">{metric.change}</Badge>
-            </Card>
-          )
-        })}
-      </div>
-
-      {/* Alerts */}
-      {data.overduePayments.length > 0 && (
-        <Card className="p-4 bg-destructive/5 border border-destructive/20">
-          <div className="flex gap-3">
-            <AlertCircle className="w-5 h-5 text-destructive flex-shrink-0 mt-0.5" />
-            <div>
-              <p className="font-medium text-foreground">Есть просроченные платежи</p>
-              <p className="text-sm text-muted-foreground">{data.overduePayments.length} участника не оплатили в срок. Требуется внимание.</p>
-            </div>
+        {loading ? (
+          <div className="grid grid-cols-1 gap-3 xl:grid-cols-[1.6fr_1fr]">
+            <ChartSkeleton />
+            <ChartSkeleton />
           </div>
-        </Card>
-      )}
+        ) : (
+          <div className="grid grid-cols-1 gap-3 xl:grid-cols-[1.6fr_1fr]">
+            <Panel className="p-4 sm:p-5">
+              <PanelHead
+                title="Поступления и расходы"
+                description="Последние 6 месяцев, по дате оплаты"
+                aside={
+                  <ChartLegend
+                    items={[
+                      { label: 'Поступления', color: 'var(--chart-income)' },
+                      { label: 'Расходы', color: 'var(--chart-expense)' },
+                      { label: 'Сальдо', color: 'var(--foreground)' },
+                    ]}
+                  />
+                }
+              />
+              <ResponsiveContainer width="100%" height={260}>
+                <ComposedChart data={chartData} barGap={3} margin={{ left: -8, right: 4, top: 4 }}>
+                  <CartesianGrid {...gridProps} />
+                  <XAxis dataKey="month" {...axisProps} />
+                  <YAxis {...axisProps} width={56} tickFormatter={compactTick} />
+                  <ReferenceLine y={0} stroke="var(--border)" />
+                  <Tooltip content={<ChartTooltip />} cursor={{ fill: 'var(--muted)', opacity: 0.6 }} />
+                  <Bar dataKey="income" name="Поступления" fill="var(--chart-income)" radius={[4, 4, 0, 0]} maxBarSize={28} />
+                  <Bar dataKey="expenses" name="Расходы" fill="var(--chart-expense)" radius={[4, 4, 0, 0]} maxBarSize={28} />
+                  <Line
+                    dataKey="balance"
+                    name="Сальдо"
+                    type="linear"
+                    stroke="var(--foreground)"
+                    strokeWidth={1.5}
+                    strokeDasharray="4 3"
+                    dot={{ r: 2.5, fill: 'var(--foreground)', strokeWidth: 0 }}
+                    activeDot={{ r: 4 }}
+                  />
+                </ComposedChart>
+              </ResponsiveContainer>
+            </Panel>
 
-      {/* Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Balance Chart */}
-        <Card className="p-6 bg-card border-border">
-          <h3 className="text-lg font-semibold text-foreground mb-4">Доходы vs Расходы</h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={data.chartData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-              <XAxis dataKey="month" stroke="#9ca3af" />
-              <YAxis stroke="#9ca3af" />
-              <Tooltip contentStyle={{ backgroundColor: '#fff', border: '1px solid #e5e7eb' }} />
-              <Legend />
-              <Bar dataKey="income" fill="#3b82f6" name="Доходы" />
-              <Bar dataKey="expenses" fill="#ef4444" name="Расходы" />
-            </BarChart>
-          </ResponsiveContainer>
-        </Card>
+            <Panel className="p-4 sm:p-5">
+              <PanelHead title="Собираемость оплат" description="Доля оплаченных счетов за месяц" />
+              <ResponsiveContainer width="100%" height={260}>
+                <BarChart data={chartData} margin={{ left: -4, right: 4, top: 8 }}>
+                  <CartesianGrid {...gridProps} />
+                  <XAxis dataKey="month" {...axisProps} />
+                  <YAxis {...axisProps} width={48} domain={[0, 100]} ticks={[0, 25, 50, 75, 100]} tickFormatter={v => `${v}%`} />
+                  <Tooltip cursor={{ fill: 'var(--muted)', opacity: 0.6 }} content={<RateTooltip />} />
+                  <Bar dataKey="rate" name="Оплачено" fill="var(--chart-1)" radius={[4, 4, 0, 0]} maxBarSize={32} />
+                </BarChart>
+              </ResponsiveContainer>
+            </Panel>
+          </div>
+        )}
 
-        {/* MRR Trend */}
-        <Card className="p-6 bg-card border-border">
-          <h3 className="text-lg font-semibold text-foreground mb-4">MRR тренд</h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={data.chartData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-              <XAxis dataKey="month" stroke="#9ca3af" />
-              <YAxis stroke="#9ca3af" />
-              <Tooltip contentStyle={{ backgroundColor: '#fff', border: '1px solid #e5e7eb' }} />
-              <Line type="monotone" dataKey="mrr" stroke="#3b82f6" strokeWidth={2} dot={{ fill: '#3b82f6' }} name="MRR" />
-            </LineChart>
-          </ResponsiveContainer>
-        </Card>
-
-        {/* Balance Trend */}
-        <Card className="p-6 bg-card border-border">
-          <h3 className="text-lg font-semibold text-foreground mb-4">Динамика баланса</h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={data.chartData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-              <XAxis dataKey="month" stroke="#9ca3af" />
-              <YAxis stroke="#9ca3af" />
-              <Tooltip contentStyle={{ backgroundColor: '#fff', border: '1px solid #e5e7eb' }} />
-              <Line type="monotone" dataKey="balance" stroke="#10b981" strokeWidth={2} dot={{ fill: '#10b981' }} name="Баланс" />
-            </LineChart>
-          </ResponsiveContainer>
-        </Card>
-
-        {/* Overdue and Recent Payments */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <Card className="p-6 bg-card border-border flex flex-col">
-            <h3 className="text-lg font-semibold text-foreground mb-4">Просроченные платежи</h3>
-            {data.overduePayments.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Нет просроченных платежей</p>
-            ) : (
-              <>
-                <div className="space-y-3 flex-1">
-                  {data.overduePayments.slice(0, 5).map((payment, idx) => (
-                    <div key={idx} className="flex justify-between items-center p-3 bg-muted/30 rounded-lg">
-                      <div>
-                        <p className="text-sm font-medium text-foreground">{payment.name}</p>
-                        <p className="text-xs text-muted-foreground">Задержка: {payment.days} дней</p>
-                      </div>
-                      <p className="text-sm font-semibold text-destructive">${payment.amount.toLocaleString()}</p>
-                    </div>
-                  ))}
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+          <ListPanel
+            title="Просроченные платежи"
+            description="Неоплаченные прошлые месяцы"
+            loading={loading}
+            onAll={() => navigate('participants')}
+            allLabel="Участники"
+            items={overdue}
+            empty={
+              <EmptyState icon={CheckCircle2} title="Просрочек нет" description="Все участники оплатили прошлые месяцы" className="py-10" />
+            }
+            render={(p, i) => (
+              <li key={i} className="flex items-center gap-3 px-4 py-2.5 sm:px-5">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium">{p.name}</p>
+                  <p className="text-xs text-muted-foreground">
+                    просрочка {formatNumber(p.days)} {plural(p.days, ['день', 'дня', 'дней'])}
+                  </p>
                 </div>
-                {data.overduePayments.length > 5 && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setShowOverdueModal(true)}
-                    className="w-full mt-4"
-                  >
-                    Показать все ({data.overduePayments.length})
-                  </Button>
-                )}
-              </>
+                <span className="num text-sm font-medium text-destructive">{formatMoney(p.amount)}</span>
+              </li>
             )}
-          </Card>
-
-          <Card className="p-6 bg-card border-border flex flex-col">
-            <h3 className="text-lg font-semibold text-foreground mb-4">Последние поступления</h3>
-            {data.recentPayments.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Нет поступлений</p>
-            ) : (
-              <>
-                <div className="space-y-3 flex-1">
-                  {data.recentPayments.slice(0, 5).map((payment, idx) => (
-                    <div key={idx} className="flex justify-between items-center p-3 bg-muted/30 rounded-lg">
-                      <div>
-                        <p className="text-sm font-medium text-foreground">{payment.name}</p>
-                        <p className="text-xs text-muted-foreground">{payment.program}</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-sm font-semibold text-green-600">${payment.amount.toLocaleString()}</p>
-                        <p className="text-xs text-muted-foreground">{new Date(payment.date).toLocaleDateString('ru-RU')}</p>
-                      </div>
-                    </div>
-                  ))}
+          />
+          <ListPanel
+            title="Последние поступления"
+            description="Недавно отмеченные оплаты"
+            loading={loading}
+            onAll={() => navigate('income')}
+            allLabel="Все поступления"
+            items={recent}
+            empty={
+              <EmptyState icon={Receipt} title="Поступлений пока нет" description="Оплаты участников появятся здесь" className="py-10" />
+            }
+            render={(p, i) => (
+              <li key={i} className="flex items-center gap-3 px-4 py-2.5 sm:px-5">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium">{p.name}</p>
+                  <p className="truncate text-xs text-muted-foreground">
+                    {p.program}
+                    {p.month ? ` · за ${MONTHS_SHORT_RU[p.month - 1]}` : ''}
+                  </p>
                 </div>
-                {data.recentPayments.length > 5 && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setShowRecentModal(true)}
-                    className="w-full mt-4"
-                  >
-                    Показать все ({data.recentPayments.length})
-                  </Button>
-                )}
-              </>
+                <div className="text-right">
+                  <p className="num text-sm font-medium text-success">{formatMoney(p.amount, 'USD', { sign: true })}</p>
+                  <p className="num text-xs text-muted-foreground">{formatDate(p.date)}</p>
+                </div>
+              </li>
             )}
-          </Card>
+          />
         </div>
       </div>
+    </PageContainer>
+  )
+}
 
-      {/* Overdue Payments Modal */}
-      {showOverdueModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <Card className="w-full max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
-            <div className="p-6 border-b border-border flex justify-between items-center">
-              <h2 className="text-xl font-bold text-foreground">Все просроченные платежи</h2>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setShowOverdueModal(false)}
-              >
-                <X className="w-4 h-4" />
-              </Button>
-            </div>
-            <div className="p-6 overflow-y-auto flex-1">
-              <div className="space-y-3">
-                {data.overduePayments.map((payment, idx) => (
-                  <div key={idx} className="flex justify-between items-center p-4 bg-muted/30 rounded-lg border border-border">
-                    <div>
-                      <p className="font-medium text-foreground">{payment.name}</p>
-                      <p className="text-sm text-muted-foreground">Задержка: {payment.days} дней</p>
-                    </div>
-                    <p className="text-lg font-semibold text-destructive">${payment.amount.toLocaleString()}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </Card>
-        </div>
-      )}
+// ---------------------------------------------------------------------------
 
-      {/* Recent Payments Modal */}
-      {showRecentModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <Card className="w-full max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
-            <div className="p-6 border-b border-border flex justify-between items-center">
-              <h2 className="text-xl font-bold text-foreground">Все последние поступления</h2>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setShowRecentModal(false)}
-              >
-                <X className="w-4 h-4" />
-              </Button>
-            </div>
-            <div className="p-6 overflow-y-auto flex-1">
-              <div className="space-y-3">
-                {data.recentPayments.map((payment, idx) => (
-                  <div key={idx} className="flex justify-between items-center p-4 bg-muted/30 rounded-lg border border-border">
-                    <div>
-                      <p className="font-medium text-foreground">{payment.name}</p>
-                      <p className="text-sm text-muted-foreground">{payment.program}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-lg font-semibold text-green-600">${payment.amount.toLocaleString()}</p>
-                      <p className="text-sm text-muted-foreground">{new Date(payment.date).toLocaleDateString('ru-RU')}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </Card>
-        </div>
-      )}
+function RateTooltip({ active, payload, label }: { active?: boolean; payload?: any[]; label?: string }) {
+  if (!active || !payload?.length) return null
+  const row = payload[0].payload
+  return (
+    <div className="rounded-lg border bg-popover px-3 py-2 text-xs shadow-pop">
+      <p className="mb-1 font-medium">{label}</p>
+      <p className="flex items-center gap-2">
+        <span className="size-2 rounded-full bg-chart-1" />
+        <span className="text-muted-foreground">Оплачено</span>
+        <span className="num ml-auto pl-3 font-medium">{row.rate}%</span>
+      </p>
+      <p className="mt-0.5 text-muted-foreground">
+        {formatNumber(row.participants)} {plural(row.participants, ['счёт', 'счёта', 'счетов'])} за месяц
+      </p>
     </div>
   )
 }
 
+function ListPanel<T>({
+  title,
+  description,
+  loading,
+  items,
+  render,
+  empty,
+  onAll,
+  allLabel,
+}: {
+  title: string
+  description: string
+  loading: boolean
+  items: T[]
+  render: (item: T, i: number) => React.ReactNode
+  empty: React.ReactNode
+  onAll: () => void
+  allLabel: string
+}) {
+  const [expanded, setExpanded] = React.useState(false)
+  const shown = expanded ? items : items.slice(0, LIST_LIMIT)
+  return (
+    <Panel className="flex flex-col">
+      <div className="flex items-start justify-between gap-3 border-b px-4 py-3.5 sm:px-5">
+        <div className="min-w-0">
+          <h2 className="font-semibold">
+            {title}
+            {!loading && items.length > 0 && <span className="num ml-1.5 text-sm font-normal text-muted-foreground">{items.length}</span>}
+          </h2>
+          <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>
+        </div>
+        <Button variant="ghost" size="sm" className="-mr-2 text-muted-foreground" onClick={onAll}>
+          {allLabel} <ArrowRight />
+        </Button>
+      </div>
+      {loading ? (
+        <div className="divide-y">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="flex items-center gap-3 px-5 py-3">
+              <div className="flex-1 space-y-1.5">
+                <Skeleton className="h-4 w-40" />
+                <Skeleton className="h-3 w-24" />
+              </div>
+              <Skeleton className="h-4 w-16" />
+            </div>
+          ))}
+        </div>
+      ) : items.length === 0 ? (
+        empty
+      ) : (
+        <>
+          <ul className="divide-y">{shown.map(render)}</ul>
+          {items.length > LIST_LIMIT && (
+            <button
+              type="button"
+              onClick={() => setExpanded(e => !e)}
+              className="mt-auto flex items-center justify-center gap-1 border-t px-4 py-2.5 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            >
+              {expanded ? 'Свернуть' : `Показать ещё ${items.length - LIST_LIMIT}`}
+              <ChevronDown className={cn('size-4 transition-transform duration-200', expanded && 'rotate-180')} />
+            </button>
+          )}
+        </>
+      )}
+    </Panel>
+  )
+}

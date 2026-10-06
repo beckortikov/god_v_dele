@@ -1,332 +1,334 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { Card } from '@/components/ui/card'
+import * as React from 'react'
+import { toast } from 'sonner'
+import { CalendarDays, Inbox, MapPin, Pencil, Plus, Trash2 } from 'lucide-react'
+
+import { cn } from '@/lib/utils'
+import { formatDate, formatMoney, formatNumber, plural } from '@/lib/format'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
-import { Plus, Edit2, Trash2, AlertCircle, Eye } from 'lucide-react'
+import { PageContainer, PageHeader, Panel, PanelToolbar } from '@/components/erp/page-header'
+import { StatStrip } from '@/components/erp/stat-strip'
+import { Segmented } from '@/components/erp/segmented'
+import { SearchInput } from '@/components/erp/search-input'
+import { EmptyState } from '@/components/erp/empty-state'
+import { TableSkeleton, TotalsBar, dangerIconCls, rowActionsCls } from '@/components/erp/table-parts'
+import { useConfirm } from '@/components/erp/confirm'
+import { useNavAction } from '@/components/app-shell/nav-context'
 import { EventDetailPage } from '@/components/offline-event-detail-page'
+import { EventSheet } from '@/components/events/event-sheet'
+import { EVENT_STATUS, fmtPct, num, type EventStatus, type OfflineEvent } from '@/components/events/types'
 
-interface OfflineEvent {
-  id: string
-  name: string
-  description?: string
-  event_date: string
-  location?: string
-  status: 'planned' | 'completed' | 'cancelled'
-  total_income: number
-  total_expenses: number
-  balance: number
-  attendees_registered: number
-  attendees_attended: number
-  program_id?: string
+type StatusFilter = 'all' | EventStatus
+
+/** «сегодня», «завтра», «через 5 дн.» for upcoming dates. */
+function untilLabel(date: string) {
+  const d = new Date(date)
+  if (Number.isNaN(d.getTime())) return null
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  d.setHours(0, 0, 0, 0)
+  const days = Math.round((d.getTime() - today.getTime()) / 86400000)
+  if (days < 0) return null
+  if (days === 0) return 'сегодня'
+  if (days === 1) return 'завтра'
+  return `через ${days} ${plural(days, ['день', 'дня', 'дней'])}`
 }
 
 export function OfflineEventsPage() {
-  const [events, setEvents] = useState<OfflineEvent[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
-  const [filterStatus, setFilterStatus] = useState<string>('all')
-  const [searchQuery, setSearchQuery] = useState('')
+  const confirm = useConfirm()
+  const [events, setEvents] = React.useState<OfflineEvent[]>([])
+  const [loading, setLoading] = React.useState(true)
+  const [error, setError] = React.useState<string | null>(null)
+  const [selectedEventId, setSelectedEventId] = React.useState<string | null>(null)
+  const [filterStatus, setFilterStatus] = React.useState<StatusFilter>('all')
+  const [searchQuery, setSearchQuery] = React.useState('')
 
-  // Add Event Form State
-  const [isOpen, setIsOpen] = useState(false)
-  const [formData, setFormData] = useState({
-    name: '',
-    description: '',
-    event_date: '',
-    location: '',
-  })
+  const [sheetOpen, setSheetOpen] = React.useState(false)
+  const [editing, setEditing] = React.useState<OfflineEvent | null>(null)
 
-  useEffect(() => {
-    fetchEvents()
-  }, [])
+  // Detail opens at the top; going back restores the list position
+  const listScroll = React.useRef(0)
+  const openDetail = (id: string) => {
+    listScroll.current = document.querySelector('main')?.scrollTop ?? 0
+    setSelectedEventId(id)
+  }
+  React.useLayoutEffect(() => {
+    const main = document.querySelector('main')
+    if (main) main.scrollTop = selectedEventId ? 0 : listScroll.current
+  }, [selectedEventId])
 
-  const fetchEvents = async () => {
+  const fetchEvents = React.useCallback(async () => {
     try {
-      setLoading(true)
       const res = await fetch('/api/offline-events')
       const result = await res.json()
       if (result.error) throw new Error(result.error)
       setEvents(result.data || [])
+      setError(null)
     } catch (err: any) {
       setError(err.message)
     } finally {
       setLoading(false)
     }
+  }, [])
+
+  React.useEffect(() => {
+    fetchEvents()
+  }, [fetchEvents])
+
+  const openCreate = () => {
+    setEditing(null)
+    setSheetOpen(true)
+  }
+  const openEdit = (ev: OfflineEvent) => {
+    setEditing(ev)
+    setSheetOpen(true)
   }
 
-  const handleAddEvent = async () => {
-    try {
-      const response = await fetch('/api/offline-events', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...formData,
-          status: 'planned'
-        })
-      })
-
-      const result = await response.json()
-      if (result.error) throw new Error(result.error)
-
-      fetchEvents() // Reload list
-      setIsOpen(false)
-      setFormData({ name: '', description: '', event_date: '', location: '' })
-    } catch (err: any) {
-      alert('Ошибка при создании события: ' + err.message)
-    }
-  }
-
-  const handleDeleteEvent = async (id: string) => {
-    if (!confirm('Вы уверены, что хотите удалить это событие?')) return
-    try {
-      const res = await fetch(`/api/offline-events/${id}`, { method: 'DELETE' })
-      if (res.ok) fetchEvents()
-    } catch (err) {
-      console.error(err)
-    }
-  }
-
-  // If detail view is active
-  if (selectedEventId) {
-    return (
-      <EventDetailPage
-        eventId={selectedEventId}
-        onBack={() => {
-          setSelectedEventId(null)
-          fetchEvents() // Refresh data on back
-        }}
-      />
-    )
-  }
-
-  if (loading) {
-    return (
-      <div className="p-6 flex items-center justify-center h-full">
-        <div className="text-center">
-          <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-muted-foreground">Загрузка событий...</p>
-        </div>
-      </div>
-    )
-  }
-
-  if (error) {
-    return (
-      <div className="p-6">
-        <Card className="p-6 bg-destructive/5 border-destructive">
-          <div className="flex gap-3">
-            <AlertCircle className="w-5 h-5 text-destructive flex-shrink-0 mt-0.5" />
-            <div>
-              <p className="font-medium text-foreground">Ошибка загрузки</p>
-              <p className="text-sm text-muted-foreground">{error}</p>
-            </div>
-          </div>
-        </Card>
-      </div>
-    )
-  }
-
-  const filteredEvents = events.filter(event => {
-    const matchesStatus = filterStatus === 'all' || event.status === filterStatus
-    const matchesSearch = event.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (event.location && event.location.toLowerCase().includes(searchQuery.toLowerCase()))
-    return matchesStatus && matchesSearch
+  // «Создать → Событие» in the top bar
+  useNavAction('new-event', () => {
+    setSelectedEventId(null)
+    openCreate()
   })
 
-  const totalIncome = filteredEvents.reduce((sum, e) => sum + (e.total_income || 0), 0)
-  const totalExpenses = filteredEvents.reduce((sum, e) => sum + (e.total_expenses || 0), 0)
+  const handleDeleteEvent = async (ev: OfflineEvent) => {
+    const ok = await confirm({
+      title: `Удалить «${ev.name}»?`,
+      description: `Событие от ${formatDate(ev.event_date)} будет удалено. Действие нельзя отменить.`,
+      confirmText: 'Удалить',
+      destructive: true,
+    })
+    if (!ok) return
+    try {
+      const res = await fetch(`/api/offline-events/${ev.id}`, { method: 'DELETE' })
+      const result = await res.json().catch(() => ({}))
+      if (!res.ok || result.error) throw new Error(result.error || `Ошибка ${res.status}`)
+      toast.success('Событие удалено')
+      fetchEvents()
+    } catch (err: any) {
+      toast.error('Не удалось удалить событие', { description: err.message })
+    }
+  }
+
+  const sheet = (
+    <EventSheet
+      open={sheetOpen}
+      onOpenChange={setSheetOpen}
+      editing={editing}
+      onSaved={id => {
+        fetchEvents()
+        // A new event opens right away so attendees can be added
+        if (!editing && id) openDetail(id)
+      }}
+    />
+  )
+
+  // Detail view
+  if (selectedEventId) {
+    return (
+      <>
+        <EventDetailPage
+          eventId={selectedEventId}
+          onBack={() => {
+            setSelectedEventId(null)
+            fetchEvents() // Refresh data on back
+          }}
+        />
+        {sheet}
+      </>
+    )
+  }
+
+  const q = searchQuery.trim().toLowerCase()
+  const byStatus = (s: StatusFilter) => (s === 'all' ? events : events.filter(e => e.status === s))
+  const filteredEvents = byStatus(filterStatus).filter(
+    event => event.name.toLowerCase().includes(q) || (event.location && event.location.toLowerCase().includes(q))
+  )
+
+  // Numerics may come back as strings: sum them as numbers
+  const totalIncome = filteredEvents.reduce((sum, e) => sum + num(e.total_income), 0)
+  const totalExpenses = filteredEvents.reduce((sum, e) => sum + num(e.total_expenses), 0)
   const totalBalance = totalIncome - totalExpenses
-  const totalAttendees = filteredEvents.reduce((sum, e) => sum + (e.attendees_attended || 0), 0)
-
-  const statusVariants: Record<string, 'default' | 'secondary' | 'destructive'> = {
-    planned: 'secondary',
-    completed: 'default',
-    cancelled: 'destructive',
-  }
-
-  const statusLabels: Record<string, string> = {
-    planned: 'Запланировано',
-    completed: 'Завершено',
-    cancelled: 'Отменено',
-  }
+  const totalAttendees = filteredEvents.reduce((sum, e) => sum + num(e.attendees_attended), 0)
 
   return (
-    <div className="p-3 sm:p-6 space-y-4 sm:space-y-6 bg-background">
-      {/* Header */}
-      <div className="flex flex-col gap-3">
-        <div className="flex justify-between items-center">
-          <div>
-            <h2 className="text-xl sm:text-2xl font-bold text-foreground">Оффлайн События</h2>
-            <p className="text-xs sm:text-sm text-muted-foreground mt-1">Управление мероприятиями и участниками</p>
+    <PageContainer>
+      <PageHeader
+        title="Оффлайн-события"
+        description="Мероприятия, гости и бюджет каждого события"
+        actions={
+          <Button size="sm" onClick={openCreate}>
+            <Plus /> Новое событие
+          </Button>
+        }
+      />
+
+      {error ? (
+        <Panel>
+          <EmptyState
+            icon={Inbox}
+            title="Не удалось загрузить события"
+            description={error}
+            action={
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setLoading(true)
+                  fetchEvents()
+                }}
+              >
+                Повторить
+              </Button>
+            }
+          />
+        </Panel>
+      ) : (
+        <>
+          <StatStrip
+            loading={loading}
+            stats={[
+              {
+                label: 'Доход',
+                dot: 'var(--chart-income)',
+                value: formatMoney(totalIncome),
+                sub: `${formatNumber(filteredEvents.length)} ${plural(filteredEvents.length, ['событие', 'события', 'событий'])}`,
+              },
+              { label: 'Расходы', dot: 'var(--chart-expense)', value: formatMoney(totalExpenses) },
+              {
+                label: 'Баланс',
+                value: formatMoney(totalBalance, 'USD', { sign: true }),
+                tone: totalBalance < 0 ? 'destructive' : totalBalance > 0 ? 'success' : 'default',
+                sub: totalExpenses > 0 ? `ROI ${fmtPct((totalBalance / totalExpenses) * 100)}` : undefined,
+              },
+              { label: 'Посетители', value: formatNumber(totalAttendees), sub: 'участники и гости' },
+            ]}
+          />
+
+          <div className="mt-6">
+            {loading ? (
+              <TableSkeleton rows={6} />
+            ) : (
+              <Panel>
+                <PanelToolbar>
+                  <SearchInput value={searchQuery} onChange={setSearchQuery} placeholder="Название или место" className="sm:w-72" />
+                  <div className="overflow-x-auto scrollbar-none">
+                    <Segmented
+                      size="sm"
+                      aria-label="Статус"
+                      value={filterStatus}
+                      onChange={setFilterStatus}
+                      options={[
+                        { value: 'all', label: 'Все', count: events.length },
+                        ...(Object.keys(EVENT_STATUS) as EventStatus[]).map(s => ({ value: s, label: EVENT_STATUS[s].label, count: byStatus(s).length })),
+                      ]}
+                    />
+                  </div>
+                </PanelToolbar>
+
+                {filteredEvents.length === 0 ? (
+                  <EmptyState
+                    icon={CalendarDays}
+                    title={events.length ? 'Ничего не найдено' : 'Событий пока нет'}
+                    description={events.length ? 'Измените поиск или статус' : 'Создайте первое мероприятие, затем добавьте участников и расходы'}
+                    action={
+                      !events.length && (
+                        <Button size="sm" onClick={openCreate}>
+                          <Plus /> Новое событие
+                        </Button>
+                      )
+                    }
+                  />
+                ) : (
+                  <>
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="hover:bg-transparent">
+                          <TableHead className="w-28">Дата</TableHead>
+                          <TableHead>Событие</TableHead>
+                          <TableHead className="max-sm:hidden">Статус</TableHead>
+                          <TableHead className="text-right max-md:hidden">Участники</TableHead>
+                          <TableHead className="text-right max-lg:hidden">Доход</TableHead>
+                          <TableHead className="text-right max-lg:hidden">Расходы</TableHead>
+                          <TableHead className="text-right">Баланс</TableHead>
+                          <TableHead className="text-right max-xl:hidden">ROI</TableHead>
+                          <TableHead className="w-20" />
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {filteredEvents.map(event => {
+                          const income = num(event.total_income)
+                          const expenses = num(event.total_expenses)
+                          const balance = num(event.balance)
+                          const roi = expenses > 0 ? (balance / expenses) * 100 : 0
+                          const st = EVENT_STATUS[event.status] ?? { label: event.status, variant: 'secondary' as const }
+                          const until = event.status === 'planned' ? untilLabel(event.event_date) : null
+                          return (
+                            <TableRow key={event.id} className="group cursor-pointer" onClick={() => openDetail(event.id)}>
+                              <TableCell>
+                                <div className="num text-muted-foreground">{formatDate(event.event_date)}</div>
+                                {until && <div className="text-xs text-info">{until}</div>}
+                              </TableCell>
+                              <TableCell className="max-w-80 whitespace-normal">
+                                <div className="truncate font-medium">{event.name}</div>
+                                {event.location && (
+                                  <div className="flex items-center gap-1 truncate text-xs text-muted-foreground">
+                                    <MapPin className="size-3 shrink-0" />
+                                    <span className="truncate">{event.location}</span>
+                                  </div>
+                                )}
+                              </TableCell>
+                              <TableCell className="max-sm:hidden">
+                                <Badge variant={st.variant}>{st.label}</Badge>
+                              </TableCell>
+                              <TableCell className="text-right max-md:hidden">
+                                <span className="num">{formatNumber(num(event.attendees_attended))}</span>
+                              </TableCell>
+                              <TableCell className="text-right max-lg:hidden">
+                                <span className={cn('num', !income && 'text-muted-foreground/70')}>{income ? formatMoney(income) : '—'}</span>
+                              </TableCell>
+                              <TableCell className="text-right max-lg:hidden">
+                                <span className={cn('num', !expenses && 'text-muted-foreground/70')}>{expenses ? formatMoney(expenses) : '—'}</span>
+                              </TableCell>
+                              <TableCell className="text-right">
+                                <span className={cn('num font-medium', balance < 0 && 'text-destructive', balance > 0 && 'text-success')}>
+                                  {formatMoney(balance, 'USD', { sign: true })}
+                                </span>
+                              </TableCell>
+                              <TableCell className="text-right text-muted-foreground max-xl:hidden">
+                                <span className={cn('num', roi < 0 && 'text-destructive')}>{expenses > 0 ? fmtPct(roi) : '—'}</span>
+                              </TableCell>
+                              <TableCell className="text-right" onClick={e => e.stopPropagation()}>
+                                <div className={rowActionsCls}>
+                                  <Button variant="ghost" size="icon-sm" aria-label="Изменить" className="text-muted-foreground" onClick={() => openEdit(event)}>
+                                    <Pencil />
+                                  </Button>
+                                  <Button variant="ghost" size="icon-sm" aria-label="Удалить" className={dangerIconCls} onClick={() => handleDeleteEvent(event)}>
+                                    <Trash2 />
+                                  </Button>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          )
+                        })}
+                      </TableBody>
+                    </Table>
+                    <TotalsBar
+                      label={`${formatNumber(filteredEvents.length)} ${plural(filteredEvents.length, ['событие', 'события', 'событий'])}`}
+                      value={formatMoney(totalBalance, 'USD', { sign: true })}
+                      tone={totalBalance < 0 ? 'destructive' : totalBalance > 0 ? 'success' : undefined}
+                    />
+                  </>
+                )}
+              </Panel>
+            )}
           </div>
-          <div className="flex gap-2">
-            <Input
-              placeholder="Поиск..."
-              className="w-[200px]"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
-            <Select value={filterStatus} onValueChange={setFilterStatus}>
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Статус" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Все статусы</SelectItem>
-                <SelectItem value="planned">Запланировано</SelectItem>
-                <SelectItem value="completed">Завершено</SelectItem>
-                <SelectItem value="cancelled">Отменено</SelectItem>
-              </SelectContent>
-            </Select>
+        </>
+      )}
 
-            <Dialog open={isOpen} onOpenChange={setIsOpen}>
-              <DialogTrigger asChild>
-                <Button className="gap-2">
-                  <Plus className="w-4 h-4" />
-                  <span className="hidden sm:inline">Добавить событие</span>
-                  <span className="sm:hidden">Добавить</span>
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Новое Событие</DialogTitle>
-                  <DialogDescription>Создайте новое оффлайн мероприятие</DialogDescription>
-                </DialogHeader>
-                <div className="space-y-4">
-                  <div>
-                    <Label htmlFor="name">Название</Label>
-                    <Input
-                      id="name"
-                      placeholder="Название события"
-                      value={formData.name}
-                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="description">Описание</Label>
-                    <Input
-                      id="description"
-                      placeholder="Краткое описание"
-                      value={formData.description}
-                      onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="event_date">Дата</Label>
-                    <Input
-                      id="event_date"
-                      type="date"
-                      value={formData.event_date}
-                      onChange={(e) => setFormData({ ...formData, event_date: e.target.value })}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="location">Локация</Label>
-                    <Input
-                      id="location"
-                      placeholder="Город или адрес"
-                      value={formData.location}
-                      onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-                    />
-                  </div>
-                  <Button onClick={handleAddEvent} className="w-full">
-                    Создать Событие
-                  </Button>
-                </div>
-              </DialogContent>
-            </Dialog>
-          </div>
-        </div>
-      </div>
-
-      {/* Stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        <Card className="p-3 sm:p-4 bg-card border-border">
-          <p className="text-xs text-muted-foreground">Общий Доход</p>
-          <p className="text-lg sm:text-2xl font-bold text-green-600 mt-1 sm:mt-2">${totalIncome.toLocaleString()}</p>
-        </Card>
-        <Card className="p-3 sm:p-4 bg-card border-border">
-          <p className="text-xs text-muted-foreground">Общие Расходы</p>
-          <p className="text-lg sm:text-2xl font-bold text-red-600 mt-1 sm:mt-2">${totalExpenses.toLocaleString()}</p>
-        </Card>
-        <Card className="p-3 sm:p-4 bg-card border-border">
-          <p className="text-xs text-muted-foreground">Баланс</p>
-          <p className={`text-lg sm:text-2xl font-bold mt-1 sm:mt-2 ${totalBalance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-            ${totalBalance.toLocaleString()}
-          </p>
-        </Card>
-        <Card className="p-3 sm:p-4 bg-card border-border">
-          <p className="text-xs text-muted-foreground">Посетители</p>
-          <p className="text-lg sm:text-2xl font-bold text-foreground mt-1 sm:mt-2">{totalAttendees}</p>
-        </Card>
-      </div>
-
-      {/* Events Table */}
-      <Card className="bg-card border-border">
-        <div className="p-4 sm:p-6">
-          <h3 className="text-base sm:text-lg font-semibold text-foreground mb-3 sm:mb-4">Список Событий</h3>
-          {filteredEvents.length === 0 ? (
-            <p className="text-center text-muted-foreground py-8">События не найдены</p>
-          ) : (
-            <div className="overflow-x-auto -mx-4 sm:mx-0">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="text-xs sm:text-sm">Название</TableHead>
-                    <TableHead className="text-xs sm:text-sm hidden sm:table-cell">Дата</TableHead>
-                    <TableHead className="text-xs sm:text-sm hidden md:table-cell">Баланс</TableHead>
-                    <TableHead className="text-xs sm:text-sm hidden lg:table-cell">ROI</TableHead>
-                    <TableHead className="text-xs sm:text-sm hidden md:table-cell">Участники (Рег.)</TableHead>
-                    <TableHead className="text-xs sm:text-sm">Статус</TableHead>
-                    <TableHead className="text-xs sm:text-sm">Действия</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredEvents.map((event) => {
-                    const roi = event.total_expenses > 0 ? ((event.balance / event.total_expenses) * 100).toFixed(1) : 0
-                    return (
-                      <TableRow key={event.id} className="cursor-pointer hover:bg-muted/50" onClick={() => setSelectedEventId(event.id)}>
-                        <TableCell className="font-medium text-xs sm:text-sm">{event.name}</TableCell>
-                        <TableCell className="text-xs sm:text-sm hidden sm:table-cell">{new Date(event.event_date).toLocaleDateString('ru-RU')}</TableCell>
-                        <TableCell className={`text-xs sm:text-sm hidden md:table-cell ${event.balance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                          ${Number(event.balance || 0).toLocaleString()}
-                        </TableCell>
-                        <TableCell className="text-xs sm:text-sm hidden lg:table-cell text-blue-600">{roi}%</TableCell>
-                        <TableCell className="text-xs sm:text-sm hidden md:table-cell">
-                          {event.attendees_registered}
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant={statusVariants[event.status]} className="text-[10px] sm:text-xs">
-                            {statusLabels[event.status] || event.status}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex gap-1 sm:gap-2" onClick={e => e.stopPropagation()}>
-                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => setSelectedEventId(event.id)}>
-                              <Eye className="w-4 h-4" />
-                            </Button>
-                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => handleDeleteEvent(event.id)}>
-                              <Trash2 className="w-4 h-4 text-destructive" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    )
-                  })}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </div>
-      </Card>
-    </div>
+      {sheet}
+    </PageContainer>
   )
 }
