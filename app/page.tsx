@@ -1,8 +1,11 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { Sidebar, PageType } from '@/components/sidebar' // Updated import
-import { TopNav } from '@/components/top-nav'
+import { useState, useEffect, useMemo } from 'react'
+import { getAllowedPages, getDefaultPage, type UserRole } from '@/lib/navigation'
+import { NavProvider, useNav } from '@/components/app-shell/nav-context'
+import { AppShell } from '@/components/app-shell/app-shell'
+import { ConfirmProvider } from '@/components/erp/confirm'
+import { TooltipProvider } from '@/components/ui/tooltip'
 import { Dashboard } from '@/components/dashboard'
 import { ParticipantsPage } from '@/components/participants-page'
 import { IncomeExpensesPage } from '@/components/income-expenses-page'
@@ -26,180 +29,105 @@ import { UsersPage } from '@/components/admin/users-page'
 import { EmployeeDashboard } from '@/components/employee/employee-dashboard'
 import { ManagerDashboard } from '@/components/employee/manager-dashboard'
 
+interface SessionUser {
+  role: UserRole
+  participantId: string | null
+  fullName: string | null
+}
+
+function readSession(): SessionUser | null {
+  if (localStorage.getItem('isAuthenticated') !== 'true') return null
+  const role = (localStorage.getItem('userRole') as UserRole) || 'admin'
+  let participantId: string | null = null
+  let fullName: string | null = null
+  try {
+    const stored = localStorage.getItem('user')
+    if (stored) {
+      const u = JSON.parse(stored)
+      participantId = u.participant_id || u.employee_id || u.id || null
+      fullName = u.full_name || u.employee_name || u.username || null
+    }
+  } catch { /* ignore */ }
+  return { role, participantId, fullName }
+}
+
 export default function Home() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const [session, setSession] = useState<SessionUser | null>(null)
   const [isLoading, setIsLoading] = useState(true)
-  const [currentPage, setCurrentPage] = useState<PageType>('dashboard')
-  const [mode, setMode] = useState<'finance' | 'hr' | 'employee'>('finance')
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false)
-  const [userRole, setUserRole] = useState<'admin' | 'finance' | 'employee' | 'manager' | 'wheels_manager' | 'participant'>('admin')
-  const [userParticipantId, setUserParticipantId] = useState<string | null>(null)
-  const [userFullName, setUserFullName] = useState<string | null>(null)
 
   useEffect(() => {
-    // Check if user is already authenticated
-    const auth = localStorage.getItem('isAuthenticated')
-    const role = localStorage.getItem('userRole') as 'admin' | 'finance' | 'employee' | 'manager' | 'wheels_manager' | 'participant' || 'admin'
-    setIsAuthenticated(auth === 'true')
-    setUserRole(role as any)
+    setSession(readSession())
     setIsLoading(false)
-
-    if (role === 'finance') {
-      setMode('finance')
-    } else if (role === 'wheels_manager') {
-      setMode('employee')
-      setCurrentPage('life-wheel')
-    } else if (role === 'manager') {
-      setMode('employee')
-      setCurrentPage('manager-dashboard')
-    } else if (role === 'employee' || role === 'participant') {
-      setMode('employee')
-      setCurrentPage('life-wheel')
-    }
-
-    // Load user info for participant self-view
-    try {
-      const storedUser = localStorage.getItem('user')
-      if (storedUser) {
-        const userData = JSON.parse(storedUser)
-        setUserParticipantId(userData.participant_id || userData.employee_id || userData.id || null)
-        setUserFullName(userData.full_name || userData.employee_name || userData.username || null)
-      }
-    } catch (e) { /* ignore */ }
-
-    // Set default sidebar state based on screen width
-    if (typeof window !== 'undefined' && window.innerWidth >= 1024) {
-      setIsSidebarOpen(true)
-    }
   }, [])
 
   const handleLogout = () => {
     localStorage.removeItem('isAuthenticated')
     localStorage.removeItem('userRole')
-    setIsAuthenticated(false)
-    setUserRole('admin') // Reset to default
-  }
-
-  const toggleSidebar = () => {
-    setIsSidebarOpen(!isSidebarOpen)
-  }
-
-  const closeSidebar = () => {
-    setIsSidebarOpen(false)
-  }
-
-  const handleModeChange = (newMode: 'finance' | 'hr' | 'employee') => {
-    setMode(newMode)
-    if (newMode === 'finance') setCurrentPage('dashboard')
-    else if (newMode === 'hr') setCurrentPage('hr-dashboard')
-    else setCurrentPage('employee-dashboard')
+    localStorage.removeItem('user')
+    const url = new URL(window.location.href)
+    url.searchParams.delete('page')
+    window.history.replaceState(null, '', url)
+    setSession(null)
   }
 
   if (isLoading) {
     return (
-      <div className="w-full h-screen bg-background flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-muted-foreground">Загрузка...</p>
-        </div>
+      <div className="flex h-dvh w-full items-center justify-center bg-background">
+        <div className="size-7 animate-spin rounded-full border-[3px] border-primary border-t-transparent" />
       </div>
     )
   }
 
-  if (!isAuthenticated) {
-    return <LoginPage onLoginSuccess={() => {
-      setIsAuthenticated(true)
-      const role = localStorage.getItem('userRole') as 'admin' | 'finance' | 'employee' | 'manager' | 'wheels_manager' | 'participant' || 'admin'
-      setUserRole(role as any)
-
-      try {
-        const storedUser = localStorage.getItem('user')
-        if (storedUser) {
-          const userData = JSON.parse(storedUser)
-          setUserParticipantId(userData.participant_id || userData.employee_id || userData.id || null)
-          setUserFullName(userData.full_name || userData.employee_name || userData.username || null)
-        }
-      } catch (e) { /* ignore */ }
-
-      if (role === 'finance') {
-        setMode('finance')
-        setCurrentPage('dashboard')
-      } else if (role === 'wheels_manager') {
-        setMode('employee')
-        setCurrentPage('life-wheel')
-      } else if (role === 'manager') {
-        setMode('employee')
-        setCurrentPage('manager-dashboard')
-      } else if (role === 'employee' || role === 'participant') {
-        setMode('employee')
-        setCurrentPage('life-wheel')
-      }
-    }} />
+  if (!session) {
+    return <LoginPage onLoginSuccess={() => setSession(readSession())} />
   }
 
-  const isWheelsAdmin = userRole === 'admin' || userRole === 'wheels_manager'
+  return <AuthedApp session={session} onLogout={handleLogout} />
+}
 
+function AuthedApp({ session, onLogout }: { session: SessionUser; onLogout: () => void }) {
+  const allowedPages = useMemo(() => getAllowedPages(session.role), [session.role])
   return (
-    <div className="flex h-screen bg-background text-foreground">
-      <Sidebar
-        currentPage={currentPage}
-        onPageChange={setCurrentPage}
-        isOpen={isSidebarOpen}
-        onClose={closeSidebar}
-        mode={mode}
-        userRole={userRole}
-      />
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <TopNav
-          currentPage={currentPage}
-          onLogout={handleLogout}
-          onMenuClick={toggleSidebar}
-          mode={mode}
-          onModeChange={handleModeChange}
-          userRole={userRole}
-        />
-        <main className="flex-1 overflow-auto">
-          {currentPage === 'dashboard' && <Dashboard />}
-          {currentPage === 'participants' && <ParticipantsPage />}
-          {currentPage === 'programs' && <ProgramsPage />}
-          {currentPage === 'opiu-reports' && <OPiUReportsPage />}
-          {currentPage === 'income' && <IncomeExpensesPage />}
-          {currentPage === 'plan-fact' && <PlanFactPage />}
-          {currentPage === 'offline' && <OfflineEventsPage />}
-          {currentPage === 'balance' && <BalanceForecastPage />}
-          {currentPage === 'life-wheel' && (
-            <LifeWheelPage
-              participantId={!isWheelsAdmin && userParticipantId ? userParticipantId : undefined}
-              participantName={!isWheelsAdmin ? (userFullName || undefined) : undefined}
-            />
-          )}
-          {currentPage === 'life-balance' && (
-            <LifeBalancePage
-              participantId={!isWheelsAdmin && userParticipantId ? userParticipantId : undefined}
-              participantName={!isWheelsAdmin ? (userFullName || undefined) : undefined}
-            />
-          )}
-          {currentPage === 'business-wheel' && (
-            <BusinessWheelPage
-              participantId={!isWheelsAdmin && userParticipantId ? userParticipantId : undefined}
-              participantName={!isWheelsAdmin ? (userFullName || undefined) : undefined}
-            />
-          )}
-
-          {/* HR Pages */}
-          {currentPage === 'hr-dashboard' && <HRDashboard />}
-          {currentPage === 'employees' && <EmployeesPage />}
-          {currentPage === 'schedule' && <SchedulePage />}
-          {currentPage === 'timesheet' && <TimesheetPage />}
-          {currentPage === 'payroll' && <PayrollPage />}
-          {currentPage === 'vacations' && <VacationsPage />}
-          {currentPage === 'users' && <UsersPage />}
-
-          {/* Employee Pages */}
-          {currentPage === 'employee-dashboard' && <EmployeeDashboard />}
-          {currentPage === 'manager-dashboard' && <ManagerDashboard />}
-        </main>
-      </div>
-    </div>
+    <NavProvider allowedPages={allowedPages} defaultPage={getDefaultPage(session.role)}>
+      <TooltipProvider>
+        <ConfirmProvider>
+          <AppShell role={session.role} userName={session.fullName} onLogout={onLogout}>
+            <PageRouter session={session} />
+          </AppShell>
+        </ConfirmProvider>
+      </TooltipProvider>
+    </NavProvider>
   )
+}
+
+function PageRouter({ session }: { session: SessionUser }) {
+  const { page } = useNav()
+  const isWheelsAdmin = session.role === 'admin' || session.role === 'wheels_manager'
+  const selfView = {
+    participantId: !isWheelsAdmin && session.participantId ? session.participantId : undefined,
+    participantName: !isWheelsAdmin ? session.fullName || undefined : undefined,
+  }
+
+  switch (page) {
+    case 'dashboard': return <Dashboard />
+    case 'participants': return <ParticipantsPage />
+    case 'programs': return <ProgramsPage />
+    case 'opiu-reports': return <OPiUReportsPage />
+    case 'income': return <IncomeExpensesPage />
+    case 'plan-fact': return <PlanFactPage />
+    case 'offline': return <OfflineEventsPage />
+    case 'balance': return <BalanceForecastPage />
+    case 'life-wheel': return <LifeWheelPage {...selfView} />
+    case 'life-balance': return <LifeBalancePage {...selfView} />
+    case 'business-wheel': return <BusinessWheelPage {...selfView} />
+    case 'hr-dashboard': return <HRDashboard />
+    case 'employees': return <EmployeesPage />
+    case 'schedule': return <SchedulePage />
+    case 'timesheet': return <TimesheetPage />
+    case 'payroll': return <PayrollPage />
+    case 'vacations': return <VacationsPage />
+    case 'users': return <UsersPage />
+    case 'employee-dashboard': return <EmployeeDashboard />
+    case 'manager-dashboard': return <ManagerDashboard />
+  }
 }

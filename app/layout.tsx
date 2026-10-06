@@ -1,33 +1,27 @@
 import React from "react"
-import type { Metadata } from 'next'
-import { Geist, Geist_Mono } from 'next/font/google'
+import type { Metadata, Viewport } from 'next'
+import { Onest } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
+import { ThemeProvider, ACCENT_INIT_SCRIPT } from '@/components/theme-provider'
+import { Toaster } from '@/components/ui/sonner'
 import './globals.css'
 
-const _geist = Geist({ subsets: ["latin"] });
-const _geistMono = Geist_Mono({ subsets: ["latin"] });
+const onest = Onest({
+  subsets: ['latin', 'cyrillic'],
+  variable: '--font-onest',
+  display: 'swap',
+})
 
 export const metadata: Metadata = {
-  title: 'Год в деле - обучение твой рост',
-  description: 'Прозрачный финансовый учет для образовательных проектов',
-  generator: 'v0.app',
-  icons: {
-    icon: [
-      {
-        url: '/icon-light-32x32.png',
-        media: '(prefers-color-scheme: light)',
-      },
-      {
-        url: '/icon-dark-32x32.png',
-        media: '(prefers-color-scheme: dark)',
-      },
-      {
-        url: '/icon.svg',
-        type: 'image/svg+xml',
-      },
-    ],
-    apple: '/apple-icon.png',
-  },
+  title: 'Год в деле — учёт и управление',
+  description: 'Прозрачный финансовый и кадровый учёт для образовательных проектов',
+}
+
+export const viewport: Viewport = {
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: '#ffffff' },
+    { media: '(prefers-color-scheme: dark)', color: '#1a1c24' },
+  ],
 }
 
 export default function RootLayout({
@@ -36,9 +30,15 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en">
-      <body className={`font-sans antialiased`}>
-        {children}
+    <html lang="ru" className={onest.variable} suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: ACCENT_INIT_SCRIPT }} />
+      </head>
+      <body className="font-sans antialiased">
+        <ThemeProvider>
+          {children}
+          <Toaster />
+        </ThemeProvider>
         <Analytics />
       </body>
     </html>

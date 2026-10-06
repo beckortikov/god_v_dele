@@ -1,1270 +1,926 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { Card } from '@/components/ui/card'
+import * as React from 'react'
+import { toast } from 'sonner'
+import {
+  ArrowDownLeft,
+  ArrowUpRight,
+  Landmark,
+  MessageSquareText,
+  MoreHorizontal,
+  Pencil,
+  Plus,
+  Receipt,
+  Trash2,
+  Wallet,
+  Inbox,
+} from 'lucide-react'
+import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+
+import { cn } from '@/lib/utils'
+import { MONTHS_SHORT_RU, formatDate, formatMoney, formatNumber, plural } from '@/lib/format'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from '@/components/ui/dialog'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
+import { Skeleton } from '@/components/ui/skeleton'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
-import { Plus, Edit2, Trash2, ArrowUpRight, ArrowDownRight, Filter, AlertCircle, MessageSquare, Landmark, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { Tooltip as Tip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { PageContainer, PageHeader, Panel, PanelToolbar } from '@/components/erp/page-header'
+import { Segmented } from '@/components/erp/segmented'
+import { SearchInput } from '@/components/erp/search-input'
+import { EmptyState } from '@/components/erp/empty-state'
+import { TablePagination } from '@/components/erp/pagination'
+import { useConfirm } from '@/components/erp/confirm'
+import { useNavAction } from '@/components/app-shell/nav-context'
+import { PaymentSheet } from '@/components/finance/payment-sheet'
+import { ExpenseSheet, DEFAULT_CATEGORIES } from '@/components/finance/expense-sheet'
+import { AccountSheet } from '@/components/finance/account-sheet'
+import {
+  readPref,
+  writePref,
+  type Account,
+  type Employee,
+  type ExpenseItem,
+  type IncomeItem,
+  type Participant,
+  type Program,
+} from '@/components/finance/types'
 
-interface IncomeItem {
-  id: string
-  date: string
-  participant: string
-  amount: number
-  status: string
-  method: string
-  currency?: string
-  original_amount?: number
-  notes?: string
-  account_id?: string
-}
+type Tab = 'income' | 'expenses' | 'accounts' | 'analytics'
+type Period = 'all' | 'month' | 'prev-month' | 'quarter' | 'year'
 
-interface ExpenseItem {
-  id: string
-  date: string
-  category: string
-  amount: number
-  type: string
-  description?: string
-  name: string
-  currency?: string
-  original_amount?: number
-  program_id?: string
-  program_name?: string
-  account_id?: string
-  exchange_rate?: number
-}
+const PAGE_SIZE = 20
+const PREFS_KEY = 'income-page-prefs'
 
+const PERIODS: { value: Period; label: string }[] = [
+  { value: 'month', label: 'Этот месяц' },
+  { value: 'prev-month', label: 'Прошлый месяц' },
+  { value: 'quarter', label: 'Последние 3 месяца' },
+  { value: 'year', label: 'Этот год' },
+  { value: 'all', label: 'Всё время' },
+]
 
-interface Participant {
-  id: string
-  name: string
-  program_id: string
-  tariff?: number
-  status?: string
-  program?: {
-    name: string
-    price_per_month: number
+function periodRange(p: Period): [Date, Date] | null {
+  const now = new Date()
+  const y = now.getFullYear()
+  const m = now.getMonth()
+  switch (p) {
+    case 'month':
+      return [new Date(y, m, 1), new Date(y, m + 1, 1)]
+    case 'prev-month':
+      return [new Date(y, m - 1, 1), new Date(y, m, 1)]
+    case 'quarter':
+      return [new Date(y, m - 2, 1), new Date(y, m + 1, 1)]
+    case 'year':
+      return [new Date(y, 0, 1), new Date(y + 1, 0, 1)]
+    default:
+      return null
   }
 }
+
+function inRange(date: string, range: [Date, Date] | null) {
+  if (!range) return true
+  const d = new Date(date)
+  return d >= range[0] && d < range[1]
+}
+
+const STATUS: Record<IncomeItem['status'], { label: string; variant: 'success' | 'destructive' | 'warning' }> = {
+  paid: { label: 'Получен', variant: 'success' },
+  overdue: { label: 'Просрочен', variant: 'destructive' },
+  pending: { label: 'Ожидается', variant: 'warning' },
+}
+
+const CHART_COLORS = ['var(--chart-1)', 'var(--chart-2)', 'var(--chart-3)', 'var(--chart-4)', 'var(--chart-5)', 'var(--chart-6)']
 
 export function IncomeExpensesPage() {
-  const [incomeData, setIncomeData] = useState<IncomeItem[]>([])
-  const [expenseData, setExpenseData] = useState<ExpenseItem[]>([])
+  const confirm = useConfirm()
 
-  const [participants, setParticipants] = useState<Participant[]>([])
-  const [programs, setPrograms] = useState<{ id: string; name: string }[]>([])
-  const [accounts, setAccounts] = useState<any[]>([])
-  const [filterProgram, setFilterProgram] = useState<string>('all')
-  
-  // Pagination states
-  const [incomePage, setIncomePage] = useState(1)
-  const [expensePage, setExpensePage] = useState(1)
-  const itemsPerPage = 10
+  const [incomeData, setIncomeData] = React.useState<IncomeItem[]>([])
+  const [expenseData, setExpenseData] = React.useState<ExpenseItem[]>([])
+  const [participants, setParticipants] = React.useState<Participant[]>([])
+  const [programs, setPrograms] = React.useState<Program[]>([])
+  const [accounts, setAccounts] = React.useState<Account[]>([])
+  const [employees, setEmployees] = React.useState<Employee[]>([])
+  const [loading, setLoading] = React.useState(true)
+  const [error, setError] = React.useState<string | null>(null)
 
-  useEffect(() => {
-    setIncomePage(1)
-    setExpensePage(1)
-  }, [filterProgram])
+  // View state (persisted per user)
+  const [tab, setTab] = React.useState<Tab>('income')
+  const [period, setPeriod] = React.useState<Period>('all')
+  const [program, setProgram] = React.useState('all')
+  const [query, setQuery] = React.useState('')
+  const [accountFilter, setAccountFilter] = React.useState('all')
+  const [categoryFilter, setCategoryFilter] = React.useState('all')
+  const [incomePage, setIncomePage] = React.useState(1)
+  const [expensePage, setExpensePage] = React.useState(1)
 
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  // Sheets
+  const [paymentOpen, setPaymentOpen] = React.useState(false)
+  const [expenseOpen, setExpenseOpen] = React.useState(false)
+  const [editingExpense, setEditingExpense] = React.useState<ExpenseItem | null>(null)
+  const [accountOpen, setAccountOpen] = React.useState(false)
+  const [editingAccount, setEditingAccount] = React.useState<Account | null>(null)
 
-  const [isIncomeOpen, setIsIncomeOpen] = useState(false)
-  const [isExpenseOpen, setIsExpenseOpen] = useState(false)
-  const [isCustomCategory, setIsCustomCategory] = useState(false)
-  const [submitLoading, setSubmitLoading] = useState(false)
-  const [incomeDialogProgramFilter, setIncomeDialogProgramFilter] = useState<string>('all')
-
-  // Form states
-  const [expenseForm, setExpenseForm] = useState<{
-    id?: string;
-    name: string;
-    amount: string;
-    category: string;
-    date: string;
-    description: string;
-    employee_id?: string;
-    program_id?: string;
-    account_id?: string;
-  }>({
-    name: '',
-    amount: '',
-    category: '',
-    date: new Date().toISOString().split('T')[0],
-    description: '',
-    program_id: '',
-    account_id: ''
-  })
-
-  const [employees, setEmployees] = useState<any[]>([])
-
-  // Accounts state
-  const [isAccountOpen, setIsAccountOpen] = useState(false)
-  const [accountForm, setAccountForm] = useState({
-    id: '',
-    name: '',
-    currency: 'USD',
-    program_id: 'none',
-    is_default: false,
-    initial_balance: '0'
-  })
-
-  // Currency states
-  const [currency, setCurrency] = useState<'USD' | 'TJS'>('USD')
-  const [exchangeRate, setExchangeRate] = useState<string>('10.5')
-
-  const [incomeForm, setIncomeForm] = useState({
-    participant_id: '',
-    amount: '',
-    month: String(new Date().getMonth() + 1),
-    year: String(new Date().getFullYear()),
-    notes: '',
-    account_id: '',
-    paid_date: new Date().toISOString().split('T')[0]
-  })
-
-  useEffect(() => {
-    fetchData()
+  React.useEffect(() => {
+    try {
+      const saved = JSON.parse(readPref(PREFS_KEY) || '{}')
+      if (saved.tab) setTab(saved.tab)
+      if (saved.period) setPeriod(saved.period)
+      if (saved.program) setProgram(saved.program)
+    } catch {}
   }, [])
 
-  useEffect(() => {
-    if (!isExpenseOpen) {
-      setIsCustomCategory(false)
-    }
-  }, [isExpenseOpen])
+  React.useEffect(() => {
+    writePref(PREFS_KEY, JSON.stringify({ tab, period, program }))
+  }, [tab, period, program])
 
-  const fetchData = async () => {
+  React.useEffect(() => {
+    setIncomePage(1)
+    setExpensePage(1)
+  }, [period, program, query, accountFilter, categoryFilter])
+
+  React.useEffect(() => {
+    setQuery('')
+    setAccountFilter('all')
+    setCategoryFilter('all')
+  }, [tab])
+
+  const fetchData = React.useCallback(async () => {
     try {
       const [paymentsRes, expensesRes, participantsRes, programsRes, employeesRes, accountsRes] = await Promise.all([
-        fetch(`/api/monthly-payments${filterProgram !== 'all' ? `?program_id=${filterProgram}` : ''}`).then(res => res.json()),
-        fetch(`/api/expenses${filterProgram !== 'all' ? `?program_id=${filterProgram}` : ''}`).then(res => res.json()),
-        fetch('/api/participants').then(res => res.json()),
-        fetch('/api/programs').then(res => res.json()),
-        fetch('/api/employees').then(res => res.json()).catch(() => []),
-        fetch(`/api/accounts${filterProgram !== 'all' ? `?program_id=${filterProgram}` : ''}`).then(res => res.json()).catch(() => [])
+        fetch('/api/monthly-payments').then(r => r.json()),
+        fetch('/api/expenses').then(r => r.json()),
+        fetch('/api/participants').then(r => r.json()),
+        fetch('/api/programs').then(r => r.json()),
+        fetch('/api/hr/employees').then(r => r.json()).catch(() => []),
+        fetch('/api/accounts').then(r => r.json()).catch(() => []),
       ])
+      for (const r of [paymentsRes, expensesRes, participantsRes, programsRes]) if (r.error) throw new Error(r.error)
 
-      if (paymentsRes.error) throw new Error(paymentsRes.error)
-      if (expensesRes.error) throw new Error(expensesRes.error)
-      if (participantsRes.error) throw new Error(participantsRes.error)
-      if (programsRes.error) throw new Error(programsRes.error)
+      const progs: Program[] = programsRes.data || []
+      const progName = (id?: string | null) => (id ? progs.find(p => p.id === id)?.name ?? null : null)
 
-      // Transform payment data to income structure
-      const income = paymentsRes.data.map((p: any) => ({
-        id: p.id,
-        date: p.paid_date || `${p.year}-${p.month_number}-01`,
-        participant: p.participant?.name || 'Unknown',
-        amount: p.fact_amount,
-        status: p.status === 'paid' ? 'получен' : p.status === 'overdue' ? 'просрочен' : 'ожидается',
-        method: 'Перевод',
-        currency: p.currency,
-        original_amount: p.original_amount,
-        notes: p.notes,
-        account_id: p.account_id
-      })).filter((i: any) => i.amount > 0)
-
-      // Transform general expense data (no event_id)
-      const expenses = expensesRes.data.map((e: any) => ({
-        id: e.id,
-        date: e.expense_date,
-        category: e.category,
-        amount: e.amount,
-        type: 'переменные',
-        description: e.description,
-        name: e.name,
-        currency: e.currency,
-        original_amount: e.original_amount,
-        program_id: e.program_id,
-        account_id: e.account_id,
-        exchange_rate: e.exchange_rate,
-        program_name: e.program_id
-          ? (programsRes.data || []).find((p: any) => p.id === e.program_id)?.name || '—'
-          : '—'
-      }))
-
-      setIncomeData(income)
-      setExpenseData(expenses)
+      setIncomeData(
+        (paymentsRes.data || [])
+          .map((p: any): IncomeItem => ({
+            id: p.id,
+            date: p.paid_date || `${p.year}-${String(p.month_number).padStart(2, '0')}-01`,
+            participantId: p.participant_id,
+            participant: p.participant?.name || 'Неизвестный участник',
+            programId: p.program_id || p.participant?.program_id || null,
+            programName: p.program?.name || progName(p.participant?.program_id),
+            amount: Number(p.fact_amount) || 0,
+            status: p.status === 'paid' ? 'paid' : p.status === 'overdue' ? 'overdue' : 'pending',
+            currency: p.currency,
+            original_amount: p.original_amount,
+            notes: p.notes,
+            account_id: p.account_id,
+            month: Number(p.month_number),
+            year: Number(p.year),
+          }))
+          .filter((i: IncomeItem) => i.amount > 0)
+      )
+      setExpenseData(
+        (expensesRes.data || []).map((e: any): ExpenseItem => ({
+          id: e.id,
+          date: e.expense_date,
+          category: e.category,
+          amount: Number(e.amount) || 0,
+          description: e.description,
+          name: e.name,
+          currency: e.currency,
+          original_amount: e.original_amount,
+          program_id: e.program_id,
+          program_name: progName(e.program_id) ?? undefined,
+          account_id: e.account_id,
+          exchange_rate: e.exchange_rate,
+        }))
+      )
       setParticipants(participantsRes.data || [])
-      setPrograms(programsRes.data || [])
-      setEmployees(employeesRes || [])
+      setPrograms(progs)
+      setEmployees(Array.isArray(employeesRes) ? employeesRes : [])
       setAccounts(Array.isArray(accountsRes) ? accountsRes : [])
-      setLoading(false)
+      setError(null)
     } catch (err: any) {
       setError(err.message)
+    } finally {
       setLoading(false)
     }
-  }
+  }, [])
 
-  const handleStartEditExpense = (item: ExpenseItem) => {
-    // Restore currency and exchange rate states from the record
-    setCurrency((item.currency as 'USD' | 'TJS') || 'USD')
-    setExchangeRate(String(item.exchange_rate || '10.5'))
+  React.useEffect(() => {
+    fetchData()
+  }, [fetchData])
 
-    setExpenseForm({
-      id: item.id,
-      name: item.name,
-      amount: String(item.original_amount || item.amount),
-      category: item.category,
-      date: item.date,
-      description: item.description || '',
-      employee_id: undefined,
-      program_id: item.program_id || '',
-      account_id: item.account_id || ''
-    })
-    setIsExpenseOpen(true)
-  }
+  // Requests coming from the global «Создать» menu / command palette
+  useNavAction('new-payment', () => setPaymentOpen(true))
+  useNavAction('new-expense', () => {
+    setEditingExpense(null)
+    setExpenseOpen(true)
+  })
 
-  const handleStartAddExpense = () => {
-    setCurrency('USD')
-    setExchangeRate('10.5')
-    setExpenseForm({
-      name: '',
-      amount: '',
-      category: '',
-      date: new Date().toISOString().split('T')[0],
-      description: '',
-      program_id: '',
-      account_id: ''
-    })
-    setIsExpenseOpen(true)
-  }
+  // ---------- Derived data ----------
+  const range = periodRange(period)
+  const accountName = (id?: string) => accounts.find(a => a.id === id)?.name
 
-  const handleDeleteExpense = async (id: string) => {
-    if (!confirm('Удалить этот расход?')) return;
-    try {
-      const res = await fetch(`/api/expenses?id=${id}`, { method: 'DELETE' });
-      const result = await res.json();
-      if (result.error) throw new Error(result.error);
-      fetchData();
-    } catch (err: any) {
-      alert('Failed to delete: ' + err.message);
-    }
-  }
-
-  const handleAddExpense = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setSubmitLoading(true)
-
-    let finalAmountUSD = Number(expenseForm.amount)
-    let originalAmount = Number(expenseForm.amount)
-    let rate = 1
-
-    if (currency === 'TJS') {
-      rate = Number(exchangeRate)
-      if (!rate || rate <= 0) {
-        alert('Введите корректный курс обмена')
-        setSubmitLoading(false)
-        return
-      }
-      finalAmountUSD = originalAmount / rate
-    }
-
-    if (!expenseForm.account_id || expenseForm.account_id === 'none') {
-        alert('Пожалуйста, выберите счет списания');
-        setSubmitLoading(false);
-        return;
-    }
-
-    try {
-      const isEdit = !!expenseForm.id;
-      const url = isEdit ? '/api/expenses' : '/api/expenses';
-      const method = isEdit ? 'PUT' : 'POST';
-
-      const body: any = {
-        name: expenseForm.name,
-        amount: finalAmountUSD, // Converted
-        original_amount: originalAmount,
-        currency: currency,
-        exchange_rate: rate,
-        category: expenseForm.category || 'Прочее',
-        expense_date: expenseForm.date,
-        description: expenseForm.description,
-        status: 'approved',
-        employee_id: expenseForm.employee_id,
-        program_id: expenseForm.program_id || null,
-        account_id: expenseForm.account_id || null
-      };
-
-      if (isEdit) body.id = expenseForm.id;
-
-      const res = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
-      })
-
-      const result = await res.json()
-      if (result.error) throw new Error(result.error)
-
-      setIsExpenseOpen(false)
-      setExpenseForm({ name: '', amount: '', category: '', date: new Date().toISOString().split('T')[0], description: '', program_id: '', account_id: '' })
-      setCurrency('USD')
-      setExchangeRate('10.5')
-      fetchData() // Refresh data
-    } catch (err: any) {
-      alert('Error saving expense: ' + err.message)
-    } finally {
-      setSubmitLoading(false)
-    }
-  }
-
-  const handleAddIncome = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setSubmitLoading(true)
-    try {
-      const participant = participants.find(p => p.id === incomeForm.participant_id)
-      if (!participant) throw new Error('Participant not found')
-
-      const monthNames = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь']
-      const monthNum = Number(incomeForm.month)
-      const monthName = monthNames[monthNum - 1] || 'Unknown'
-
-      let finalAmountUSD = Number(incomeForm.amount)
-      let originalAmount = Number(incomeForm.amount)
-      let rate = 1
-
-      if (currency === 'TJS') {
-        rate = Number(exchangeRate)
-        if (!rate || rate <= 0) {
-          alert('Введите корректный курс обмена')
-          return
-        }
-        finalAmountUSD = originalAmount / rate
-      }
-
-      if (!incomeForm.account_id || incomeForm.account_id === 'none') {
-          alert('Пожалуйста, выберите счет зачисления');
-          setSubmitLoading(false);
-          return;
-      }
-
-      // We need to send correct fields: plan_amount, payment_month, program_id
-      const res = await fetch('/api/monthly-payments', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          participant_id: incomeForm.participant_id,
-          program_id: participant.program_id,
-          plan_amount: participant.tariff || participant.program?.price_per_month || 0, // Prefer tariff, then program price
-          fact_amount: finalAmountUSD, // Converted to USD
-          original_amount: originalAmount, // TJS or USD
-          currency: currency,
-          exchange_rate: rate,
-          month_number: monthNum,
-          payment_month: monthName,
-          year: Number(incomeForm.year),
-          status: 'paid',
-          paid_date: incomeForm.paid_date || new Date().toISOString().split('T')[0],
-          notes: incomeForm.notes || null,
-          account_id: incomeForm.account_id || null
-        })
-      })
-      const result = await res.json()
-      if (result.error) throw new Error(result.error)
-
-      setIsIncomeOpen(false)
-      setIncomeForm({ participant_id: '', amount: '', month: String(new Date().getMonth() + 1), year: String(new Date().getFullYear()), notes: '', account_id: '', paid_date: new Date().toISOString().split('T')[0] })
-      fetchData()
-    } catch (err: any) {
-      alert('Error adding income: ' + err.message)
-    } finally {
-      setSubmitLoading(false)
-    }
-  }
-
-  const handleAddAccount = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setSubmitLoading(true)
-    try {
-      const isEdit = !!accountForm.id;
-      const method = isEdit ? 'PUT' : 'POST';
-      const body = {
-        id: accountForm.id || undefined,
-        name: accountForm.name,
-        currency: accountForm.currency,
-        program_id: accountForm.program_id === 'none' ? null : accountForm.program_id,
-        is_default: accountForm.is_default,
-        initial_balance: Number(accountForm.initial_balance) || 0
-      }
-      const res = await fetch('/api/accounts', {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
-      })
-      const result = await res.json()
-      if (result.error) throw new Error(result.error)
-      setIsAccountOpen(false)
-      setAccountForm({ id: '', name: '', currency: 'USD', program_id: 'none', is_default: false, initial_balance: '0' })
-      fetchData()
-    } catch (err: any) {
-      alert('Error saving account: ' + err.message)
-    } finally {
-      setSubmitLoading(false)
-    }
-  }
-
-  const handleDeleteAccount = async (id: string) => {
-    if (!confirm('Удалить счет? Все связанные транзакции потеряют привязку к счету!')) return;
-    try {
-      const res = await fetch(`/api/accounts?id=${id}`, { method: 'DELETE' });
-      const result = await res.json();
-      if (result.error) throw new Error(result.error);
-      fetchData();
-    } catch (err: any) {
-      alert('Error deleting account: ' + err.message);
-    }
-  }
-
-  // Filter data by program
-  const filteredIncomeData = (filterProgram === 'all'
-    ? incomeData
-    : incomeData.filter(item => {
-      const participant = participants.find(p => p.name === item.participant)
-      return participant?.program_id === filterProgram
-    })
-  ).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()) // Sort by date descending
-
-  const filteredExpenseData = expenseData
-    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()) // Sort by date descending
-
-  const defaultCategories = ['Зарплаты', 'Маркетинг', 'Офис', 'Мероприятия', 'Бонусы', 'Организационные', 'Прочее']
-  const allCategories = Array.from(
-    new Set([
-      ...defaultCategories,
-      ...expenseData.map(e => e.category).filter(Boolean)
-    ])
+  const scopedIncome = React.useMemo(
+    () =>
+      incomeData
+        .filter(i => (program === 'all' || i.programId === program) && inRange(i.date, range))
+        .sort((a, b) => +new Date(b.date) - +new Date(a.date)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [incomeData, program, period]
+  )
+  const scopedExpenses = React.useMemo(
+    () =>
+      expenseData
+        .filter(e => (program === 'all' || e.program_id === program) && inRange(e.date, range))
+        .sort((a, b) => +new Date(b.date) - +new Date(a.date)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [expenseData, program, period]
   )
 
-  const totalIncome = filteredIncomeData.reduce((sum, item) => sum + Number(item.amount), 0)
-  const totalExpenses = filteredExpenseData.reduce((sum, item) => sum + Number(item.amount), 0)
+  const q = query.trim().toLowerCase()
+  const visibleIncome = scopedIncome.filter(
+    i =>
+      (accountFilter === 'all' || i.account_id === accountFilter) &&
+      (!q || i.participant.toLowerCase().includes(q) || i.notes?.toLowerCase().includes(q) || i.programName?.toLowerCase().includes(q))
+  )
+  const visibleExpenses = scopedExpenses.filter(
+    e =>
+      (accountFilter === 'all' || e.account_id === accountFilter) &&
+      (categoryFilter === 'all' || e.category === categoryFilter) &&
+      (!q || e.name.toLowerCase().includes(q) || e.description?.toLowerCase().includes(q) || e.category?.toLowerCase().includes(q))
+  )
+
+  const totalIncome = scopedIncome.reduce((s, i) => s + i.amount, 0)
+  const totalExpenses = scopedExpenses.reduce((s, e) => s + e.amount, 0)
   const balance = totalIncome - totalExpenses
+  const visibleIncomeSum = visibleIncome.reduce((s, i) => s + i.amount, 0)
+  const visibleExpenseSum = visibleExpenses.reduce((s, e) => s + e.amount, 0)
 
-  // Pagination page slices
-  const totalIncomePages = Math.ceil(filteredIncomeData.length / itemsPerPage)
-  const paginatedIncomeData = filteredIncomeData.slice(
-    (incomePage - 1) * itemsPerPage,
-    incomePage * itemsPerPage
+  const categories = React.useMemo(
+    () => Array.from(new Set([...DEFAULT_CATEGORIES, ...expenseData.map(e => e.category).filter(Boolean)])),
+    [expenseData]
   )
+  const scopedAccounts = program === 'all' ? accounts : accounts.filter(a => !a.program_id || a.program_id === program)
 
-  const totalExpensePages = Math.ceil(filteredExpenseData.length / itemsPerPage)
-  const paginatedExpenseData = filteredExpenseData.slice(
-    (expensePage - 1) * itemsPerPage,
-    expensePage * itemsPerPage
-  )
+  // ---------- Actions ----------
+  const deletePayment = async (item: IncomeItem) => {
+    const ok = await confirm({
+      title: 'Удалить поступление?',
+      description: `${item.participant} · ${formatMoney(item.amount)} от ${formatDate(item.date)}. Действие нельзя отменить.`,
+      confirmText: 'Удалить',
+      destructive: true,
+    })
+    if (!ok) return
+    try {
+      const res = await fetch(`/api/monthly-payments?id=${item.id}`, { method: 'DELETE' })
+      const result = await res.json()
+      if (result.error) throw new Error(result.error)
+      toast.success('Поступление удалено')
+      fetchData()
+    } catch (err: any) {
+      toast.error('Не удалось удалить', { description: err.message })
+    }
+  }
 
-  const expenseCategories = filteredExpenseData.reduce((acc, curr) => {
-    acc[curr.category] = (acc[curr.category] || 0) + Number(curr.amount)
-    return acc
-  }, {} as Record<string, number>)
+  const deleteExpense = async (item: ExpenseItem) => {
+    const ok = await confirm({
+      title: 'Удалить расход?',
+      description: `«${item.name}» на ${formatMoney(item.amount)}. Действие нельзя отменить.`,
+      confirmText: 'Удалить',
+      destructive: true,
+    })
+    if (!ok) return
+    try {
+      const res = await fetch(`/api/expenses?id=${item.id}`, { method: 'DELETE' })
+      const result = await res.json()
+      if (result.error) throw new Error(result.error)
+      toast.success('Расход удалён')
+      fetchData()
+    } catch (err: any) {
+      toast.error('Не удалось удалить', { description: err.message })
+    }
+  }
 
-  const expensesPieData = Object.entries(expenseCategories).map(([name, value]) => ({
-    name, value
-  }))
+  const deleteAccount = async (acc: Account) => {
+    const ok = await confirm({
+      title: `Удалить счёт «${acc.name}»?`,
+      description: 'Связанные операции останутся, но потеряют привязку к счёту.',
+      confirmText: 'Удалить счёт',
+      destructive: true,
+    })
+    if (!ok) return
+    try {
+      const res = await fetch(`/api/accounts?id=${acc.id}`, { method: 'DELETE' })
+      const result = await res.json()
+      if (result.error) throw new Error(result.error)
+      toast.success('Счёт удалён')
+      fetchData()
+    } catch (err: any) {
+      toast.error('Не удалось удалить счёт', { description: err.message })
+    }
+  }
 
-  const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6']
+  const openExpense = (item: ExpenseItem | null) => {
+    setEditingExpense(item)
+    setExpenseOpen(true)
+  }
 
-  if (loading) {
+  const openAccount = (acc: Account | null) => {
+    setEditingAccount(acc)
+    setAccountOpen(true)
+  }
+
+  // ---------- Render ----------
+  if (error) {
     return (
-      <div className="p-6 flex items-center justify-center h-full">
-        <div className="text-center">
-          <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-muted-foreground">Загрузка данных...</p>
-        </div>
-      </div>
+      <PageContainer>
+        <Panel>
+          <EmptyState
+            icon={Inbox}
+            title="Не удалось загрузить данные"
+            description={error}
+            action={<Button variant="outline" onClick={() => { setLoading(true); fetchData() }}>Повторить</Button>}
+          />
+        </Panel>
+      </PageContainer>
     )
   }
 
-  if (error) {
-    return <div className="p-6">Error: {error}</div>
+  return (
+    <PageContainer>
+      <PageHeader
+        title="Доходы и расходы"
+        description="Поступления от участников, расходы компании и остатки на счетах"
+        actions={
+          <>
+            <Select value={program} onValueChange={setProgram}>
+              <SelectTrigger size="sm" className="min-w-40" aria-label="Программа">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent align="end">
+                <SelectItem value="all">Все программы</SelectItem>
+                {programs.map(p => (
+                  <SelectItem key={p.id} value={p.id}>
+                    {p.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={period} onValueChange={v => setPeriod(v as Period)}>
+              <SelectTrigger size="sm" className="min-w-36" aria-label="Период">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent align="end">
+                {PERIODS.map(p => (
+                  <SelectItem key={p.value} value={p.value}>
+                    {p.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button size="sm" variant="outline" onClick={() => openExpense(null)}>
+              <ArrowUpRight /> Расход
+            </Button>
+            <Button size="sm" onClick={() => setPaymentOpen(true)}>
+              <ArrowDownLeft /> Поступление
+            </Button>
+          </>
+        }
+      />
+
+      <SummaryStrip
+        loading={loading}
+        income={totalIncome}
+        incomeCount={scopedIncome.length}
+        expenses={totalExpenses}
+        expenseCount={scopedExpenses.length}
+        balance={balance}
+        onIncome={() => setTab('income')}
+        onExpenses={() => setTab('expenses')}
+      />
+
+      <div className="mt-6 mb-3 overflow-x-auto scrollbar-none">
+        <Segmented
+          aria-label="Раздел"
+          value={tab}
+          onChange={setTab}
+          options={[
+            { value: 'income', label: 'Поступления', count: loading ? undefined : scopedIncome.length },
+            { value: 'expenses', label: 'Расходы', count: loading ? undefined : scopedExpenses.length },
+            { value: 'accounts', label: 'Счета', count: loading ? undefined : scopedAccounts.length },
+            { value: 'analytics', label: 'Аналитика' },
+          ]}
+        />
+      </div>
+
+      {loading ? (
+        <TableSkeleton />
+      ) : tab === 'income' ? (
+        <Panel>
+          <PanelToolbar>
+            <SearchInput value={query} onChange={setQuery} placeholder="Участник или комментарий" className="sm:w-72" />
+            <AccountFilter value={accountFilter} onChange={setAccountFilter} accounts={scopedAccounts} />
+          </PanelToolbar>
+          {visibleIncome.length === 0 ? (
+            <EmptyState
+              icon={Receipt}
+              title={scopedIncome.length ? 'Ничего не найдено' : 'Поступлений пока нет'}
+              description={scopedIncome.length ? 'Измените поиск или фильтры' : 'Зарегистрируйте первую оплату участника'}
+              action={!scopedIncome.length && <Button size="sm" onClick={() => setPaymentOpen(true)}><Plus /> Поступление</Button>}
+            />
+          ) : (
+            <>
+              <Table>
+                <TableHeader>
+                  <TableRow className="hover:bg-transparent">
+                    <TableHead className="w-28">Дата</TableHead>
+                    <TableHead>Участник</TableHead>
+                    <TableHead className="max-md:hidden">Счёт</TableHead>
+                    <TableHead className="max-sm:hidden">Статус</TableHead>
+                    <TableHead className="text-right">Сумма</TableHead>
+                    <TableHead className="w-20" />
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {visibleIncome.slice((incomePage - 1) * PAGE_SIZE, incomePage * PAGE_SIZE).map(item => (
+                    <TableRow key={item.id} className="group">
+                      <TableCell className="num text-muted-foreground">{formatDate(item.date)}</TableCell>
+                      <TableCell>
+                        <div className="font-medium">{item.participant}</div>
+                        {item.programName && <div className="text-xs text-muted-foreground">{item.programName}</div>}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground max-md:hidden">{accountName(item.account_id) ?? '—'}</TableCell>
+                      <TableCell className="max-sm:hidden">
+                        <Badge variant={STATUS[item.status].variant}>{STATUS[item.status].label}</Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="num font-medium text-success">{formatMoney(item.amount, 'USD', { sign: true })}</div>
+                        {item.currency === 'TJS' && item.original_amount ? (
+                          <div className="num text-xs text-muted-foreground">{formatMoney(item.original_amount, 'TJS')}</div>
+                        ) : null}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-0.5">
+                          {item.notes && (
+                            <Tip>
+                              <TooltipTrigger asChild>
+                                <Button variant="ghost" size="icon-sm" aria-label="Комментарий">
+                                  <MessageSquareText className="text-muted-foreground" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent side="left" className="whitespace-pre-wrap">{item.notes}</TooltipContent>
+                            </Tip>
+                          )}
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            aria-label="Удалить"
+                            className="text-muted-foreground hover:bg-destructive-soft hover:text-destructive [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 focus-visible:opacity-100"
+                            onClick={() => deletePayment(item)}
+                          >
+                            <Trash2 />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+              <TotalsBar label={`${formatNumber(visibleIncome.length)} ${plural(visibleIncome.length, ['поступление', 'поступления', 'поступлений'])}`} value={formatMoney(visibleIncomeSum, 'USD', { sign: true })} tone="success" />
+              <TablePagination page={incomePage} pageSize={PAGE_SIZE} total={visibleIncome.length} onPageChange={setIncomePage} />
+            </>
+          )}
+        </Panel>
+      ) : tab === 'expenses' ? (
+        <Panel>
+          <PanelToolbar>
+            <SearchInput value={query} onChange={setQuery} placeholder="Название или комментарий" className="sm:w-72" />
+            <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+              <SelectTrigger size="sm" className="min-w-36" aria-label="Категория">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Все категории</SelectItem>
+                {categories.map(c => (
+                  <SelectItem key={c} value={c}>
+                    {c}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <AccountFilter value={accountFilter} onChange={setAccountFilter} accounts={scopedAccounts} />
+          </PanelToolbar>
+          {visibleExpenses.length === 0 ? (
+            <EmptyState
+              icon={Wallet}
+              title={scopedExpenses.length ? 'Ничего не найдено' : 'Расходов пока нет'}
+              description={scopedExpenses.length ? 'Измените поиск или фильтры' : 'Добавьте первый расход компании'}
+              action={!scopedExpenses.length && <Button size="sm" onClick={() => openExpense(null)}><Plus /> Расход</Button>}
+            />
+          ) : (
+            <>
+              <Table>
+                <TableHeader>
+                  <TableRow className="hover:bg-transparent">
+                    <TableHead className="w-28">Дата</TableHead>
+                    <TableHead>Расход</TableHead>
+                    <TableHead className="max-sm:hidden">Категория</TableHead>
+                    <TableHead className="max-lg:hidden">Программа</TableHead>
+                    <TableHead className="max-md:hidden">Счёт</TableHead>
+                    <TableHead className="text-right">Сумма</TableHead>
+                    <TableHead className="w-20" />
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {visibleExpenses.slice((expensePage - 1) * PAGE_SIZE, expensePage * PAGE_SIZE).map(item => (
+                    <TableRow key={item.id} className="group cursor-pointer" onClick={() => openExpense(item)}>
+                      <TableCell className="num text-muted-foreground">{formatDate(item.date)}</TableCell>
+                      <TableCell className="max-w-72 whitespace-normal">
+                        <div className="truncate font-medium">{item.name}</div>
+                        {item.description && <div className="truncate text-xs text-muted-foreground">{item.description}</div>}
+                      </TableCell>
+                      <TableCell className="max-sm:hidden">
+                        <Badge variant="secondary">{item.category || 'Прочее'}</Badge>
+                      </TableCell>
+                      <TableCell className="text-muted-foreground max-lg:hidden">{item.program_name ?? '—'}</TableCell>
+                      <TableCell className="text-muted-foreground max-md:hidden">{accountName(item.account_id) ?? '—'}</TableCell>
+                      <TableCell className="text-right">
+                        <div className="num font-medium">{formatMoney(-item.amount)}</div>
+                        {item.currency === 'TJS' && item.original_amount ? (
+                          <div className="num text-xs text-muted-foreground">{formatMoney(item.original_amount, 'TJS')}</div>
+                        ) : null}
+                      </TableCell>
+                      <TableCell className="text-right" onClick={e => e.stopPropagation()}>
+                        <div className="flex items-center justify-end gap-0.5 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 focus-within:opacity-100">
+                          <Button variant="ghost" size="icon-sm" aria-label="Изменить" className="text-muted-foreground" onClick={() => openExpense(item)}>
+                            <Pencil />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            aria-label="Удалить"
+                            className="text-muted-foreground hover:bg-destructive-soft hover:text-destructive"
+                            onClick={() => deleteExpense(item)}
+                          >
+                            <Trash2 />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+              <TotalsBar label={`${formatNumber(visibleExpenses.length)} ${plural(visibleExpenses.length, ['расход', 'расхода', 'расходов'])}`} value={formatMoney(-visibleExpenseSum)} />
+              <TablePagination page={expensePage} pageSize={PAGE_SIZE} total={visibleExpenses.length} onPageChange={setExpensePage} />
+            </>
+          )}
+        </Panel>
+      ) : tab === 'accounts' ? (
+        <AccountsGrid accounts={scopedAccounts} onAdd={() => openAccount(null)} onEdit={openAccount} onDelete={deleteAccount} />
+      ) : (
+        <Analytics income={scopedIncome} expenses={scopedExpenses} />
+      )}
+
+      <PaymentSheet
+        open={paymentOpen}
+        onOpenChange={setPaymentOpen}
+        participants={participants}
+        accounts={accounts}
+        payments={incomeData}
+        onSaved={fetchData}
+      />
+      <ExpenseSheet
+        open={expenseOpen}
+        onOpenChange={setExpenseOpen}
+        editing={editingExpense}
+        categories={categories}
+        programs={programs}
+        accounts={accounts}
+        employees={employees}
+        onSaved={fetchData}
+      />
+      <AccountSheet open={accountOpen} onOpenChange={setAccountOpen} editing={editingAccount} programs={programs} onSaved={fetchData} />
+    </PageContainer>
+  )
+}
+
+// ---------------------------------------------------------------------------
+
+function SummaryStrip({
+  loading,
+  income,
+  incomeCount,
+  expenses,
+  expenseCount,
+  balance,
+  onIncome,
+  onExpenses,
+}: {
+  loading: boolean
+  income: number
+  incomeCount: number
+  expenses: number
+  expenseCount: number
+  balance: number
+  onIncome: () => void
+  onExpenses: () => void
+}) {
+  const ratio = income > 0 ? Math.min(expenses / income, 1) : expenses > 0 ? 1 : 0
+  return (
+    <Panel className="grid grid-cols-1 divide-y sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+      <button onClick={onIncome} className="group px-5 py-4 text-left transition-colors hover:bg-muted/40">
+        <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
+          <span className="size-2 rounded-full bg-chart-income" /> Поступления
+        </p>
+        {loading ? (
+          <Skeleton className="mt-2 h-7 w-32" />
+        ) : (
+          <>
+            <p className="num mt-1 text-2xl font-semibold tracking-tight">{formatMoney(income)}</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {formatNumber(incomeCount)} {plural(incomeCount, ['платёж', 'платежа', 'платежей'])}
+            </p>
+          </>
+        )}
+      </button>
+      <button onClick={onExpenses} className="group px-5 py-4 text-left transition-colors hover:bg-muted/40">
+        <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
+          <span className="size-2 rounded-full bg-chart-expense" /> Расходы
+        </p>
+        {loading ? (
+          <Skeleton className="mt-2 h-7 w-32" />
+        ) : (
+          <>
+            <p className="num mt-1 text-2xl font-semibold tracking-tight">{formatMoney(expenses)}</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {formatNumber(expenseCount)} {plural(expenseCount, ['операция', 'операции', 'операций'])}
+            </p>
+          </>
+        )}
+      </button>
+      <div className="px-5 py-4">
+        <p className="flex items-center gap-1.5 text-sm text-muted-foreground">Сальдо</p>
+        {loading ? (
+          <Skeleton className="mt-2 h-7 w-32" />
+        ) : (
+          <>
+            <p className={cn('num mt-1 text-2xl font-semibold tracking-tight', balance < 0 && 'text-destructive')}>
+              {formatMoney(balance, 'USD', { sign: true })}
+            </p>
+            <div className="mt-2 flex items-center gap-2">
+              <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-chart-income/25">
+                <div className="h-full rounded-full bg-chart-expense transition-[width] duration-500 ease-[var(--ease-out)]" style={{ width: `${ratio * 100}%` }} />
+              </div>
+              <span className="num shrink-0 text-xs text-muted-foreground">
+                {income > 0 ? `${Math.round((expenses / income) * 100)}% расходов` : '—'}
+              </span>
+            </div>
+          </>
+        )}
+      </div>
+    </Panel>
+  )
+}
+
+function AccountFilter({ value, onChange, accounts }: { value: string; onChange: (v: string) => void; accounts: Account[] }) {
+  return (
+    <Select value={value} onValueChange={onChange}>
+      <SelectTrigger size="sm" className="min-w-36" aria-label="Счёт">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="all">Все счета</SelectItem>
+        {accounts.map(a => (
+          <SelectItem key={a.id} value={a.id}>
+            {a.name}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  )
+}
+
+function TotalsBar({ label, value, tone }: { label: string; value: string; tone?: 'success' }) {
+  return (
+    <div className="flex items-center justify-between border-t bg-muted/40 px-3 py-2.5 text-sm sm:px-4">
+      <span className="text-muted-foreground">Итого · {label}</span>
+      <span className={cn('num font-semibold', tone === 'success' && 'text-success')}>{value}</span>
+    </div>
+  )
+}
+
+function TableSkeleton() {
+  return (
+    <Panel>
+      <div className="border-b px-4 py-2.5">
+        <Skeleton className="h-8 w-72" />
+      </div>
+      <div className="divide-y">
+        {Array.from({ length: 8 }).map((_, i) => (
+          <div key={i} className="flex items-center gap-4 px-4 py-3.5">
+            <Skeleton className="h-4 w-20" />
+            <Skeleton className="h-4 flex-1" />
+            <Skeleton className="h-4 w-24 max-sm:hidden" />
+            <Skeleton className="h-4 w-20" />
+          </div>
+        ))}
+      </div>
+    </Panel>
+  )
+}
+
+function AccountsGrid({
+  accounts,
+  onAdd,
+  onEdit,
+  onDelete,
+}: {
+  accounts: Account[]
+  onAdd: () => void
+  onEdit: (a: Account) => void
+  onDelete: (a: Account) => void
+}) {
+  return (
+    <div className="grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-3">
+      {accounts.map(acc => (
+        <Panel key={acc.id} className="flex flex-col p-4">
+          <div className="flex items-start gap-3">
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+              <Landmark className="size-4" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="truncate font-medium">{acc.name}</p>
+              <p className="truncate text-xs text-muted-foreground">{acc.program?.name ?? 'Общий счёт'}</p>
+            </div>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon-sm" className="-mt-1 -mr-1 text-muted-foreground" aria-label="Действия со счётом">
+                  <MoreHorizontal />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onSelect={() => onEdit(acc)}>
+                  <Pencil /> Изменить
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem variant="destructive" onSelect={() => onDelete(acc)}>
+                  <Trash2 /> Удалить
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+          <p className={cn('num mt-5 text-2xl font-semibold tracking-tight', (acc.balance ?? 0) < 0 && 'text-destructive')}>
+            {formatMoney(acc.balance ?? 0, acc.currency)}
+          </p>
+          <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
+            <span>Остаток · {acc.currency}</span>
+            {acc.is_default && <Badge className="ml-auto">По умолчанию</Badge>}
+          </div>
+        </Panel>
+      ))}
+      <button
+        onClick={onAdd}
+        className="flex min-h-36 flex-col items-center justify-center gap-2 rounded-xl border border-dashed text-sm text-muted-foreground transition-colors hover:border-ring/50 hover:bg-card hover:text-foreground"
+      >
+        <Plus className="size-5" />
+        Новый счёт
+      </button>
+    </div>
+  )
+}
+
+function ChartTooltip({ active, payload, label }: any) {
+  if (!active || !payload?.length) return null
+  return (
+    <div className="rounded-lg border bg-popover px-3 py-2 text-xs shadow-pop">
+      {label && <p className="mb-1 font-medium">{label}</p>}
+      {payload.map((p: any) => (
+        <p key={p.name} className="flex items-center gap-2">
+          <span className="size-2 rounded-full" style={{ background: p.color || p.payload?.fill }} />
+          <span className="text-muted-foreground">{p.name}</span>
+          <span className="num ml-auto pl-3 font-medium">{formatMoney(p.value)}</span>
+        </p>
+      ))}
+    </div>
+  )
+}
+
+function Analytics({ income, expenses }: { income: IncomeItem[]; expenses: ExpenseItem[] }) {
+  const monthly = React.useMemo(() => {
+    const map = new Map<string, { key: string; label: string; income: number; expenses: number }>()
+    const add = (date: string, field: 'income' | 'expenses', v: number) => {
+      const d = new Date(date)
+      if (Number.isNaN(d.getTime())) return
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+      if (!map.has(key)) map.set(key, { key, label: `${MONTHS_SHORT_RU[d.getMonth()]} ${String(d.getFullYear()).slice(2)}`, income: 0, expenses: 0 })
+      map.get(key)![field] += v
+    }
+    income.forEach(i => add(i.date, 'income', i.amount))
+    expenses.forEach(e => add(e.date, 'expenses', e.amount))
+    return Array.from(map.values()).sort((a, b) => a.key.localeCompare(b.key)).slice(-12)
+  }, [income, expenses])
+
+  const byCategory = React.useMemo(() => {
+    const acc: Record<string, number> = {}
+    expenses.forEach(e => (acc[e.category || 'Прочее'] = (acc[e.category || 'Прочее'] || 0) + e.amount))
+    const rows = Object.entries(acc)
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value)
+    // Collapse the long tail so the palette stays readable
+    if (rows.length > 6) {
+      const rest = rows.slice(5).reduce((s, r) => s + r.value, 0)
+      return [...rows.slice(0, 5), { name: 'Остальное', value: rest }]
+    }
+    return rows
+  }, [expenses])
+  const totalExp = byCategory.reduce((s, r) => s + r.value, 0)
+
+  if (!income.length && !expenses.length) {
+    return (
+      <Panel>
+        <EmptyState icon={Inbox} title="Нет данных за выбранный период" description="Выберите другой период или программу" />
+      </Panel>
+    )
   }
 
   return (
-    <div className="p-3 sm:p-6 space-y-4 sm:space-y-6 bg-background min-h-full">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
-        <div>
-          <h2 className="text-xl sm:text-2xl font-bold text-foreground">Доходы и Расходы</h2>
-          <p className="text-xs sm:text-sm text-muted-foreground mt-1">Управление финансовыми потоками</p>
+    <div className="grid grid-cols-1 gap-3 xl:grid-cols-[1.6fr_1fr]">
+      <Panel className="p-4 sm:p-5">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="font-semibold">Поступления и расходы по месяцам</h2>
+          <div className="flex items-center gap-4 text-xs text-muted-foreground">
+            <span className="flex items-center gap-1.5"><span className="size-2 rounded-full bg-chart-income" /> Поступления</span>
+            <span className="flex items-center gap-1.5"><span className="size-2 rounded-full bg-chart-expense" /> Расходы</span>
+          </div>
         </div>
-        <div className="w-full sm:w-64">
-          <select
-            value={filterProgram}
-            onChange={(e) => setFilterProgram(e.target.value)}
-            className="w-full px-3 py-2 bg-background border border-border rounded-md text-foreground text-xs sm:text-sm touch-manipulation"
-          >
-            <option value="all">Все программы</option>
-            {programs.map(prog => (
-              <option key={prog.id} value={prog.id}>{prog.name}</option>
-            ))}
-          </select>
-        </div>
-      </div>
+        <ResponsiveContainer width="100%" height={300}>
+          <BarChart data={monthly} barGap={3} margin={{ left: -8, right: 4, top: 4 }}>
+            <CartesianGrid vertical={false} stroke="var(--border)" />
+            <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fill: 'var(--muted-foreground)', fontSize: 12 }} />
+            <YAxis
+              tickLine={false}
+              axisLine={false}
+              width={56}
+              tick={{ fill: 'var(--muted-foreground)', fontSize: 12 }}
+              tickFormatter={v => (Math.abs(v) >= 1000 ? `${Math.round(v / 1000)}k` : String(v))}
+            />
+            <Tooltip content={<ChartTooltip />} cursor={{ fill: 'var(--muted)', opacity: 0.6 }} />
+            <Bar dataKey="income" name="Поступления" fill="var(--chart-income)" radius={[4, 4, 0, 0]} maxBarSize={28} />
+            <Bar dataKey="expenses" name="Расходы" fill="var(--chart-expense)" radius={[4, 4, 0, 0]} maxBarSize={28} />
+          </BarChart>
+        </ResponsiveContainer>
+      </Panel>
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
-        <Card className="p-3.5 sm:p-4 bg-card border-border">
-          <div className="flex justify-between items-start">
-            <div>
-              <p className="text-xs text-muted-foreground">Общий доход</p>
-              <h3 className="text-xl sm:text-2xl font-bold text-foreground mt-1">${totalIncome.toLocaleString()}</h3>
-            </div>
-            <div className="p-2 bg-green-100 rounded-full">
-              <ArrowUpRight className="w-4 h-4 text-green-600" />
-            </div>
-          </div>
-        </Card>
-        <Card className="p-3.5 sm:p-4 bg-card border-border">
-          <div className="flex justify-between items-start">
-            <div>
-              <p className="text-xs text-muted-foreground">Общие расходы</p>
-              <h3 className="text-xl sm:text-2xl font-bold text-foreground mt-1">${totalExpenses.toLocaleString()}</h3>
-            </div>
-            <div className="p-2 bg-red-100 rounded-full">
-              <ArrowDownRight className="w-4 h-4 text-red-600" />
-            </div>
-          </div>
-        </Card>
-        <Card className="p-3.5 sm:p-4 bg-card border-border">
-          <div className="flex justify-between items-start">
-            <div>
-              <p className="text-xs text-muted-foreground">Чистый баланс</p>
-              <h3 className={`text-xl sm:text-2xl font-bold mt-1 ${balance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                ${balance.toLocaleString()}
-              </h3>
-            </div>
-            <div className="p-2 bg-blue-100 rounded-full">
-              <PieChart className="w-4 h-4 text-blue-600" />
-            </div>
-          </div>
-        </Card>
-      </div>
-
-      <Tabs defaultValue="income" className="w-full">
-        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 h-auto p-1 gap-1">
-          <TabsTrigger value="income" className="text-xs py-2">Доходы</TabsTrigger>
-          <TabsTrigger value="expenses" className="text-xs py-2">Расходы</TabsTrigger>
-          <TabsTrigger value="analysis" className="text-xs py-2">Аналитика</TabsTrigger>
-          <TabsTrigger value="accounts" className="text-xs py-2">Счета</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="income" className="space-y-6 mt-6">
-          <Card className="bg-card border-border">
-            <div className="p-4 border-b border-border flex justify-between items-center">
-              <h3 className="font-semibold text-foreground">Последние поступления</h3>
-              <Button size="sm" variant="ghost" onClick={() => setIsIncomeOpen(true)}>
-                <Plus className="w-4 h-4 mr-2" /> Добавить
-              </Button>
-            </div>
-            <div className="p-0 overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Дата</TableHead>
-                    <TableHead>Участник</TableHead>
-                    <TableHead>Сумма</TableHead>
-                    <TableHead>Счет зачисления</TableHead>
-                    <TableHead>Статус</TableHead>
-                    <TableHead className="w-[100px]"></TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {paginatedIncomeData.map((item) => (
-                    <TableRow key={item.id}>
-                      <TableCell>{new Date(item.date).toLocaleDateString('ru-RU')}</TableCell>
-                      <TableCell>{item.participant}</TableCell>
-                      <TableCell className="text-green-600 font-medium">
-                        +${Number(item.amount).toLocaleString()}
-                        {item.currency === 'TJS' && item.original_amount && (
-                          <span className="text-xs text-muted-foreground block">
-                            ({Number(item.original_amount).toLocaleString()} TJS)
-                          </span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className="bg-green-50/50 dark:bg-green-950/20 text-green-700 dark:text-green-400 border-green-200 dark:border-green-800">
-                          {accounts.find(acc => acc.id === item.account_id)?.name || '—'}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={item.status === 'получен' ? 'default' : 'secondary'}>
-                          {item.status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-2 items-center">
-                          {item.notes && (
-                            <Dialog>
-                              <DialogTrigger asChild>
-                                <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                                  <MessageSquare className="h-4 w-4 text-gray-400" />
-                                </Button>
-                              </DialogTrigger>
-                              <DialogContent className="max-w-md">
-                                <DialogHeader>
-                                  <DialogTitle>Комментарий к платежу</DialogTitle>
-                                  <DialogDescription>
-                                    {item.participant} • {new Date(item.date).toLocaleDateString('ru-RU')}
-                                  </DialogDescription>
-                                </DialogHeader>
-                                <div className="bg-blue-50 dark:bg-blue-950/20 p-4 rounded-lg border border-blue-200 dark:border-blue-800">
-                                  <p className="text-sm text-foreground whitespace-pre-wrap">{item.notes}</p>
-                                </div>
-                              </DialogContent>
-                            </Dialog>
-                          )}
-                          <Button size="sm" variant="ghost" className="h-8 w-8 p-0"
-                            onClick={async () => {
-                              if (!confirm('Удалить этот платеж?')) return;
-                              await fetch(`/api/monthly-payments?id=${item.id}`, { method: 'DELETE' });
-                              fetchData();
-                            }}
-                          >
-                            <Trash2 className="h-4 w-4 text-red-500" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                  {filteredIncomeData.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={6} className="text-center text-muted-foreground py-6">
-                        Нет данных
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </div>
-            
-            {/* Income Pagination Control */}
-            {totalIncomePages > 1 && (
-              <div className="flex justify-between items-center p-4 border-t border-border bg-card">
-                <div className="text-xs text-muted-foreground">
-                  Показано {(incomePage - 1) * itemsPerPage + 1} - {Math.min(incomePage * itemsPerPage, filteredIncomeData.length)} из {filteredIncomeData.length} поступлений
-                </div>
-                <div className="flex gap-2 items-center">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setIncomePage(prev => Math.max(prev - 1, 1))}
-                    disabled={incomePage === 1}
-                    className="h-8 w-8 p-0"
-                  >
-                    <ChevronLeft className="h-4 w-4" />
-                  </Button>
-                  <span className="text-xs text-foreground font-semibold px-2">
-                    Страница {incomePage} из {totalIncomePages}
-                  </span>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setIncomePage(prev => Math.min(prev + 1, totalIncomePages))}
-                    disabled={incomePage === totalIncomePages}
-                    className="h-8 w-8 p-0"
-                  >
-                    <ChevronRight className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-            )}
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="expenses" className="space-y-6 mt-6">
-          <Card className="bg-card border-border">
-            <div className="p-4 border-b border-border flex justify-between items-center">
-              <h3 className="font-semibold text-foreground">Последние расходы</h3>
-              <Button size="sm" variant="ghost" onClick={handleStartAddExpense}>
-                <Plus className="w-4 h-4 mr-2" /> Добавить
-              </Button>
-            </div>
-            <div className="p-0 overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Дата</TableHead>
-                    <TableHead>Название</TableHead>
-                    <TableHead>Категория</TableHead>
-                    <TableHead>Программа</TableHead>
-                    <TableHead>Счет списания</TableHead>
-                    <TableHead>Сумма</TableHead>
-                    <TableHead className="w-[120px]"></TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {paginatedExpenseData.map((item) => (
-                    <TableRow key={item.id}>
-                      <TableCell>{new Date(item.date).toLocaleDateString('ru-RU')}</TableCell>
-                      <TableCell className="font-medium text-foreground">{item.name}</TableCell>
-                      <TableCell>
-                        <Badge variant="secondary" className="text-xs">
-                          {item.category}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className="text-xs">
-                          {item.program_name || '—'}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className="bg-red-50/50 dark:bg-red-950/20 text-red-700 dark:text-red-400 border-red-200 dark:border-red-800">
-                          {accounts.find(acc => acc.id === item.account_id)?.name || '—'}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-red-600 font-medium">
-                        -${Number(item.amount).toLocaleString()}
-                        {item.currency === 'TJS' && item.original_amount && (
-                          <span className="text-xs text-muted-foreground block">
-                            ({Number(item.original_amount).toLocaleString()} TJS)
-                          </span>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-2">
-                          <Button size="sm" variant="outline" className="h-8 w-8 p-0" onClick={() => handleStartEditExpense(item)}>
-                            <Edit2 className="h-4 w-4 text-blue-500" />
-                          </Button>
-                          <Button size="sm" variant="outline" className="h-8 w-8 p-0" onClick={() => handleDeleteExpense(item.id)}>
-                            <Trash2 className="h-4 w-4 text-red-500" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                  {filteredExpenseData.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={7} className="text-center text-muted-foreground py-6">
-                        Нет данных
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </div>
-            
-            {/* Expense Pagination Control */}
-            {totalExpensePages > 1 && (
-              <div className="flex justify-between items-center p-4 border-t border-border bg-card">
-                <div className="text-xs text-muted-foreground">
-                  Показано {(expensePage - 1) * itemsPerPage + 1} - {Math.min(expensePage * itemsPerPage, filteredExpenseData.length)} из {filteredExpenseData.length} расходов
-                </div>
-                <div className="flex gap-2 items-center">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setExpensePage(prev => Math.max(prev - 1, 1))}
-                    disabled={expensePage === 1}
-                    className="h-8 w-8 p-0"
-                  >
-                    <ChevronLeft className="h-4 w-4" />
-                  </Button>
-                  <span className="text-xs text-foreground font-semibold px-2">
-                    Страница {expensePage} из {totalExpensePages}
-                  </span>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setExpensePage(prev => Math.min(prev + 1, totalExpensePages))}
-                    disabled={expensePage === totalExpensePages}
-                    className="h-8 w-8 p-0"
-                  >
-                    <ChevronRight className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-            )}
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="analysis" className="space-y-6 mt-6">
-          {/* Analytics Charts */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <Card className="p-6 bg-card border-border">
-              <h3 className="text-lg font-semibold text-foreground mb-4">Структура расходов</h3>
-              <ResponsiveContainer width="100%" height={300}>
+      <Panel className="p-4 sm:p-5">
+        <h2 className="mb-2 font-semibold">Структура расходов</h2>
+        {byCategory.length === 0 ? (
+          <EmptyState title="Расходов нет" className="py-10" />
+        ) : (
+          <>
+            <div className="relative">
+              <ResponsiveContainer width="100%" height={200}>
                 <PieChart>
-                  <Pie
-                    data={expensesPieData}
-                    cx="50%"
-                    cy="50%"
-                    labelLine={false}
-                    label={(entry) => entry.name}
-                    outerRadius={80}
-                    fill="#8884d8"
-                    dataKey="value"
-                  >
-                    {expensesPieData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                  <Pie data={byCategory} dataKey="value" nameKey="name" innerRadius={62} outerRadius={88} paddingAngle={2} stroke="var(--card)" strokeWidth={2}>
+                    {byCategory.map((_, i) => (
+                      <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
                     ))}
                   </Pie>
-                  <Tooltip />
-                  <Legend />
+                  <Tooltip content={<ChartTooltip />} />
                 </PieChart>
               </ResponsiveContainer>
-            </Card>
-          </div>
-        </TabsContent>
-
-        <TabsContent value="accounts" className="space-y-6 mt-6">
-            <Card className="bg-card border-border">
-              <div className="p-4 border-b border-border flex justify-between items-center">
-                <h3 className="font-semibold text-foreground">Управление счетами</h3>
-                <Button size="sm" variant="default" onClick={() => {
-                    setAccountForm({ id: '', name: '', currency: 'USD', program_id: 'none', is_default: false, initial_balance: '0' });
-                    setIsAccountOpen(true);
-                }}>
-                  <Plus className="w-4 h-4 mr-2" /> Добавить счет
-                </Button>
+              <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+                <span className="text-xs text-muted-foreground">Всего</span>
+                <span className="num text-lg font-semibold">{formatMoney(totalExp)}</span>
               </div>
-              <div className="p-0">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Название</TableHead>
-                      <TableHead>Программа</TableHead>
-                      <TableHead>Валюта</TableHead>
-                      <TableHead>Остаток</TableHead>
-                      <TableHead>По умолчанию</TableHead>
-                      <TableHead className="w-[100px]"></TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {accounts.map((item) => (
-                      <TableRow key={item.id}>
-                        <TableCell className="font-medium">
-                            <div className="flex items-center gap-2">
-                                <Landmark className="w-4 h-4 text-slate-400" />
-                                {item.name}
-                            </div>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className="text-xs">
-                            {item.program?.name || 'Глобальный счет'}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>{item.currency}</TableCell>
-                        <TableCell className="font-semibold text-foreground">
-                            {item.currency === 'USD' ? '$' : ''}
-                            {item.balance?.toLocaleString() || 0}
-                            {item.currency === 'TJS' ? ' TJS' : ''}
-                        </TableCell>
-                        <TableCell>{item.is_default ? 'Да' : 'Нет'}</TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex justify-end gap-2">
-                            <Button size="sm" variant="outline" onClick={() => {
-                                setAccountForm({
-                                    id: item.id,
-                                    name: item.name,
-                                    currency: item.currency,
-                                    program_id: item.program_id || 'none',
-                                    is_default: item.is_default,
-                                    initial_balance: String(item.initial_balance || 0)
-                                });
-                                setIsAccountOpen(true);
-                            }}>
-                              <Edit2 className="h-4 w-4 mr-1 text-blue-500" />
-                            </Button>
-                            <Button size="sm" variant="outline" onClick={() => handleDeleteAccount(item.id)}>
-                              <Trash2 className="h-4 w-4 mr-1 text-red-500" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                    {accounts.length === 0 && <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground">Нет данных</TableCell></TableRow>}
-                  </TableBody>
-                </Table>
-              </div>
-            </Card>
-        </TabsContent>
-      </Tabs >
-
-      {/* Add Expense Dialog */}
-      {/* Add Expense Dialog */}
-      <Dialog open={isExpenseOpen} onOpenChange={setIsExpenseOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{expenseForm.id ? 'Редактировать расход' : 'Добавить расход'}</DialogTitle>
-            <DialogDescription>Заполните информацию о расходе</DialogDescription>
-          </DialogHeader>
-          <form onSubmit={handleAddExpense} className="space-y-4">
-            {/* Program Selection */}
-            <div className="space-y-2">
-              <Label>Программа (необязательно)</Label>
-              <Select value={expenseForm.program_id || 'none'} onValueChange={(v) => setExpenseForm({ ...expenseForm, program_id: v === 'none' ? '' : v })}>
-                <SelectTrigger><SelectValue placeholder="Выберите программу" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">— Без программы —</SelectItem>
-                  {programs.map(prog => (
-                    <SelectItem key={prog.id} value={prog.id}>{prog.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
             </div>
-
-            {/* Account Selection */}
-            <div className="space-y-2">
-              <Label>Счет списания *</Label>
-              <Select value={expenseForm.account_id || ''} onValueChange={(v) => setExpenseForm({ ...expenseForm, account_id: v })} required>
-                <SelectTrigger><SelectValue placeholder="Выберите счет" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">— Не указан —</SelectItem>
-                  {accounts
-                    .filter(acc => !expenseForm.program_id || acc.program_id === expenseForm.program_id || acc.program_id === null)
-                    .map(acc => (
-                      <SelectItem key={acc.id} value={acc.id}>{acc.name} ({acc.currency})</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Employee Selection Logic */}
-            {(expenseForm.category === 'Зарплаты' || expenseForm.category === 'Personnel') && (
-              <div className="space-y-2">
-                <Label>Сотрудник</Label>
-                <Select onValueChange={(v) => {
-                  const emp = employees.find(e => e.id === v);
-                  if (emp) {
-                    setExpenseForm(prev => ({
-                      ...prev,
-                      name: `Зарплата: ${emp.first_name} ${emp.last_name}`,
-                      employee_id: emp.id
-                    }));
-                  }
-                }}>
-                  <SelectTrigger><SelectValue placeholder="Выберите сотрудника" /></SelectTrigger>
-                  <SelectContent>
-                    {employees.filter(e => e.status === 'active').map(e => (
-                      <SelectItem key={e.id} value={e.id}>{e.first_name} {e.last_name} ({e.position})</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-
-            <div className="space-y-2">
-              <Label>Название</Label>
-              <Input value={expenseForm.name} onChange={e => setExpenseForm({ ...expenseForm, name: e.target.value })} placeholder="Например: Аренда офиса" required />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="col-span-2 flex gap-4 items-end">
-                <div className="flex-1">
-                  <Label htmlFor="expense-amount">Сумма</Label>
-                  <div className="relative">
-                    <Input
-                      id="expense-amount"
-                      type="number"
-                      placeholder="0.00"
-                      value={expenseForm.amount}
-                      onChange={(e) => setExpenseForm({ ...expenseForm, amount: e.target.value })}
-                    />
-                    <div className="absolute right-1 top-1">
-                      <select
-                        value={currency}
-                        onChange={(e) => setCurrency(e.target.value as 'USD' | 'TJS')}
-                        className="h-8 border-none bg-transparent focus:ring-0 text-xs font-semibold text-muted-foreground cursor-pointer"
-                        style={{ outline: 'none' }}
-                      >
-                        <option value="USD">USD</option>
-                        <option value="TJS">TJS</option>
-                      </select>
+            <ul className="mt-3 space-y-2">
+              {byCategory.map((r, i) => {
+                const pct = totalExp ? (r.value / totalExp) * 100 : 0
+                return (
+                  <li key={r.name} className="text-sm">
+                    <div className="flex items-center gap-2">
+                      <span className="size-2.5 shrink-0 rounded-sm" style={{ background: CHART_COLORS[i % CHART_COLORS.length] }} />
+                      <span className="min-w-0 flex-1 truncate">{r.name}</span>
+                      <span className="num text-muted-foreground">{Math.round(pct)}%</span>
+                      <span className="num w-24 text-right font-medium">{formatMoney(r.value)}</span>
                     </div>
-                  </div>
-                </div>
-                {currency === 'TJS' && (
-                  <div className="w-24">
-                    <Label htmlFor="expense-rate">Курс</Label>
-                    <Input
-                      id="expense-rate"
-                      type="number"
-                      value={exchangeRate}
-                      onChange={(e) => setExchangeRate(e.target.value)}
-                    />
-                  </div>
-                )}
-              </div>
-              {currency === 'TJS' && expenseForm.amount && (
-                <div className="col-span-2 text-right">
-                  <p className="text-xs text-muted-foreground">
-                    ≈ ${(Number(expenseForm.amount) / Number(exchangeRate || 1)).toFixed(2)} USD
-                  </p>
-                </div>
-              )}
-            </div>
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label>Категория</Label>
-                <Button 
-                  type="button" 
-                  variant="link" 
-                  className="h-auto p-0 text-xs text-primary" 
-                  onClick={() => {
-                    setIsCustomCategory(!isCustomCategory);
-                    setExpenseForm({ ...expenseForm, category: '' });
-                  }}
-                >
-                  {isCustomCategory ? "Выбрать из списка" : "+ Ввести новую категорию"}
-                </Button>
-              </div>
-              
-              {isCustomCategory ? (
-                <Input 
-                  placeholder="Введите название новой категории" 
-                  value={expenseForm.category} 
-                  onChange={e => setExpenseForm({ ...expenseForm, category: e.target.value })}
-                  required
-                />
-              ) : (
-                <Select 
-                  value={expenseForm.category} 
-                  onValueChange={(v) => {
-                    if (v === 'ADD_NEW') {
-                      setIsCustomCategory(true);
-                      setExpenseForm({ ...expenseForm, category: '' });
-                    } else {
-                      setExpenseForm({ ...expenseForm, category: v });
-                    }
-                  }}
-                >
-                  <SelectTrigger><SelectValue placeholder="Выберите категорию" /></SelectTrigger>
-                  <SelectContent>
-                    {allCategories.map(cat => (
-                      <SelectItem key={cat} value={cat}>{cat}</SelectItem>
-                    ))}
-                    <SelectItem value="ADD_NEW" className="text-primary font-medium cursor-pointer">+ Добавить новую...</SelectItem>
-                  </SelectContent>
-                </Select>
-              )}
-            </div>
-            <div className="space-y-2">
-              <Label>Дата</Label>
-              <Input type="date" value={expenseForm.date} onChange={e => setExpenseForm({ ...expenseForm, date: e.target.value })} required />
-            </div>
-            <DialogFooter>
-              <Button type="submit" disabled={submitLoading}>{submitLoading ? 'Сохранение...' : expenseForm.id ? 'Сохранить' : 'Добавить'}</Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
-
-      {/* Add Income Dialog */}
-      {/* Add Income Dialog */}
-      <Dialog open={isIncomeOpen} onOpenChange={setIsIncomeOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Зарегистрировать платёж</DialogTitle>
-            <DialogDescription>Добавьте новое поступление от участника</DialogDescription>
-          </DialogHeader>
-          <form onSubmit={handleAddIncome} className="space-y-4">
-            <div className="space-y-2">
-              <Label>Фильтр по программе</Label>
-              <Select value={incomeDialogProgramFilter} onValueChange={setIncomeDialogProgramFilter}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Все программы" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Все программы</SelectItem>
-                  {programs.map(prog => (
-                    <SelectItem key={prog.id} value={prog.id}>{prog.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Участник</Label>
-              <Select value={incomeForm.participant_id} onValueChange={(v) => setIncomeForm({ ...incomeForm, participant_id: v })} required>
-                <SelectTrigger>
-                  <SelectValue placeholder="Выберите участника" />
-                </SelectTrigger>
-                <SelectContent>
-                  {participants
-                    .filter(p => p.status === 'active')
-                    .filter(p => incomeDialogProgramFilter === 'all' || p.program_id === incomeDialogProgramFilter)
-                    .map(p => (
-                      <SelectItem key={p.id} value={p.id}>{p.name} ({p.program?.name || 'Нет программы'})</SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Account Selection */}
-            <div className="space-y-2">
-              <Label>Счет зачисления *</Label>
-              <Select value={incomeForm.account_id || ''} onValueChange={(v) => setIncomeForm({ ...incomeForm, account_id: v })} required>
-                <SelectTrigger><SelectValue placeholder="Выберите счет" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">— Не указан —</SelectItem>
-                  {accounts
-                    .filter(acc => {
-                        const participant = participants.find(p => p.id === incomeForm.participant_id);
-                        const programId = participant?.program_id;
-                        return !programId || acc.program_id === programId || acc.program_id === null;
-                    })
-                    .map(acc => (
-                      <SelectItem key={acc.id} value={acc.id}>{acc.name} ({acc.currency})</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="col-span-2 flex gap-4 items-end">
-                <div className="flex-1">
-                  <Label htmlFor="income-amount">Сумма</Label>
-                  <div className="relative">
-                    <Input
-                      id="income-amount"
-                      type="number"
-                      placeholder="0.00"
-                      value={incomeForm.amount}
-                      onChange={(e) => setIncomeForm({ ...incomeForm, amount: e.target.value })}
-                    />
-                    <div className="absolute right-1 top-1">
-                      <select
-                        value={currency}
-                        onChange={(e) => setCurrency(e.target.value as 'USD' | 'TJS')}
-                        className="h-8 border-none bg-transparent focus:ring-0 text-xs font-semibold text-muted-foreground cursor-pointer"
-                        style={{ outline: 'none' }}
-                      >
-                        <option value="USD">USD</option>
-                        <option value="TJS">TJS</option>
-                      </select>
-                    </div>
-                  </div>
-                </div>
-                {currency === 'TJS' && (
-                  <div className="w-24">
-                    <Label htmlFor="income-rate">Курс</Label>
-                    <Input
-                      id="income-rate"
-                      type="number"
-                      value={exchangeRate}
-                      onChange={(e) => setExchangeRate(e.target.value)}
-                    />
-                  </div>
-                )}
-              </div>
-              {currency === 'TJS' && incomeForm.amount && (
-                <div className="col-span-2 text-right">
-                  <p className="text-xs text-muted-foreground">
-                    ≈ ${(Number(incomeForm.amount) / Number(exchangeRate || 1)).toFixed(2)} USD
-                  </p>
-                </div>
-              )}
-
-              <div className="space-y-2 col-span-2">
-                <Label htmlFor="income-paid-date">Дата прихода (фактическая) *</Label>
-                <Input
-                  id="income-paid-date"
-                  type="date"
-                  value={incomeForm.paid_date}
-                  onChange={(e) => setIncomeForm({ ...incomeForm, paid_date: e.target.value })}
-                  required
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label>Месяц (целевой период)</Label>
-                <Input type="number" min="1" max="12" value={incomeForm.month} onChange={e => setIncomeForm({ ...incomeForm, month: e.target.value })} required />
-              </div>
-              <div className="space-y-2">
-                <Label>Год (целевой период)</Label>
-                <Input type="number" value={incomeForm.year} onChange={e => setIncomeForm({ ...incomeForm, year: e.target.value })} required />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <div className="flex justify-between items-center">
-                <Label htmlFor="income-notes">Комментарий (необязательно)</Label>
-                <span className="text-xs text-muted-foreground">{incomeForm.notes.length}/500</span>
-              </div>
-              <Textarea
-                id="income-notes"
-                placeholder="Добавьте комментарий к платежу, например: способ оплаты, номер транзакции..."
-                value={incomeForm.notes}
-                onChange={e => {
-                  if (e.target.value.length <= 500) {
-                    setIncomeForm({ ...incomeForm, notes: e.target.value })
-                  }
-                }}
-                className="min-h-[80px] resize-none"
-              />
-            </div>
-            <DialogFooter>
-              <Button type="submit" disabled={submitLoading}>{submitLoading ? 'Сохранение...' : 'Зарегистрировать'}</Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
-
-      {/* Account Dialog */}
-      <Dialog open={isAccountOpen} onOpenChange={setIsAccountOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{accountForm.id ? 'Редактировать счет' : 'Создать счет'}</DialogTitle>
-            <DialogDescription>Заполните информацию о счете</DialogDescription>
-          </DialogHeader>
-          <form onSubmit={handleAddAccount} className="space-y-4">
-            <div className="space-y-2">
-              <Label>Название счета</Label>
-              <Input value={accountForm.name} onChange={e => setAccountForm({ ...accountForm, name: e.target.value })} placeholder="Например: Касса (Сомони)" required />
-            </div>
-            
-            <div className="space-y-2">
-              <Label>Валюта</Label>
-              <Select value={accountForm.currency} onValueChange={(v) => setAccountForm({ ...accountForm, currency: v })}>
-                <SelectTrigger><SelectValue placeholder="Выберите валюту" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="USD">Доллар США (USD)</SelectItem>
-                  <SelectItem value="TJS">Таджикский сомони (TJS)</SelectItem>
-                  <SelectItem value="RUB">Российский рубль (RUB)</SelectItem>
-                  <SelectItem value="EUR">Евро (EUR)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Программа (необязательно)</Label>
-              <Select value={accountForm.program_id} onValueChange={(v) => setAccountForm({ ...accountForm, program_id: v })}>
-                <SelectTrigger><SelectValue placeholder="Без программы (Глобальный счет)" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Без программы (Глобальный счет)</SelectItem>
-                  {programs.map(prog => (
-                    <SelectItem key={prog.id} value={prog.id}>{prog.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Начальный остаток</Label>
-              <Input type="number" value={accountForm.initial_balance} onChange={e => setAccountForm({ ...accountForm, initial_balance: e.target.value })} placeholder="0.00" />
-            </div>
-
-            <div className="flex items-center space-x-2 mt-4">
-                <input 
-                    type="checkbox" 
-                    id="is_default_acc" 
-                    checked={accountForm.is_default}
-                    onChange={(e) => setAccountForm({ ...accountForm, is_default: e.target.checked })}
-                    className="rounded border-gray-300 text-primary focus:ring-primary"
-                />
-                <Label htmlFor="is_default_acc">Счет по умолчанию</Label>
-            </div>
-
-            <DialogFooter>
-              <Button type="submit" disabled={submitLoading}>{submitLoading ? 'Сохранение...' : accountForm.id ? 'Сохранить' : 'Создать'}</Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
-    </div >
+                  </li>
+                )
+              })}
+            </ul>
+          </>
+        )}
+      </Panel>
+    </div>
   )
 }
