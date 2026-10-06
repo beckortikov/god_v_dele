@@ -37,6 +37,8 @@ import { Segmented } from '@/components/erp/segmented'
 import { SearchInput } from '@/components/erp/search-input'
 import { EmptyState } from '@/components/erp/empty-state'
 import { TablePagination } from '@/components/erp/pagination'
+import { TotalsBar, TableSkeleton, rowActionsCls, dangerIconCls } from '@/components/erp/table-parts'
+import { CHART_COLORS, ChartTooltip, ChartLegend, axisProps, gridProps, compactTick } from '@/components/erp/chart'
 import { useConfirm } from '@/components/erp/confirm'
 import { useNavAction } from '@/components/app-shell/nav-context'
 import { PaymentSheet } from '@/components/finance/payment-sheet'
@@ -97,7 +99,6 @@ const STATUS: Record<IncomeItem['status'], { label: string; variant: 'success' |
   pending: { label: 'Ожидается', variant: 'warning' },
 }
 
-const CHART_COLORS = ['var(--chart-1)', 'var(--chart-2)', 'var(--chart-3)', 'var(--chart-4)', 'var(--chart-5)', 'var(--chart-6)']
 
 export function IncomeExpensesPage() {
   const confirm = useConfirm()
@@ -561,7 +562,7 @@ export function IncomeExpensesPage() {
                         ) : null}
                       </TableCell>
                       <TableCell className="text-right" onClick={e => e.stopPropagation()}>
-                        <div className="flex items-center justify-end gap-0.5 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 focus-within:opacity-100">
+                        <div className={rowActionsCls}>
                           <Button variant="ghost" size="icon-sm" aria-label="Изменить" className="text-muted-foreground" onClick={() => openExpense(item)}>
                             <Pencil />
                           </Button>
@@ -569,7 +570,7 @@ export function IncomeExpensesPage() {
                             variant="ghost"
                             size="icon-sm"
                             aria-label="Удалить"
-                            className="text-muted-foreground hover:bg-destructive-soft hover:text-destructive"
+                            className={dangerIconCls}
                             onClick={() => deleteExpense(item)}
                           >
                             <Trash2 />
@@ -710,34 +711,7 @@ function AccountFilter({ value, onChange, accounts }: { value: string; onChange:
   )
 }
 
-function TotalsBar({ label, value, tone }: { label: string; value: string; tone?: 'success' }) {
-  return (
-    <div className="flex items-center justify-between border-t bg-muted/40 px-3 py-2.5 text-sm sm:px-4">
-      <span className="text-muted-foreground">Итого · {label}</span>
-      <span className={cn('num font-semibold', tone === 'success' && 'text-success')}>{value}</span>
-    </div>
-  )
-}
 
-function TableSkeleton() {
-  return (
-    <Panel>
-      <div className="border-b px-4 py-2.5">
-        <Skeleton className="h-8 w-72" />
-      </div>
-      <div className="divide-y">
-        {Array.from({ length: 8 }).map((_, i) => (
-          <div key={i} className="flex items-center gap-4 px-4 py-3.5">
-            <Skeleton className="h-4 w-20" />
-            <Skeleton className="h-4 flex-1" />
-            <Skeleton className="h-4 w-24 max-sm:hidden" />
-            <Skeleton className="h-4 w-20" />
-          </div>
-        ))}
-      </div>
-    </Panel>
-  )
-}
 
 function AccountsGrid({
   accounts,
@@ -799,21 +773,6 @@ function AccountsGrid({
   )
 }
 
-function ChartTooltip({ active, payload, label }: any) {
-  if (!active || !payload?.length) return null
-  return (
-    <div className="rounded-lg border bg-popover px-3 py-2 text-xs shadow-pop">
-      {label && <p className="mb-1 font-medium">{label}</p>}
-      {payload.map((p: any) => (
-        <p key={p.name} className="flex items-center gap-2">
-          <span className="size-2 rounded-full" style={{ background: p.color || p.payload?.fill }} />
-          <span className="text-muted-foreground">{p.name}</span>
-          <span className="num ml-auto pl-3 font-medium">{formatMoney(p.value)}</span>
-        </p>
-      ))}
-    </div>
-  )
-}
 
 function Analytics({ income, expenses }: { income: IncomeItem[]; expenses: ExpenseItem[] }) {
   const monthly = React.useMemo(() => {
@@ -858,22 +817,18 @@ function Analytics({ income, expenses }: { income: IncomeItem[]; expenses: Expen
       <Panel className="p-4 sm:p-5">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
           <h2 className="font-semibold">Поступления и расходы по месяцам</h2>
-          <div className="flex items-center gap-4 text-xs text-muted-foreground">
-            <span className="flex items-center gap-1.5"><span className="size-2 rounded-full bg-chart-income" /> Поступления</span>
-            <span className="flex items-center gap-1.5"><span className="size-2 rounded-full bg-chart-expense" /> Расходы</span>
-          </div>
+          <ChartLegend
+            items={[
+              { label: 'Поступления', color: 'var(--chart-income)' },
+              { label: 'Расходы', color: 'var(--chart-expense)' },
+            ]}
+          />
         </div>
         <ResponsiveContainer width="100%" height={300}>
           <BarChart data={monthly} barGap={3} margin={{ left: -8, right: 4, top: 4 }}>
-            <CartesianGrid vertical={false} stroke="var(--border)" />
-            <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fill: 'var(--muted-foreground)', fontSize: 12 }} />
-            <YAxis
-              tickLine={false}
-              axisLine={false}
-              width={56}
-              tick={{ fill: 'var(--muted-foreground)', fontSize: 12 }}
-              tickFormatter={v => (Math.abs(v) >= 1000 ? `${Math.round(v / 1000)}k` : String(v))}
-            />
+            <CartesianGrid {...gridProps} />
+            <XAxis dataKey="label" {...axisProps} />
+            <YAxis {...axisProps} width={56} tickFormatter={compactTick} />
             <Tooltip content={<ChartTooltip />} cursor={{ fill: 'var(--muted)', opacity: 0.6 }} />
             <Bar dataKey="income" name="Поступления" fill="var(--chart-income)" radius={[4, 4, 0, 0]} maxBarSize={28} />
             <Bar dataKey="expenses" name="Расходы" fill="var(--chart-expense)" radius={[4, 4, 0, 0]} maxBarSize={28} />

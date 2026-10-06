@@ -14,6 +14,9 @@ import {
   ArrowDownLeft,
   ArrowUpRight,
   Check,
+  UserPlus,
+  CalendarPlus,
+  UserSquare2,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -64,6 +67,9 @@ export interface CreateAction {
 export const CREATE_ACTIONS: CreateAction[] = [
   { id: 'new-payment', label: 'Поступление', hint: 'Оплата от участника', page: 'income', icon: ArrowDownLeft, roles: ['admin', 'finance'] },
   { id: 'new-expense', label: 'Расход', hint: 'Списание со счёта', page: 'income', icon: ArrowUpRight, roles: ['admin', 'finance'] },
+  { id: 'new-participant', label: 'Участник', hint: 'Запись на программу', page: 'participants', icon: UserPlus, roles: ['admin', 'finance', 'wheels_manager'] },
+  { id: 'new-event', label: 'Мероприятие', hint: 'Оффлайн-событие', page: 'offline', icon: CalendarPlus, roles: ['admin', 'finance'] },
+  { id: 'new-employee', label: 'Сотрудник', hint: 'Карточка сотрудника', page: 'employees', icon: UserSquare2, roles: ['admin'] },
 ]
 
 const LAST_PAGES_KEY = 'nav-last-pages'
