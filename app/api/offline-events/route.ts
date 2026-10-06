@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-client'
+import { fetchRow, logAudit } from '@/lib/audit'
+import { changeSuffix, roundMoneyFields } from '@/lib/audit-labels'
 
 // GET - Fetch all offline events
 export async function GET() {
@@ -50,6 +52,16 @@ export async function POST(req: Request) {
 
         if (error) throw error
 
+        if (data?.[0]) {
+            await logAudit(req, {
+                table: 'offline_events',
+                recordId: data[0].id,
+                action: 'create',
+                summary: `Мероприятие «${data[0].name}»`,
+                after: data[0],
+            })
+        }
+
         return NextResponse.json({ data }, { status: 201 })
     } catch (error: any) {
         console.error('Error creating offline event:', error)
@@ -61,11 +73,14 @@ export async function POST(req: Request) {
 export async function PUT(req: Request) {
     try {
         const body = await req.json()
-        const { id, ...updateData } = body
+        const { id, ...rawUpdate } = body
 
         if (!id) {
             return NextResponse.json({ error: 'Event ID is required' }, { status: 400 })
         }
+
+        const updateData = roundMoneyFields(rawUpdate)
+        const before = await fetchRow('offline_events', id)
 
         const { data, error } = await supabaseAdmin
             .from('offline_events')
@@ -74,6 +89,17 @@ export async function PUT(req: Request) {
             .select()
 
         if (error) throw error
+
+        if (data?.[0]) {
+            await logAudit(req, {
+                table: 'offline_events',
+                recordId: id,
+                action: 'update',
+                summary: `Мероприятие «${data[0].name}»${changeSuffix(before, data[0])}`,
+                before,
+                after: data[0],
+            })
+        }
 
         return NextResponse.json({ data }, { status: 200 })
     } catch (error: any) {

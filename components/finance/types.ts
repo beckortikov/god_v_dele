@@ -28,6 +28,9 @@ export interface ExpenseItem {
   program_name?: string
   account_id?: string
   exchange_rate?: number
+  employee_id?: string
+  /** Set for expenses that belong to an offline event. */
+  event_id?: string
 }
 
 export interface Participant {

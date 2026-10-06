@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-client';
+import { fetchRow, logAudit } from '@/lib/audit';
+import { changeSuffix, stripSecrets } from '@/lib/audit-labels';
 
 // UPDATE - Update user (password, role, etc)
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -15,6 +17,8 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
             updateData.participant_id = null;
         }
 
+        const rawBefore = await fetchRow('app_users', id);
+
         const { data, error } = await supabaseAdmin
             .from('app_users')
             .update(updateData)
@@ -25,6 +29,22 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
         if (error) {
             console.error('Error updating user:', error);
             return NextResponse.json({ error: error.message }, { status: 500 });
+        }
+
+        if (data) {
+            // Passwords never go into the журнал; only the fact that it changed
+            const passwordChanged = !!rawBefore && 'password' in updateData && rawBefore.password !== data.password;
+            const before = stripSecrets(rawBefore);
+            const after = stripSecrets(data);
+            const parts = [changeSuffix(before, after).replace(/^: /, ''), passwordChanged ? 'пароль' : ''].filter(Boolean);
+            await logAudit(request, {
+                table: 'app_users',
+                recordId: id,
+                action: 'update',
+                summary: `Пользователь «${data.username}»${parts.length ? `: ${parts.join(', ')}` : ''}`,
+                before,
+                after,
+            });
         }
 
         return NextResponse.json(data);
@@ -38,6 +58,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
 export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
     try {
         const { id } = await params;
+        const before = stripSecrets(await fetchRow('app_users', id));
 
         const { error } = await supabaseAdmin
             .from('app_users')
@@ -47,6 +68,16 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
         if (error) {
             console.error('Error deleting user:', error);
             return NextResponse.json({ error: error.message }, { status: 500 });
+        }
+
+        if (before) {
+            await logAudit(request, {
+                table: 'app_users',
+                recordId: id,
+                action: 'delete',
+                summary: `Пользователь «${before.username}»`,
+                before,
+            });
         }
 
         return NextResponse.json({ success: true });

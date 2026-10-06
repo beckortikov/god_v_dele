@@ -1,16 +1,22 @@
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-client'
+import { fetchRow, logAudit } from '@/lib/audit'
+import { changeSuffix, monthLabel, rowMoney, roundMoneyFields } from '@/lib/audit-labels'
+import { fetchRowsWhere, logDeletedRows } from '@/app/api/audit/_server'
+import { plural } from '@/lib/format'
 
-// GET - Fetch all participants with their program details
-export async function GET() {
+// GET - Fetch all participants with their program details (optionally one by ?id=)
+export async function GET(req: Request) {
     try {
-        const { data, error } = await supabaseAdmin
+        const id = new URL(req.url).searchParams.get('id')
+        let query = supabaseAdmin
             .from('participants')
             .select(`
         *,
         program:programs(*)
       `)
-            .order('created_at', { ascending: false })
+        if (id) query = query.eq('id', id)
+        const { data, error } = await query.order('created_at', { ascending: false })
 
         if (error) throw error
 
@@ -24,7 +30,7 @@ export async function GET() {
 // POST - Create new participant
 export async function POST(req: Request) {
     try {
-        const body = await req.json()
+        const body = roundMoneyFields(await req.json())
 
         const { data, error } = await supabaseAdmin
             .from('participants')
@@ -35,6 +41,17 @@ export async function POST(req: Request) {
       `)
 
         if (error) throw error
+
+        if (data?.[0]) {
+            const { program, ...after } = data[0] as any
+            await logAudit(req, {
+                table: 'participants',
+                recordId: after.id,
+                action: 'create',
+                summary: `Участник «${after.name}»${program?.name ? `, ${program.name}` : ''}`,
+                after,
+            })
+        }
 
         return NextResponse.json({ data }, { status: 201 })
     } catch (error: any) {
@@ -47,11 +64,14 @@ export async function POST(req: Request) {
 export async function PUT(req: Request) {
     try {
         const body = await req.json()
-        const { id, ...updateData } = body
+        const { id, ...rawUpdate } = body
 
         if (!id) {
             return NextResponse.json({ error: 'Participant ID is required' }, { status: 400 })
         }
+
+        const updateData = roundMoneyFields(rawUpdate)
+        const before = await fetchRow('participants', id)
 
         const { data, error } = await supabaseAdmin
             .from('participants')
@@ -63,6 +83,18 @@ export async function PUT(req: Request) {
       `)
 
         if (error) throw error
+
+        if (data?.[0]) {
+            const { program, ...after } = data[0] as any
+            await logAudit(req, {
+                table: 'participants',
+                recordId: id,
+                action: 'update',
+                summary: `Участник «${after.name}»${changeSuffix(before, after)}`,
+                before,
+                after,
+            })
+        }
 
         return NextResponse.json({ data }, { status: 200 })
     } catch (error: any) {
@@ -81,12 +113,29 @@ export async function DELETE(req: Request) {
             return NextResponse.json({ error: 'Participant ID is required' }, { status: 400 })
         }
 
+        const before = await fetchRow('participants', id)
+        // monthly_payments are removed by ON DELETE CASCADE — keep them in the корзина too
+        const payments = before ? await fetchRowsWhere('monthly_payments', 'participant_id', id) : []
+
         const { error } = await supabaseAdmin
             .from('participants')
             .delete()
             .eq('id', id)
 
         if (error) throw error
+
+        if (before) {
+            await logAudit(req, {
+                table: 'participants',
+                recordId: id,
+                action: 'delete',
+                summary: `Участник «${before.name}»${payments.length ? ` и ${payments.length} ${plural(payments.length, ['платёж', 'платежа', 'платежей'])}` : ''}`,
+                before,
+            })
+            await logDeletedRows(req, 'monthly_payments', payments, p =>
+                `Платёж: ${before.name}, ${monthLabel(p.month_number, p.year)} — ${rowMoney(p, 'fact_amount')} (вместе с участником)`
+            )
+        }
 
         return NextResponse.json({ success: true }, { status: 200 })
     } catch (error: any) {

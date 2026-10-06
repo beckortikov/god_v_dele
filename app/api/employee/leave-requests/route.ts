@@ -1,5 +1,15 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-client';
+import { fetchRow, logAudit } from '@/lib/audit';
+import { enumLabel } from '@/lib/audit-labels';
+import { formatDate } from '@/lib/format';
+import { employeeName } from '@/app/api/audit/_server';
+
+async function leaveSummary(row: any) {
+    const name = await employeeName(row?.employee_id);
+    const kind = enumLabel('leave_requests', 'type', row?.type) ?? 'Заявка';
+    return `${kind}: ${name || 'сотрудник'}, ${formatDate(row?.start_date)} – ${formatDate(row?.end_date)}`;
+}
 
 export async function GET(request: Request) {
     try {
@@ -46,6 +56,10 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: error.message }, { status: 500 });
         }
 
+        if (data) {
+            await logAudit(request, { table: 'leave_requests', recordId: data.id, action: 'create', summary: await leaveSummary(data), after: data });
+        }
+
         return NextResponse.json(data);
     } catch (error: any) {
         return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
@@ -61,6 +75,8 @@ export async function PUT(request: Request) {
             return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
         }
 
+        const before = await fetchRow('leave_requests', id);
+
         const { data, error } = await supabaseAdmin
             .from('leave_requests')
             .update({ status, approved_by, updated_at: new Date().toISOString() })
@@ -70,6 +86,18 @@ export async function PUT(request: Request) {
 
         if (error) {
             return NextResponse.json({ error: error.message }, { status: 500 });
+        }
+
+        if (data) {
+            const statusText = enumLabel('leave_requests', 'status', data.status) ?? data.status;
+            await logAudit(request, {
+                table: 'leave_requests',
+                recordId: id,
+                action: 'update',
+                summary: `${await leaveSummary(data)} — ${String(statusText).toLowerCase()}`,
+                before,
+                after: data,
+            });
         }
 
         return NextResponse.json(data);

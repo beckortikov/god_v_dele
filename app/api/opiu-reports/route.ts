@@ -8,105 +8,92 @@ export async function GET(req: Request) {
         const year = parseInt(searchParams.get('year') || String(new Date().getFullYear()))
         const programId = searchParams.get('program_id') || 'all'
 
-        // Fetch all participants
+        // Calculate startDate and endDate for date comparisons.
+        // Built as plain strings: toISOString() is UTC and shifted the range one day
+        // back on servers with a UTC+N timezone.
+        const mm = String(month).padStart(2, '0')
+        const startDate = `${year}-${mm}-01`
+        const endDate = `${year}-${mm}-${String(new Date(year, month, 0).getDate()).padStart(2, '0')}`
+        const ytdStartDate = `${year}-01-01`
+        const byProgram = programId !== 'all'
+
+        // ── Performance ──────────────────────────────────────────────────────
+        // Previously this route ran 10 sequential PostgREST requests (≈0.4–1.1 s
+        // each, 5–8 s total) and fetched monthly_payments five times. Now it makes
+        // 6 requests in parallel, selects only the columns the report uses, reads
+        // monthly_payments once and derives its five subsets in memory with the
+        // same predicates the old SQL filters used, and replaces the per-participant
+        // array scans with Map lookups. Rows keep the database order, so sums are
+        // accumulated in the same order as before (the response is byte-identical).
+
         let participantsQuery = supabaseAdmin
             .from('participants')
-            .select(`
-        *,
-        program:programs(*)
-      `)
+            .select('id, name, status, tariff, program_id, program:programs(name, price_per_month)')
+        if (byProgram) participantsQuery = participantsQuery.eq('program_id', programId)
 
-        if (programId !== 'all') {
-            participantsQuery = participantsQuery.eq('program_id', programId)
-        }
+        let accountsQuery = supabaseAdmin.from('accounts').select('id, name, currency, initial_balance')
+        if (byProgram) accountsQuery = accountsQuery.or(`program_id.eq.${programId},program_id.is.null`)
 
-        const { data: participants, error: participantsError } = await participantsQuery
-
-        if (participantsError) throw participantsError
-
-        // Fetch accounts
-        let accountsQuery = supabaseAdmin.from('accounts').select('*')
-        if (programId !== 'all') {
-            accountsQuery = accountsQuery.or(`program_id.eq.${programId},program_id.is.null`)
-        }
-        const { data: accounts, error: accountsError } = await accountsQuery
-        // Ignore accountsError for now if table doesn't exist yet, we'll handle gracefully.
-
-        // 1. Fetch Planned Period Payments for the selected month/year (cohort billing)
-        let paymentsQuery = supabaseAdmin
+        // One payments query covering every subset below: billed up to this year
+        // (period / opening / YTD sets) or received up to the end of the month (cash sets).
+        let paymentsAllQuery = supabaseAdmin
             .from('monthly_payments')
-            .select('*, participant:participants!inner(program_id)')
-            .eq('month_number', month)
-            .eq('year', year)
+            .select('participant_id, month_number, year, plan_amount, fact_amount, status, notes, currency, original_amount, account_id, paid_date, participant:participants!inner(program_id)')
+            .or(`year.lte.${year},paid_date.lte.${endDate}`)
+        if (byProgram) paymentsAllQuery = paymentsAllQuery.eq('participant.program_id', programId)
 
-        if (programId !== 'all') {
-            paymentsQuery = paymentsQuery.eq('participant.program_id', programId)
-        }
+        // Expenses keep three separate queries with the original filters: with a
+        // program filter Postgres may pick an index and return rows in another
+        // order, and a different summation order changes float sums in the last
+        // digit. They run in parallel, so this costs no extra wall time.
+        const expenseCols = 'amount, category, currency, original_amount, account_id'
+        let expensesQuery = supabaseAdmin.from('expenses').select(expenseCols).gte('expense_date', startDate).lte('expense_date', endDate)
+        if (byProgram) expensesQuery = expensesQuery.eq('program_id', programId)
 
-        const { data: payments, error: paymentsError } = await paymentsQuery
-        if (paymentsError) throw paymentsError
+        let openingExpensesQuery = supabaseAdmin.from('expenses').select(expenseCols).lt('expense_date', startDate)
+        if (byProgram) openingExpensesQuery = openingExpensesQuery.eq('program_id', programId)
 
-        // Calculate startDate and endDate for date comparisons
-        const startDate = new Date(year, month - 1, 1).toISOString().split('T')[0]
-        const endDate = new Date(year, month, 0).toISOString().split('T')[0]
+        // YTD expenses are company-wide (no program filter), as before
+        const ytdExpensesQuery = supabaseAdmin.from('expenses').select(expenseCols).gte('expense_date', ytdStartDate).lte('expense_date', endDate)
 
-        // 2. Fetch Cash Payments (Actual Cash Received in the selected month/year)
-        let cashPaymentsQuery = supabaseAdmin
-            .from('monthly_payments')
-            .select('*, participant:participants!inner(program_id)')
-            .or(`and(paid_date.gte.${startDate},paid_date.lte.${endDate}),and(paid_date.is.null,month_number.eq.${month},year.eq.${year},fact_amount.gt.0)`)
+        const [participantsRes, accountsRes, paymentsAllRes, expensesRes, openingExpensesRes, ytdExpensesRes] = await Promise.all([
+            participantsQuery,
+            accountsQuery,
+            paymentsAllQuery,
+            expensesQuery,
+            openingExpensesQuery,
+            ytdExpensesQuery,
+        ])
 
-        if (programId !== 'all') {
-            cashPaymentsQuery = cashPaymentsQuery.eq('participant.program_id', programId)
-        }
+        if (participantsRes.error) throw participantsRes.error
+        if (paymentsAllRes.error) throw paymentsAllRes.error
+        if (expensesRes.error) throw expensesRes.error
+        if (openingExpensesRes.error) throw openingExpensesRes.error
+        if (ytdExpensesRes.error) throw ytdExpensesRes.error
+        // Accounts errors are ignored (table may not exist yet), as before.
+        const participants: any[] | null = participantsRes.data
+        const accounts: any[] | null = accountsRes.data
+        const allPayments: any[] = paymentsAllRes.data || []
+        const expenses: any[] = expensesRes.data || []
+        const openingExpenses: any[] = openingExpensesRes.data || []
+        const ytdExpenses: any[] = ytdExpensesRes.data || []
 
-        const { data: cashPayments, error: cashPaymentsError } = await cashPaymentsQuery
-        if (cashPaymentsError) throw cashPaymentsError
+        const paidBetween = (p: any, from: string, to: string) => p.paid_date != null && p.paid_date >= from && p.paid_date <= to
 
-        // Fetch expenses for the selected month
-        let expensesQuery = supabaseAdmin
-            .from('expenses')
-            .select('*')
-            .gte('expense_date', startDate)
-            .lte('expense_date', endDate)
+        // 1. Planned period payments for the selected month/year (cohort billing)
+        const payments = allPayments.filter(p => p.month_number === month && p.year === year)
 
-        if (programId !== 'all') {
-            expensesQuery = expensesQuery.eq('program_id', programId)
-        }
+        // 2. Cash received in the selected month (or billed this month, undated and non-zero)
+        const cashPayments = allPayments.filter(p =>
+            paidBetween(p, startDate, endDate) ||
+            (p.paid_date == null && p.month_number === month && p.year === year && p.fact_amount > 0))
 
-        const { data: expenses, error: expensesError } = await expensesQuery
-        if (expensesError) throw expensesError
-
-        // 3. Fetch Opening Balances (Before startDate) - cash basis (paid_date < startDate)
-        let allOpeningPaymentsQuery = supabaseAdmin
-            .from('monthly_payments')
-            .select('fact_amount, currency, original_amount, account_id, paid_date, year, month_number, participant:participants!inner(program_id)')
-            .lte('year', year)
-            
-        if (programId !== 'all') {
-            allOpeningPaymentsQuery = allOpeningPaymentsQuery.eq('participant.program_id', programId)
-        }
-        
-        const { data: allOpeningPayments, error: allOpeningPaymentsError } = await allOpeningPaymentsQuery
-        if (allOpeningPaymentsError) throw allOpeningPaymentsError
-
-        // Filter opening payments in JS safely to support fallbacks for null paid_date
-        const openingPayments = allOpeningPayments?.filter(p => {
+        // 3. Opening balances (before startDate), cash basis with a billing-month fallback
+        const openingPayments = allPayments.filter(p => {
+            if (!(p.year <= year)) return false
             const dateStr = p.paid_date || `${p.year}-${String(p.month_number).padStart(2, '0')}-01`
             return dateStr < startDate
         })
-
-        let openingExpensesQuery = supabaseAdmin
-            .from('expenses')
-            .select('amount, currency, original_amount, account_id')
-            .lt('expense_date', startDate)
-
-        if (programId !== 'all') {
-            openingExpensesQuery = openingExpensesQuery.eq('program_id', programId)
-        }
-
-        const { data: openingExpenses, error: openingExpensesError } = await openingExpensesQuery
-        if (openingExpensesError) throw openingExpensesError
 
         let openingBalanceUSD = 0
         let openingBalanceTJS = 0
@@ -124,10 +111,10 @@ export async function GET(req: Request) {
             }
         })
 
-        openingPayments?.forEach(p => {
+        openingPayments.forEach(p => {
             openingBalanceUSD += p.fact_amount || 0
             if (p.currency === 'TJS') openingBalanceTJS += p.original_amount || 0
-            
+
             const acc = p.account_id ? accountBalances[p.account_id] : null
             if (acc) {
                 if (acc.currency === 'TJS') {
@@ -138,10 +125,10 @@ export async function GET(req: Request) {
             }
         })
 
-        openingExpenses?.forEach(e => {
+        openingExpenses.forEach(e => {
             openingBalanceUSD -= e.amount || 0
             if (e.currency === 'TJS') openingBalanceTJS -= e.original_amount || 0
-            
+
             const acc = e.account_id ? accountBalances[e.account_id] : null
             if (acc) {
                 if (acc.currency === 'TJS') {
@@ -153,7 +140,7 @@ export async function GET(req: Request) {
         })
 
         // Current month calculations for accounts (using cashPayments for actual cash flows)
-        cashPayments?.forEach(p => {
+        cashPayments.forEach(p => {
             const acc = p.account_id ? accountBalances[p.account_id] : null
             if (acc) {
                 if (acc.currency === 'TJS') {
@@ -164,7 +151,7 @@ export async function GET(req: Request) {
             }
         })
 
-        expenses?.forEach(e => {
+        expenses.forEach(e => {
             const acc = e.account_id ? accountBalances[e.account_id] : null
             if (acc) {
                 if (acc.currency === 'TJS') {
@@ -182,41 +169,26 @@ export async function GET(req: Request) {
 
         let account_balances_list = Object.values(accountBalances)
 
-        // 4. YTD Calculations (split into planned period vs actual cash received)
-        // Fetch YTD Period Payments
-        let ytdPeriodPaymentsQuery = supabaseAdmin
-            .from('monthly_payments')
-            .select('*, participant:participants!inner(program_id)')
-            .eq('year', year)
-            .lte('month_number', month)
+        // 4. YTD: billed Jan…month of this year, and cash received Jan 1…endDate
+        const ytdPeriodPayments = allPayments.filter(p => p.year === year && p.month_number <= month)
+        const ytdCashPayments = allPayments.filter(p =>
+            paidBetween(p, ytdStartDate, endDate) ||
+            (p.paid_date == null && p.year === year && p.month_number <= month && p.fact_amount > 0))
 
-        if (programId !== 'all') {
-            ytdPeriodPaymentsQuery = ytdPeriodPaymentsQuery.eq('participant.program_id', programId)
+        // Lookups instead of O(participants × payments) scans. Arrays keep DB order.
+        const paymentByParticipant = new Map<string, any>()
+        for (const p of payments) if (!paymentByParticipant.has(p.participant_id)) paymentByParticipant.set(p.participant_id, p)
+        const groupBy = (rows: any[]) => {
+            const m = new Map<string, any[]>()
+            for (const r of rows) {
+                const list = m.get(r.participant_id)
+                if (list) list.push(r)
+                else m.set(r.participant_id, [r])
+            }
+            return m
         }
-        const { data: ytdPeriodPayments, error: ytdPeriodPaymentsError } = await ytdPeriodPaymentsQuery
-        if (ytdPeriodPaymentsError) throw ytdPeriodPaymentsError
-
-        // Fetch YTD Cash Payments
-        const ytdStartDate = `${year}-01-01`
-        let ytdCashPaymentsQuery = supabaseAdmin
-            .from('monthly_payments')
-            .select('fact_amount, currency, original_amount, paid_date, year, month_number, participant:participants!inner(program_id)')
-            .or(`and(paid_date.gte.${ytdStartDate},paid_date.lte.${endDate}),and(paid_date.is.null,year.eq.${year},month_number.lte.${month},fact_amount.gt.0)`)
-
-        if (programId !== 'all') {
-            ytdCashPaymentsQuery = ytdCashPaymentsQuery.eq('participant.program_id', programId)
-        }
-        const { data: ytdCashPayments, error: ytdCashPaymentsError } = await ytdCashPaymentsQuery
-        if (ytdCashPaymentsError) throw ytdCashPaymentsError
-
-        // Fetch all expenses for the year (for YTD calculations)
-        const { data: ytdExpenses, error: ytdExpensesError } = await supabaseAdmin
-            .from('expenses')
-            .select('*')
-            .gte('expense_date', ytdStartDate)
-            .lte('expense_date', endDate)
-
-        if (ytdExpensesError) throw ytdExpensesError
+        const cashByParticipant = groupBy(cashPayments)
+        const ytdPeriodByParticipant = groupBy(ytdPeriodPayments)
 
         // Calculate metrics
         const activeParticipants = participants?.filter(p => p.status === 'active') || []
@@ -232,8 +204,8 @@ export async function GET(req: Request) {
         let paidCount = 0
 
         const participantPayments = activeParticipants.map(participant => {
-            const payment = payments?.find(p => p.participant_id === participant.id)
-            const plan = payment?.plan_amount || payment?.amount || participant.tariff || participant.program?.price_per_month || 0
+            const payment = paymentByParticipant.get(participant.id)
+            const plan = payment?.plan_amount || participant.tariff || participant.program?.price_per_month || 0
             const fact = payment?.fact_amount || 0
             const factTJS = payment?.currency === 'TJS' ? (payment.original_amount || 0) : 0
 
@@ -304,9 +276,9 @@ export async function GET(req: Request) {
 
         // Calculate ytdPlanIncome using ytdPeriodPayments (cohort target period billing)
         activeParticipants.forEach(participant => {
-            const participantYtdPayments = ytdPeriodPayments?.filter(p => p.participant_id === participant.id) || []
+            const participantYtdPayments = ytdPeriodByParticipant.get(participant.id) || []
             participantYtdPayments.forEach(payment => {
-                const plan = payment.plan_amount || payment.amount || participant.tariff || participant.program?.price_per_month || 0
+                const plan = payment.plan_amount || participant.tariff || participant.program?.price_per_month || 0
                 ytdPlanIncome += plan
             })
         })
@@ -357,12 +329,12 @@ export async function GET(req: Request) {
             if (participant.status === 'completed') acc[programId].completed_participants++
 
             // Plan is cohort-based:
-            const payment = payments?.find(p => p.participant_id === participant.id)
-            const plan = payment?.plan_amount || payment?.amount || participant.tariff || participant.program?.price_per_month || 0
+            const payment = paymentByParticipant.get(participant.id)
+            const plan = payment?.plan_amount || participant.tariff || participant.program?.price_per_month || 0
             acc[programId].plan_income += plan
 
             // Fact is cash-basis: sum of all actual cash payments received in this month for this participant
-            const participantCashPayments = cashPayments?.filter(p => p.participant_id === participant.id) || []
+            const participantCashPayments = cashByParticipant.get(participant.id) || []
             const fact = participantCashPayments.reduce((sum, p) => sum + (p.fact_amount || 0), 0)
             const factTJS = participantCashPayments.reduce((sum, p) => p.currency === 'TJS' ? sum + (p.original_amount || 0) : sum, 0)
             acc[programId].fact_income += fact

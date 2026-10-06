@@ -1,5 +1,6 @@
 'use client'
 
+import { TelegramSettings } from '@/components/telegram/telegram-settings'
 import React, { useState, useEffect, useMemo } from 'react'
 import { toast } from 'sonner'
 import { Briefcase, GraduationCap, Pencil, Plus, ShieldCheck, Trash2, Users } from 'lucide-react'
@@ -577,6 +578,10 @@ export function UsersPage() {
                     </form>
                 </SheetContent>
             </Sheet>
+            <section className="mt-8">
+                <h2 className="mb-3 text-base font-semibold">Интеграции</h2>
+                <TelegramSettings />
+            </section>
         </PageContainer>
     )
 }

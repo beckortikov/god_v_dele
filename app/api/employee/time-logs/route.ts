@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-client';
+import { logAudit } from '@/lib/audit';
+import { employeeName } from '@/app/api/audit/_server';
 
 export async function GET(request: Request) {
     try {
@@ -49,6 +51,9 @@ export async function POST(request: Request) {
                 .select()
                 .single();
             if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+            // High-volume: compact summary, after-row only
+            const name = await employeeName(employee_id);
+            await logAudit(request, { table: 'time_logs', recordId: data?.id, action: 'create', summary: `Начало работы: ${name || 'сотрудник'}`, after: data });
             return NextResponse.json(data);
         }
         else if (action === 'end') {
@@ -78,6 +83,16 @@ export async function POST(request: Request) {
                 .single();
 
             if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+            const name = await employeeName(employee_id);
+            const h = Math.floor(durationMinutes / 60);
+            const m = durationMinutes % 60;
+            await logAudit(request, {
+                table: 'time_logs',
+                recordId: activeLog.id,
+                action: 'update',
+                summary: `Конец работы: ${name || 'сотрудник'}, ${h ? `${h} ч ` : ''}${m} мин`,
+                after: data,
+            });
             return NextResponse.json(data);
         }
 

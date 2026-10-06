@@ -132,6 +132,19 @@ export function ParticipantsPage() {
 
   useNavAction('new-participant', openCreate)
 
+  // «open-participant» from search or notifications: open the card once the list is loaded
+  const [pendingOpenId, setPendingOpenId] = React.useState<string | null>(null)
+  useNavAction('open-participant', payload => {
+    if (typeof payload?.id === 'string') setPendingOpenId(payload.id)
+  })
+  React.useEffect(() => {
+    if (!pendingOpenId || loading) return
+    const target = participants.find(p => p.id === pendingOpenId)
+    setPendingOpenId(null)
+    if (target) openDetail(target)
+    else toast.error('Участник не найден', { description: 'Возможно, его удалили' })
+  }, [pendingOpenId, loading, participants])
+
   // ---------- Derived data ----------
   const paymentsBy = React.useMemo(() => {
     const map = new Map<string, MonthlyPayment[]>()

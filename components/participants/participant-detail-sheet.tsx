@@ -7,10 +7,12 @@ import { Sheet, SheetBody, SheetContent, SheetDescription, SheetFooter, SheetHea
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { EmptyState } from '@/components/erp/empty-state'
+import { TelegramAdminPanel } from '@/components/telegram/telegram-admin-panel'
 import { MONTHS_RU, formatDate, formatMoney, formatNumber, plural } from '@/lib/format'
 import {
   PARTICIPANT_STATUS,
   monthlyTariff,
+  paymentPlan,
   paymentRowStatus,
   type MonthlyPayment,
   type Participant,
@@ -92,6 +94,8 @@ export function ParticipantDetailSheet({
                   value={`${p.program?.duration_months || 0} ${plural(p.program?.duration_months || 0, ['месяц', 'месяца', 'месяцев'])}`}
                 />
               </dl>
+
+              <TelegramAdminPanel key={p.id} participantId={p.id} participantName={p.name} participantPhone={p.phone} />
 
               <section>
                 <div className="mb-2 flex items-baseline justify-between">
@@ -193,7 +197,7 @@ function Detail({
 }
 
 function PaymentRow({ payment, participant }: { payment: MonthlyPayment; participant: Participant }) {
-  const plan = payment.amount || participant.tariff || participant.program?.price_per_month || 0
+  const plan = paymentPlan(payment, participant)
   const fact = payment.fact_amount || 0
   const deviation = fact - plan
   const status = paymentRowStatus(payment, participant)

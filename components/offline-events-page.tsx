@@ -87,6 +87,11 @@ export function OfflineEventsPage() {
     setSheetOpen(true)
   }
 
+  // «open-event» from search or notifications: the detail view loads the event itself
+  useNavAction('open-event', payload => {
+    if (typeof payload?.id === 'string') openDetail(payload.id)
+  })
+
   // «Создать → Событие» in the top bar
   useNavAction('new-event', () => {
     setSelectedEventId(null)

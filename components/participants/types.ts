@@ -21,11 +21,15 @@ export interface MonthlyPayment {
   id: string
   month_number: number
   year: number
-  amount: number
+  /** Plan for this month as stored by the API (`monthly_payments.plan_amount`). */
+  plan_amount?: number | null
+  /** @deprecated Not returned by the API; use `paymentPlan()`. Kept so old callers compile. */
+  amount?: number
   fact_amount: number
   status: string
   participant_id: string
   payment_month?: string
+  paid_date?: string | null
   notes?: string
 }
 
@@ -39,64 +43,120 @@ export const PARTICIPANT_STATUS: Record<Participant['status'], { label: string; 
 export const monthlyTariff = (p: Participant) => p.tariff || p.program?.price_per_month || 0
 
 /**
- * Has unpaid past months (no record, or fact < plan) from the start month up to,
- * but not including, the current month. `payments` may be all payments or only
- * this participant's: they are filtered by participant id either way.
+ * Plan of one monthly payment row: the row's own `plan_amount`; the participant's
+ * tariff (then program price) only when the row has no plan stored.
  */
-export function checkOverdue(participant: Participant, payments: MonthlyPayment[]) {
-  if (!participant.start_date) return false
-
-  const start = new Date(participant.start_date)
-  const now = new Date()
-  const pPayments = payments.filter(p => p.participant_id === participant.id)
-
-  const currentDate = new Date(start.getFullYear(), start.getMonth(), 1)
-  const firstDayCurrentMonth = new Date(now.getFullYear(), now.getMonth(), 1)
-
-  while (currentDate < firstDayCurrentMonth) {
-    const month = currentDate.getMonth() + 1
-    const year = currentDate.getFullYear()
-
-    const payment = pPayments.find(p => p.month_number === month && p.year === year)
-    const plan = payment?.amount || participant.tariff || participant.program?.price_per_month || 0
-    const fact = payment?.fact_amount || 0
-
-    if (!payment || fact < plan) return true
-
-    currentDate.setMonth(currentDate.getMonth() + 1)
-  }
-
-  return false
+export function paymentPlan(payment: MonthlyPayment | undefined, participant: Participant) {
+  const stored = payment?.plan_amount
+  return stored != null ? Number(stored) || 0 : monthlyTariff(participant)
 }
 
-/** Paid something, but less than the plan, in any month. */
+/** Money compared in whole cents, so 999.9999999999999 (TJS→USD conversion) counts as 1000. */
+const toCents = (v: number | null | undefined) => Math.round((Number(v) || 0) * 100)
+
+/** Fact covers the plan (to the cent). A zero plan is covered by definition. */
+export const isFullyPaid = (fact: number | null | undefined, plan: number) => toCents(fact) >= toCents(plan)
+
+/**
+ * Only active participants are chased for money. Archived and completed ones are
+ * shown neutrally: no «Просрочено» / «Частично» flags and not in those counts.
+ */
+export const isBillable = (p: Participant) => p.status === 'active'
+
+const ym = (year: number, month: number) => year * 12 + (month - 1) // month 1–12 → absolute month index
+
+export interface OverdueMonth {
+  year: number
+  month: number
+  plan: number
+  fact: number
+  /** `missing`: no payment row for a month that should have been billed; `underpaid`: fact < plan. */
+  reason: 'missing' | 'underpaid'
+}
+
+/**
+ * Past months (strictly before the current month) that are not fully paid.
+ *
+ * A month is considered billed when either
+ *  - it has a payment row (whatever the program duration), or
+ *  - it falls inside the program: from the start month for `duration_months`
+ *    months (no limit when the duration is unknown).
+ * A billed month is overdue when it has no row (plan = tariff) or fact < plan
+ * (compared in cents). Months with a zero plan are never overdue.
+ * Non-active participants have no overdue months.
+ *
+ * `payments` may be all payments or only this participant's.
+ */
+export function overdueMonths(participant: Participant, payments: MonthlyPayment[], now = new Date()): OverdueMonth[] {
+  if (!isBillable(participant) || !participant.start_date) return []
+  const start = new Date(participant.start_date)
+  if (Number.isNaN(start.getTime())) return []
+
+  const current = ym(now.getFullYear(), now.getMonth() + 1)
+  const first = ym(start.getFullYear(), start.getMonth() + 1)
+  const duration = participant.program?.duration_months || 0
+  const programEnd = duration > 0 ? first + duration : Infinity // exclusive
+
+  const byMonth = new Map<number, MonthlyPayment>()
+  for (const p of payments) {
+    if (p.participant_id !== participant.id) continue
+    const k = ym(p.year, p.month_number)
+    if (!byMonth.has(k)) byMonth.set(k, p)
+  }
+
+  const months = new Set<number>()
+  for (let k = first; k < Math.min(current, programEnd); k++) months.add(k)
+  for (const k of byMonth.keys()) if (k < current) months.add(k)
+
+  const out: OverdueMonth[] = []
+  for (const k of Array.from(months).sort((a, b) => a - b)) {
+    const row = byMonth.get(k)
+    const plan = paymentPlan(row, participant)
+    const fact = Number(row?.fact_amount) || 0
+    if (toCents(plan) <= 0 || isFullyPaid(fact, plan)) continue
+    out.push({ year: Math.floor(k / 12), month: (k % 12) + 1, plan, fact, reason: row ? 'underpaid' : 'missing' })
+  }
+  return out
+}
+
+/** Has at least one unpaid or underpaid past month (see `overdueMonths`). */
+export function checkOverdue(participant: Participant, payments: MonthlyPayment[]) {
+  return overdueMonths(participant, payments).length > 0
+}
+
+/** Active participant who paid something, but less than the plan, in any month. */
 export function checkPartial(participant: Participant, payments: MonthlyPayment[]) {
-  const pPayments = payments.filter(p => p.participant_id === participant.id)
-  return pPayments.some(p => {
-    const plan = p.amount || participant.tariff || participant.program?.price_per_month || 0
-    const fact = p.fact_amount || 0
-    return fact > 0 && fact < plan
+  if (!isBillable(participant)) return false
+  return payments.some(p => {
+    if (p.participant_id !== participant.id) return false
+    const fact = Number(p.fact_amount) || 0
+    return fact > 0 && !isFullyPaid(fact, paymentPlan(p, participant))
   })
 }
 
-/** The current month's payment record has status «paid». */
-export function checkPaidThisMonth(participant: Participant, payments: MonthlyPayment[]) {
-  const now = new Date()
+/** The current month's row is covered in full (by amount; `status` is not reliable). */
+export function checkPaidThisMonth(participant: Participant, payments: MonthlyPayment[], now = new Date()) {
   const currentMonth = now.getMonth() + 1
   const currentYear = now.getFullYear()
   const payment = payments.find(
     pay => pay.participant_id === participant.id && pay.month_number === currentMonth && pay.year === currentYear
   )
-  return payment?.status === 'paid'
+  if (!payment) return false
+  const fact = Number(payment.fact_amount) || 0
+  return fact > 0 && isFullyPaid(fact, paymentPlan(payment, participant))
 }
 
 /** Status of one monthly payment row, as shown in the history. */
 export function paymentRowStatus(payment: MonthlyPayment, participant: Participant) {
-  const plan = payment.amount || participant.tariff || participant.program?.price_per_month || 0
-  const fact = payment.fact_amount || 0
-  if (payment.status === 'overdue') return { label: 'Просрочен', variant: 'destructive' as const }
-  if (fact >= plan && fact > 0) return { label: 'Оплачен', variant: 'success' as const }
-  if (fact > 0 && fact < plan) return { label: 'Частично', variant: 'warning' as const }
+  const plan = paymentPlan(payment, participant)
+  const fact = Number(payment.fact_amount) || 0
+  if (fact > 0 && isFullyPaid(fact, plan)) return { label: 'Оплачен', variant: 'success' as const }
+  if (fact > 0) return { label: 'Частично', variant: 'warning' as const }
+  // Past unpaid months are overdue only while the participant is active
+  const now = new Date()
+  const isPast = ym(payment.year, payment.month_number) < ym(now.getFullYear(), now.getMonth() + 1)
+  if (isBillable(participant) && toCents(plan) > 0 && (isPast || payment.status === 'overdue'))
+    return { label: 'Просрочен', variant: 'destructive' as const }
   return { label: 'Ожидается', variant: 'secondary' as const }
 }
 
@@ -104,19 +164,32 @@ export interface ParticipantSummary {
   overdue: boolean
   partial: boolean
   paidThisMonth: boolean
+  /** Rows paid in full / all rows. */
   paidCount: number
   totalCount: number
   collected: number
+  /** Overdue past months: no row at all vs a row with fact < plan. */
+  overdueMissing: number
+  overdueUnderpaid: number
+  /** Sum of plan − fact over the overdue months. */
+  overdueDebt: number
 }
 
 export function summarize(participant: Participant, own: MonthlyPayment[]): ParticipantSummary {
+  const months = overdueMonths(participant, own)
   return {
-    overdue: checkOverdue(participant, own),
+    overdue: months.length > 0,
     partial: checkPartial(participant, own),
     paidThisMonth: checkPaidThisMonth(participant, own),
-    paidCount: own.filter(p => p.status === 'paid' || (p.fact_amount || 0) >= (p.amount || 0)).length,
+    paidCount: own.filter(p => {
+      const fact = Number(p.fact_amount) || 0
+      return fact > 0 && isFullyPaid(fact, paymentPlan(p, participant))
+    }).length,
     totalCount: own.length,
-    collected: own.reduce((acc, cur) => acc + (cur.fact_amount || 0), 0),
+    collected: own.reduce((acc, cur) => acc + (Number(cur.fact_amount) || 0), 0),
+    overdueMissing: months.filter(m => m.reason === 'missing').length,
+    overdueUnderpaid: months.filter(m => m.reason === 'underpaid').length,
+    overdueDebt: months.reduce((s, m) => s + (m.plan - m.fact), 0),
   }
 }
 

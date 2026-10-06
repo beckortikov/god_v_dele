@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-client';
+import { logAudit } from '@/lib/audit';
+import { personName, roundMoneyFields } from '@/lib/audit-labels';
 
 export async function GET() {
     try {
@@ -22,7 +24,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
     try {
-        const body = await request.json();
+        const body = roundMoneyFields(await request.json());
 
         // Basic validation could go here
 
@@ -35,6 +37,16 @@ export async function POST(request: Request) {
         if (error) {
             console.error('Error creating employee:', error);
             return NextResponse.json({ error: error.message }, { status: 500 });
+        }
+
+        if (data) {
+            await logAudit(request, {
+                table: 'employees',
+                recordId: data.id,
+                action: 'create',
+                summary: `Сотрудник «${personName(data)}»${data.position ? `, ${data.position}` : ''}`,
+                after: data,
+            });
         }
 
         return NextResponse.json(data);

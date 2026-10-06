@@ -1,5 +1,10 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-client';
+import { logAudit } from '@/lib/audit';
+import { roundMoney } from '@/lib/money';
+import { monthLabel } from '@/lib/audit-labels';
+import { formatMoney } from '@/lib/format';
+import { employeeName } from '@/app/api/audit/_server';
 
 export async function GET(request: Request) {
     try {
@@ -60,7 +65,7 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Employee not found' }, { status: 404 });
         }
 
-        const baseSalary = Number(employee.base_salary);
+        const baseSalary = roundMoney(employee.base_salary);
 
         // 2. Calculate Working Days (Mon-Fri) in the month
         const startDate = new Date(year, month_number - 1, 1);
@@ -103,7 +108,8 @@ export async function POST(request: Request) {
         }
 
         // 5. Calculate Total
-        const totalAmount = baseSalary + Number(bonus_amount) - deductionAmount;
+        const bonusAmount = roundMoney(bonus_amount);
+        const totalAmount = roundMoney(baseSalary + bonusAmount - deductionAmount);
 
         // 6. Insert Record
         const payload = {
@@ -111,7 +117,7 @@ export async function POST(request: Request) {
             month_number,
             year,
             base_salary: baseSalary,
-            bonus_amount: Number(bonus_amount),
+            bonus_amount: bonusAmount,
             deduction_amount: deductionAmount,
             total_amount: totalAmount,
             status: body.status || 'pending'
@@ -130,6 +136,17 @@ export async function POST(request: Request) {
                 return NextResponse.json({ error: 'Payroll record already exists for this month' }, { status: 409 });
             }
             return NextResponse.json({ error: error.message }, { status: 500 });
+        }
+
+        if (data) {
+            const name = await employeeName(employee_id);
+            await logAudit(request, {
+                table: 'payroll',
+                recordId: data.id,
+                action: 'create',
+                summary: `Зарплата: ${name || 'сотрудник'}, ${monthLabel(month_number, year)} — ${formatMoney(data.total_amount, 'TJS')}`,
+                after: data,
+            });
         }
 
         return NextResponse.json(data);

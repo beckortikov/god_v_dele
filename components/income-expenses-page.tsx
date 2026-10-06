@@ -11,7 +11,9 @@ import {
   Pencil,
   Plus,
   Receipt,
+  Repeat,
   Trash2,
+  Upload,
   Wallet,
   Inbox,
 } from 'lucide-react'
@@ -44,6 +46,9 @@ import { useNavAction } from '@/components/app-shell/nav-context'
 import { PaymentSheet } from '@/components/finance/payment-sheet'
 import { ExpenseSheet, DEFAULT_CATEGORIES } from '@/components/finance/expense-sheet'
 import { AccountSheet } from '@/components/finance/account-sheet'
+import { RepeatExpensesSheet } from '@/components/finance/repeat-expenses-sheet'
+import { ImportSheet, type ImportMode } from '@/components/finance/import-sheet'
+import { TransfersPanel } from '@/components/finance/transfers-panel'
 import {
   readPref,
   writePref,
@@ -128,6 +133,11 @@ export function IncomeExpensesPage() {
   const [editingExpense, setEditingExpense] = React.useState<ExpenseItem | null>(null)
   const [accountOpen, setAccountOpen] = React.useState(false)
   const [editingAccount, setEditingAccount] = React.useState<Account | null>(null)
+  const [repeatOpen, setRepeatOpen] = React.useState(false)
+  const [importOpen, setImportOpen] = React.useState(false)
+  const [importMode, setImportMode] = React.useState<ImportMode>('expenses')
+  // Expense requested via deep link (search), opened once the data is loaded
+  const [pendingExpenseId, setPendingExpenseId] = React.useState<string | null>(null)
 
   React.useEffect(() => {
     try {
@@ -202,6 +212,8 @@ export function IncomeExpensesPage() {
           program_name: progName(e.program_id) ?? undefined,
           account_id: e.account_id,
           exchange_rate: e.exchange_rate,
+          employee_id: e.employee_id ?? undefined,
+          event_id: e.event_id ?? undefined,
         }))
       )
       setParticipants(participantsRes.data || [])
@@ -226,6 +238,24 @@ export function IncomeExpensesPage() {
     setEditingExpense(null)
     setExpenseOpen(true)
   })
+  useNavAction('open-expense', payload => {
+    const id = payload?.id
+    if (id == null || id === '') return
+    setTab('expenses')
+    setPendingExpenseId(String(id))
+  })
+
+  React.useEffect(() => {
+    if (!pendingExpenseId || loading) return
+    const item = expenseData.find(e => String(e.id) === pendingExpenseId)
+    setPendingExpenseId(null)
+    if (item) {
+      setEditingExpense(item)
+      setExpenseOpen(true)
+    } else {
+      toast.error('Расход не найден', { description: 'Возможно, его уже удалили' })
+    }
+  }, [pendingExpenseId, loading, expenseData])
 
   // ---------- Derived data ----------
   const range = periodRange(period)
@@ -336,6 +366,11 @@ export function IncomeExpensesPage() {
     setExpenseOpen(true)
   }
 
+  const openImport = (mode: ImportMode) => {
+    setImportMode(mode)
+    setImportOpen(true)
+  }
+
   const openAccount = (acc: Account | null) => {
     setEditingAccount(acc)
     setAccountOpen(true)
@@ -431,6 +466,11 @@ export function IncomeExpensesPage() {
           <PanelToolbar>
             <SearchInput value={query} onChange={setQuery} placeholder="Участник или комментарий" className="sm:w-72" />
             <AccountFilter value={accountFilter} onChange={setAccountFilter} accounts={scopedAccounts} />
+            <div className="ml-auto flex items-center gap-2">
+              <Button size="sm" variant="ghost" onClick={() => openImport('payments')}>
+                <Upload /> Импорт
+              </Button>
+            </div>
           </PanelToolbar>
           {visibleIncome.length === 0 ? (
             <EmptyState
@@ -520,6 +560,14 @@ export function IncomeExpensesPage() {
               </SelectContent>
             </Select>
             <AccountFilter value={accountFilter} onChange={setAccountFilter} accounts={scopedAccounts} />
+            <div className="ml-auto flex items-center gap-2">
+              <Button size="sm" variant="ghost" onClick={() => openImport('expenses')}>
+                <Upload /> Импорт
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => setRepeatOpen(true)}>
+                <Repeat /> Повторить расходы
+              </Button>
+            </div>
           </PanelToolbar>
           {visibleExpenses.length === 0 ? (
             <EmptyState
@@ -587,7 +635,14 @@ export function IncomeExpensesPage() {
           )}
         </Panel>
       ) : tab === 'accounts' ? (
-        <AccountsGrid accounts={scopedAccounts} onAdd={() => openAccount(null)} onEdit={openAccount} onDelete={deleteAccount} />
+        <div className="flex flex-col gap-3">
+          <AccountsGrid accounts={scopedAccounts} onAdd={() => openAccount(null)} onEdit={openAccount} onDelete={deleteAccount} />
+          <TransfersPanel
+            accounts={accounts}
+            visibleAccountIds={program === 'all' ? undefined : scopedAccounts.map(a => a.id)}
+            onChanged={fetchData}
+          />
+        </div>
       ) : (
         <Analytics income={scopedIncome} expenses={scopedExpenses} />
       )}
@@ -611,6 +666,19 @@ export function IncomeExpensesPage() {
         onSaved={fetchData}
       />
       <AccountSheet open={accountOpen} onOpenChange={setAccountOpen} editing={editingAccount} programs={programs} onSaved={fetchData} />
+      <RepeatExpensesSheet open={repeatOpen} onOpenChange={setRepeatOpen} expenses={expenseData} accounts={accounts} onSaved={fetchData} />
+      <ImportSheet
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        mode={importMode}
+        accounts={accounts}
+        programs={programs}
+        categories={categories}
+        participants={participants}
+        payments={incomeData}
+        expenses={expenseData}
+        onSaved={fetchData}
+      />
     </PageContainer>
   )
 }

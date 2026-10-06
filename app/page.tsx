@@ -1,10 +1,11 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
-import { getAllowedPages, getDefaultPage, type UserRole } from '@/lib/navigation'
+import { useState, useEffect, useMemo, type ReactNode } from 'react'
+import { PAGES, getAllowedPages, getDefaultPage, type UserRole } from '@/lib/navigation'
 import { NavProvider, useNav } from '@/components/app-shell/nav-context'
 import { AppShell } from '@/components/app-shell/app-shell'
 import { ConfirmProvider } from '@/components/erp/confirm'
+import { ErrorBoundary } from '@/components/erp/error-boundary'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { installActorHeaders } from '@/lib/client-actor'
 import { Dashboard } from '@/components/dashboard'
@@ -97,12 +98,20 @@ function AuthedApp({ session, onLogout }: { session: SessionUser; onLogout: () =
       <TooltipProvider>
         <ConfirmProvider>
           <AppShell role={session.role} userName={session.fullName} onLogout={onLogout}>
-            <PageRouter session={session} />
+            <PageBoundary>
+              <PageRouter session={session} />
+            </PageBoundary>
           </AppShell>
         </ConfirmProvider>
       </TooltipProvider>
     </NavProvider>
   )
+}
+
+/** Keyed by page: a crash stays inside one page and clears when the user navigates away. */
+function PageBoundary({ children }: { children: ReactNode }) {
+  const { page } = useNav()
+  return <ErrorBoundary key={page} scope={PAGES[page]?.title ?? page}>{children}</ErrorBoundary>
 }
 
 function PageRouter({ session }: { session: SessionUser }) {

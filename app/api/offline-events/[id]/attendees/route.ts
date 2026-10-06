@@ -1,5 +1,8 @@
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-client'
+import { logAudit } from '@/lib/audit'
+import { rowMoney, roundMoneyFields } from '@/lib/audit-labels'
+import { eventName, participantNames } from '@/app/api/audit/_server'
 
 export async function GET(
     req: Request,
@@ -64,7 +67,7 @@ export async function POST(
 
             const res = await supabaseAdmin
                 .from('event_attendees')
-                .insert(attendeesData)
+                .insert(roundMoneyFields(attendeesData))
                 .select()
             
             data = res.data
@@ -88,7 +91,7 @@ export async function POST(
 
             const res = await supabaseAdmin
                 .from('event_attendees')
-                .insert([attendeeData])
+                .insert([roundMoneyFields(attendeeData)])
                 .select()
             
             data = res.data
@@ -96,6 +99,24 @@ export async function POST(
         }
 
         if (error) throw error
+
+        if (data?.length) {
+            const [evName, names] = await Promise.all([
+                eventName(id),
+                participantNames(data.map((a: any) => a.participant_id)),
+            ])
+            await Promise.all(
+                data.map((a: any) =>
+                    logAudit(req, {
+                        table: 'event_attendees',
+                        recordId: a.id,
+                        action: 'create',
+                        summary: `Гость «${names[a.participant_id] || a.guest_name || 'без имени'}» на «${evName || 'мероприятие'}» ${rowMoney(a, 'payment_received')}`,
+                        after: a,
+                    })
+                )
+            )
+        }
 
         return NextResponse.json({ data }, { status: 201 })
     } catch (error: any) {

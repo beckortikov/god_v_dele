@@ -1,5 +1,11 @@
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-client'
+import { logAudit, fetchRow } from '@/lib/audit'
+import { participantName } from '@/app/api/audit/_server'
+
+// High-volume: the журнал keeps a compact summary and only the saved row
+const wheelSummary = async (row: any) =>
+    `Колесо бизнеса: ${(await participantName(row?.participant_id)) || 'участник'}, ${String(row?.month ?? '').toLowerCase()} ${row?.year ?? ''}`
 
 // GET - Fetch business wheel entries
 export async function GET(req: Request) {
@@ -53,6 +59,12 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: 'Invalid year' }, { status: 400 })
         }
 
+        const { data: existing } = await supabaseAdmin
+            .from('business_wheel_entries')
+            .select('id')
+            .eq('participant_id', participant_id).eq('year', parsedYear).eq('month', month)
+            .maybeSingle()
+
         const { data, error } = await supabaseAdmin
             .from('business_wheel_entries')
             .upsert(
@@ -74,6 +86,16 @@ export async function POST(req: Request) {
             throw error
         }
 
+        if (data?.[0]) {
+            await logAudit(req, {
+                table: 'business_wheel_entries',
+                recordId: data[0].id,
+                action: existing ? 'update' : 'create',
+                summary: await wheelSummary(data[0]),
+                after: data[0],
+            })
+        }
+
         return NextResponse.json({ data }, { status: 200 })
     } catch (error: any) {
         console.error('API Error saving business wheel:', error)
@@ -91,12 +113,19 @@ export async function DELETE(req: Request) {
             return NextResponse.json({ error: 'id is required' }, { status: 400 })
         }
 
+        // Keep the full row on delete so it can be restored from the корзина
+        const before = await fetchRow('business_wheel_entries', id)
+
         const { error } = await supabaseAdmin
             .from('business_wheel_entries')
             .delete()
             .eq('id', id)
 
         if (error) throw error
+
+        if (before) {
+            await logAudit(req, { table: 'business_wheel_entries', recordId: id, action: 'delete', summary: await wheelSummary(before), before })
+        }
 
         return NextResponse.json({ success: true }, { status: 200 })
     } catch (error: any) {

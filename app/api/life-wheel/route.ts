@@ -1,5 +1,11 @@
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-client'
+import { logAudit, fetchRow } from '@/lib/audit'
+import { participantName } from '@/app/api/audit/_server'
+
+// High-volume: the журнал keeps a compact summary and only the saved row
+const wheelSummary = async (row: any) =>
+    `Колесо жизни: ${(await participantName(row?.participant_id)) || 'участник'}, ${row?.period_label === 'template' ? 'шаблон' : row?.period_label ?? ''}`
 
 // GET - Fetch life wheel entry for a participant/period
 export async function GET(req: Request) {
@@ -39,6 +45,12 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
         }
 
+        const { data: existing } = await supabaseAdmin
+            .from('life_wheel_entries')
+            .select('id')
+            .eq('participant_id', participant_id).eq('period_type', period_type).eq('period_label', period_label)
+            .maybeSingle()
+
         const { data, error } = await supabaseAdmin
             .from('life_wheel_entries')
             .upsert(
@@ -60,6 +72,16 @@ export async function POST(req: Request) {
             throw error
         }
 
+        if (data?.[0]) {
+            await logAudit(req, {
+                table: 'life_wheel_entries',
+                recordId: data[0].id,
+                action: existing ? 'update' : 'create',
+                summary: await wheelSummary(data[0]),
+                after: data[0],
+            })
+        }
+
         return NextResponse.json({ data }, { status: 200 })
     } catch (error: any) {
         console.error('API Error saving life wheel:', error)
@@ -77,12 +99,19 @@ export async function DELETE(req: Request) {
             return NextResponse.json({ error: 'id is required' }, { status: 400 })
         }
 
+        // Keep the full row on delete so it can be restored from the корзина
+        const before = await fetchRow('life_wheel_entries', id)
+
         const { error } = await supabaseAdmin
             .from('life_wheel_entries')
             .delete()
             .eq('id', id)
 
         if (error) throw error
+
+        if (before) {
+            await logAudit(req, { table: 'life_wheel_entries', recordId: id, action: 'delete', summary: await wheelSummary(before), before })
+        }
 
         return NextResponse.json({ success: true }, { status: 200 })
     } catch (error: any) {

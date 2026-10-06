@@ -174,6 +174,8 @@ export function EventExpenseSheet({
                   onCurrencyChange={setCurrency}
                   rate={rate}
                   onRateChange={setRate}
+                  rateDate={form.expense_date}
+                  rateLocked={!!editing && editing.currency === 'TJS' && num(editing.exchange_rate) > 1}
                   invalid={!!errors.amount}
                 />
               </Field>

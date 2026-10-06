@@ -272,6 +272,8 @@ export function ExpenseSheet({
                   onCurrencyChange={setCurrency}
                   rate={rate}
                   onRateChange={setRate}
+                  rateDate={form.date}
+                  rateLocked={!!editing && editing.currency === 'TJS' && Number(editing.exchange_rate) > 1}
                   invalid={!!errors.amount}
                 />
               </Field>

@@ -25,14 +25,14 @@ interface MonthlyPayment {
   id: string
   month_number: number
   year: number
-  amount: number // Plan amount for this payment
+  plan_amount: number | null // Plan for this month as stored (API field)
   fact_amount: number // Fact amount paid
   status: string
   notes?: string
   participant: {
     id: string
     name: string
-    tariff?: number
+    tariff?: number | null
   }
   program?: {
     id: string
@@ -47,6 +47,7 @@ interface Expense {
   amount: number
   expense_date: string
   event_id?: string | null
+  program_id?: string | null
 }
 
 interface Forecast {
@@ -74,8 +75,16 @@ const STATUS: Record<
   pending: { label: 'Ожидается', variant: 'secondary' },
 }
 
-/** Plan of a single payment: the same fallback chain as before the redesign. */
-const planOf = (p: MonthlyPayment) => p.amount || p.participant?.tariff || p.program?.price_per_month || 0
+/**
+ * Plan of a single payment: the row's own `plan_amount`. The participant's tariff
+ * (then the program price) is used only when the row has no plan stored (null).
+ */
+const planOf = (p: MonthlyPayment) =>
+  p.plan_amount != null ? Number(p.plan_amount) || 0 : p.participant?.tariff || p.program?.price_per_month || 0
+
+/** Calendar year of an ISO date string, without timezone shifts. */
+const yearOf = (iso: string) => Number(iso.slice(0, 4))
+const monthOf = (iso: string) => Number(iso.slice(5, 7))
 
 const num = 'num text-right whitespace-nowrap'
 
@@ -89,6 +98,7 @@ export function PlanFactPage() {
   const [filterProgram, setFilterProgram] = usePref<string>('plan-fact-program', 'all')
   const [view, setView] = usePref<View>('plan-fact-view', 'participants')
   const [selectedMonth, setSelectedMonth] = React.useState<string>('all')
+  const [yearPref, setYearPref] = usePref<string>('plan-fact-year', String(new Date().getFullYear()))
   const [query, setQuery] = React.useState('')
   const [unpaidPage, setUnpaidPage] = React.useState(1)
 
@@ -111,13 +121,6 @@ export function PlanFactPage() {
       setForecasts(forecastsRes.data || [])
       setPrograms(programsRes.data || [])
 
-      // Current month by default; if it has no payments yet, the latest month that does
-      const current = new Date().getMonth() + 1
-      const withPayments = new Set<number>((paymentsRes.data || []).map((p: MonthlyPayment) => p.month_number))
-      const past = Array.from(withPayments).filter(m => m <= current)
-      const pick =
-        withPayments.has(current) || withPayments.size === 0 ? current : past.length ? Math.max(...past) : Math.max(...withPayments)
-      setSelectedMonth(monthNames[pick - 1])
       setError(null)
     } catch (err: any) {
       setError(err.message)
@@ -140,29 +143,51 @@ export function PlanFactPage() {
     setUnpaidPage(1)
   }, [view, filterProgram])
 
+  // Years that have any payments, expenses or forecasts; the current year is always offered
+  const years = React.useMemo(() => {
+    const set = new Set<number>([new Date().getFullYear()])
+    payments.forEach(p => set.add(p.year))
+    expenses.forEach(e => e.expense_date && set.add(yearOf(e.expense_date)))
+    forecasts.forEach(f => set.add(f.year))
+    return Array.from(set)
+      .filter(Number.isFinite)
+      .sort((a, b) => b - a)
+  }, [payments, expenses, forecasts])
+  const year = years.includes(Number(yearPref)) ? Number(yearPref) : new Date().getFullYear()
+
   const filteredPayments = React.useMemo(() => {
     return filterProgram === 'all' ? payments : payments.filter(p => p.program_id === filterProgram || p.program?.id === filterProgram)
   }, [payments, filterProgram])
 
+  // Expenses carry their own program_id; with a program selected, only that program's
+  // expenses count (company-wide expenses without a program are left out).
+  const filteredExpenses = React.useMemo(
+    () => expenses.filter(e => !e.event_id && (filterProgram === 'all' || e.program_id === filterProgram)),
+    [expenses, filterProgram],
+  )
+
   const data = React.useMemo(() => {
     const relevantMonths = Array.from({ length: 12 }, (_, i) => i + 1)
+    // Everything is keyed by year + month so the same month of different years never mixes
+    const yearPayments = filteredPayments.filter(p => p.year === year)
+    const yearExpenses = filteredExpenses.filter(e => yearOf(e.expense_date) === year)
 
     return relevantMonths
       .map(monthNum => {
-        const forecast = forecasts.find(f => f.month_number === monthNum)
+        const forecast = forecasts.find(f => f.month_number === monthNum && f.year === year)
+        const monthPayments = yearPayments.filter(p => p.month_number === monthNum)
 
-        const scheduledIncome = filteredPayments.filter(p => p.month_number === monthNum).reduce((sum, p) => sum + planOf(p), 0)
+        const scheduledIncome = monthPayments.reduce((sum, p) => sum + planOf(p), 0)
 
         // Only use forecast income if NO program filter is applied, otherwise calculate from filtered payments
         const planIncome = filterProgram === 'all' && forecast?.planned_income ? forecast.planned_income : scheduledIncome
 
-        const factIncome = filteredPayments.filter(p => p.month_number === monthNum).reduce((sum, p) => sum + (p.fact_amount || 0), 0)
+        const factIncome = monthPayments.reduce((sum, p) => sum + (p.fact_amount || 0), 0)
 
-        const planExpense = forecast?.planned_expenses || 0
+        // The company-wide expense forecast does not apply to a single program
+        const planExpense = filterProgram === 'all' ? forecast?.planned_expenses || 0 : 0
 
-        const factExpense = expenses
-          .filter(e => !e.event_id && new Date(e.expense_date).getMonth() + 1 === monthNum)
-          .reduce((sum, e) => sum + e.amount, 0)
+        const factExpense = yearExpenses.filter(e => monthOf(e.expense_date) === monthNum).reduce((sum, e) => sum + e.amount, 0)
 
         return {
           month: monthNames[monthNum - 1],
@@ -176,7 +201,7 @@ export function PlanFactPage() {
         }
       })
       .filter(d => d.planIncome > 0 || d.factIncome > 0 || d.factExpense > 0)
-  }, [filteredPayments, expenses, forecasts, filterProgram])
+  }, [filteredPayments, filteredExpenses, forecasts, filterProgram, year])
 
   const totals = React.useMemo(
     () =>
@@ -204,12 +229,25 @@ export function PlanFactPage() {
   // Selected month
   const selectedMonthNum = monthNames.indexOf(selectedMonth) + 1
   const currentMonthData = data.find(d => d.month === selectedMonth)
-  const currentMonthPayments = filteredPayments.filter(p => p.month_number === selectedMonthNum)
+  const currentMonthPayments = filteredPayments.filter(p => p.year === year && p.month_number === selectedMonthNum)
   const monthOptions = React.useMemo(() => {
     const set = new Set(data.map(d => d.month))
     if (selectedMonth !== 'all') set.add(selectedMonth)
     return monthNames.filter(m => set.has(m))
   }, [data, selectedMonth])
+
+  // Default month for the selected year: the current month when it has payments,
+  // otherwise the latest past month that does, otherwise the latest month with any.
+  React.useEffect(() => {
+    if (loading) return
+    const now = new Date()
+    const current = year === now.getFullYear() ? now.getMonth() + 1 : 12
+    const withPayments = new Set<number>(filteredPayments.filter(p => p.year === year).map(p => p.month_number))
+    const past = Array.from(withPayments).filter(m => m <= current)
+    const pick =
+      withPayments.has(current) || withPayments.size === 0 ? current : past.length ? Math.max(...past) : Math.max(...withPayments)
+    setSelectedMonth(monthNames[pick - 1])
+  }, [loading, year, filteredPayments])
 
   const unpaidPayments = React.useMemo(
     () =>
@@ -254,7 +292,23 @@ export function PlanFactPage() {
       <PageHeader
         title="План–факт"
         description="Насколько поступления и расходы совпали с планом"
-        actions={<ProgramSelect value={filterProgram} onChange={setFilterProgram} programs={programs} />}
+        actions={
+          <>
+            <Select value={String(year)} onValueChange={setYearPref}>
+              <SelectTrigger size="sm" className="w-24" aria-label="Год">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent align="end">
+                {years.map(y => (
+                  <SelectItem key={y} value={String(y)}>
+                    {y}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <ProgramSelect value={filterProgram} onChange={setFilterProgram} programs={programs} />
+          </>
+        }
       />
 
       <StatStrip

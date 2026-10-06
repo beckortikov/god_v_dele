@@ -14,6 +14,7 @@ import { Segmented } from '@/components/erp/segmented'
 import { SearchInput } from '@/components/erp/search-input'
 import { EmptyState } from '@/components/erp/empty-state'
 import { MoneyInput, type Currency } from '@/components/finance/money-input'
+import { todayISO } from '@/lib/format'
 import { readPref, writePref } from '@/components/finance/types'
 import { ChipGroup, CheckMark } from '@/components/events/parts'
 import {
@@ -232,6 +233,7 @@ export function AddAttendeesSheet({
           onCurrencyChange={setCurrency}
           rate={rate}
           onRateChange={setRate}
+          rateDate={todayISO()}
           invalid={!!errors.amount}
         />
       </Field>
@@ -529,6 +531,8 @@ export function EditAttendeeSheet({
                   onCurrencyChange={setCurrency}
                   rate={rate}
                   onRateChange={setRate}
+                  rateDate={todayISO()}
+                  rateLocked={attendee?.currency === 'TJS' && num(attendee?.exchange_rate) > 1}
                   invalid={!!errors.amount}
                 />
               </Field>

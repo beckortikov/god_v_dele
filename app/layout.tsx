@@ -4,6 +4,7 @@ import { Onest } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import { ThemeProvider, ACCENT_INIT_SCRIPT } from '@/components/theme-provider'
 import { Toaster } from '@/components/ui/sonner'
+import { PwaRegister } from '@/components/pwa-register'
 import './globals.css'
 
 const onest = Onest({
@@ -15,6 +16,20 @@ const onest = Onest({
 export const metadata: Metadata = {
   title: 'Год в деле — учёт и управление',
   description: 'Прозрачный финансовый и кадровый учёт для образовательных проектов',
+  applicationName: 'Год в деле',
+  manifest: '/manifest.webmanifest',
+  appleWebApp: {
+    capable: true,
+    title: 'Год в деле',
+    statusBarStyle: 'default',
+  },
+  icons: {
+    icon: [
+      { url: '/icon.svg', type: 'image/svg+xml' },
+      { url: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
+    ],
+    apple: [{ url: '/icons/apple-touch-icon.png', sizes: '180x180', type: 'image/png' }],
+  },
 }
 
 export const viewport: Viewport = {
@@ -40,6 +55,7 @@ export default function RootLayout({
           <Toaster />
         </ThemeProvider>
         <Analytics />
+        <PwaRegister />
       </body>
     </html>
   )

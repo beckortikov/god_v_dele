@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { fetchRow, logAudit } from '@/lib/audit'
+import { isMissingTable } from '@/app/api/account-transfers/shared'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -34,6 +36,15 @@ export async function GET(request: Request) {
         const { data: payments } = await supabaseAdmin.from('monthly_payments').select('account_id, original_amount, fact_amount, currency').not('account_id', 'is', null)
         const { data: expenses } = await supabaseAdmin.from('expenses').select('account_id, amount, original_amount, currency').not('account_id', 'is', null)
 
+        // Transfers between accounts (migration 012). If the table is not there yet,
+        // balances are computed exactly as before.
+        let transfers: { from_account_id: string | null; to_account_id: string | null; amount_from: number; amount_to: number }[] = []
+        const { data: transferRows, error: transferError } = await supabaseAdmin
+            .from('account_transfers')
+            .select('from_account_id, to_account_id, amount_from, amount_to')
+        if (!transferError) transfers = transferRows || []
+        else if (!isMissingTable(transferError)) console.error('Error fetching transfers for balances:', transferError)
+
         const accountsWithBalances = accounts.map(acc => {
             let balance = Number(acc.initial_balance) || 0;
             
@@ -49,6 +60,12 @@ export async function GET(request: Request) {
                 if (e.account_id === acc.id) {
                     balance -= (acc.currency === 'TJS' ? (e.original_amount || 0) : (e.amount || 0))
                 }
+            })
+
+            // Transfer amounts are stored in each account's own currency
+            transfers.forEach(t => {
+                if (t.from_account_id === acc.id) balance -= Number(t.amount_from) || 0
+                if (t.to_account_id === acc.id) balance += Number(t.amount_to) || 0
             })
             
             return {
@@ -90,6 +107,8 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: error.message }, { status: 500 })
         }
 
+        await logAudit(request, { table: 'accounts', recordId: data?.id, action: 'create', summary: `Счёт «${name}»`, after: data })
+
         return NextResponse.json(data)
     } catch (error) {
         console.error('Unexpected error creating account:', error)
@@ -105,6 +124,8 @@ export async function PUT(request: Request) {
         if (!id || !name || !currency) {
             return NextResponse.json({ error: 'ID, name and currency are required' }, { status: 400 })
         }
+
+        const before = await fetchRow('accounts', id)
 
         const { data, error } = await supabaseAdmin
             .from('accounts')
@@ -124,6 +145,8 @@ export async function PUT(request: Request) {
             return NextResponse.json({ error: error.message }, { status: 500 })
         }
 
+        await logAudit(request, { table: 'accounts', recordId: id, action: 'update', summary: `Счёт «${name}»`, before, after: data })
+
         return NextResponse.json(data)
     } catch (error) {
         console.error('Unexpected error updating account:', error)
@@ -140,6 +163,8 @@ export async function DELETE(request: Request) {
             return NextResponse.json({ error: 'ID is required' }, { status: 400 })
         }
 
+        const before = await fetchRow('accounts', id)
+
         const { error } = await supabaseAdmin
             .from('accounts')
             .delete()
@@ -149,6 +174,14 @@ export async function DELETE(request: Request) {
             console.error('Error deleting account:', error)
             return NextResponse.json({ error: error.message }, { status: 500 })
         }
+
+        await logAudit(request, {
+            table: 'accounts',
+            recordId: id,
+            action: 'delete',
+            summary: before ? `Счёт «${before.name}»` : 'Счёт',
+            before,
+        })
 
         return NextResponse.json({ success: true })
     } catch (error) {

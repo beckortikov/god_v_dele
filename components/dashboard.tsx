@@ -27,6 +27,8 @@ interface DashboardData {
     amount: number
     days: number
   }>
+  /** Totals over every overdue month (the list above is only the top 10) */
+  overdueSummary?: { payments: number; participants: number; amount: number }
   recentPayments: Array<{
     name: string
     program: string
@@ -133,7 +135,8 @@ export function Dashboard() {
 
   // Float noise like 1e-13 means «paid in full», not overdue
   const overdue = (data?.overduePayments ?? []).filter(p => cents(p.amount) > 0)
-  const overdueSum = overdue.reduce((s, p) => s + p.amount, 0)
+  const overdueCount = data?.overdueSummary?.payments ?? overdue.length
+  const overdueSum = data?.overdueSummary?.amount ?? overdue.reduce((s, p) => s + p.amount, 0)
   const recent = data?.recentPayments ?? []
 
   const m = data?.metrics
@@ -199,7 +202,7 @@ export function Dashboard() {
             <AlertCircle className="size-5 shrink-0 text-destructive" />
             <span className="min-w-0 flex-1 text-sm">
               <span className="font-medium text-foreground">
-                {overdue.length} {plural(overdue.length, ['просроченный платёж', 'просроченных платежа', 'просроченных платежей'])} на{' '}
+                {overdueCount} {plural(overdueCount, ['просроченный платёж', 'просроченных платежа', 'просроченных платежей'])} на{' '}
                 <span className="num">{formatMoney(overdueSum)}</span>
               </span>
               <span className="block text-muted-foreground sm:inline sm:before:content-['_·_']">Участники не оплатили прошлые месяцы</span>

@@ -1,5 +1,12 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-client';
+import { fetchRow, logAudit } from '@/lib/audit';
+import { changeSuffix, monthLabel, rowMoney, roundMoneyFields } from '@/lib/audit-labels';
+import { formatMoney } from '@/lib/format';
+import { employeeName, logDeletedRows } from '@/app/api/audit/_server';
+
+const payrollSummary = (name: string, row: any) =>
+    `Зарплата: ${name || 'сотрудник'}, ${monthLabel(row?.month_number, row?.year)} — ${formatMoney(row?.total_amount, 'TJS')}`;
 
 export async function PUT(
     request: Request,
@@ -7,7 +14,8 @@ export async function PUT(
 ) {
     try {
         const { id } = await params;
-        const body = await request.json();
+        const body = roundMoneyFields(await request.json());
+        const before = await fetchRow('payroll', id);
 
         // Update payroll record
         const { data: updatedPayroll, error: updateError } = await supabaseAdmin
@@ -20,6 +28,18 @@ export async function PUT(
         if (updateError) {
             console.error('Error updating payroll:', updateError);
             return NextResponse.json({ error: updateError.message }, { status: 500 });
+        }
+
+        if (updatedPayroll) {
+            const name = await employeeName(updatedPayroll.employee_id);
+            await logAudit(request, {
+                table: 'payroll',
+                recordId: id,
+                action: 'update',
+                summary: `${payrollSummary(name, updatedPayroll)}${changeSuffix(before, updatedPayroll)}`,
+                before,
+                after: updatedPayroll,
+            });
         }
 
         // Logic Note: Expense creation is now handled by Finance API.
@@ -71,6 +91,13 @@ export async function DELETE(
             return NextResponse.json({ error: deleteError.message }, { status: 500 });
         }
 
+        {
+            const { employees: emp, ...payrollRow } = payroll as any;
+            const name = emp ? `${emp.first_name ?? ''} ${emp.last_name ?? ''}`.trim() : '';
+            await logAudit(request, { table: 'payroll', recordId: id, action: 'delete', summary: payrollSummary(name, payrollRow), before: payrollRow });
+        }
+        const linkedSuffix = ' (вместе с начислением зарплаты)';
+
         // 3. Try to delete linked Expense
         if (payroll.employees) {
             const empName = `Зарплата: ${payroll.employees.first_name} ${payroll.employees.last_name}`;
@@ -88,7 +115,7 @@ export async function DELETE(
             // Find expenses with matching name in that month
             const { data: expensesToDelete } = await supabaseAdmin
                 .from('expenses')
-                .select('id, name, expense_date')
+                .select('*')
                 .eq('name', empName)
                 .gte('expense_date', startDate)
                 .lt('expense_date', endDate);
@@ -103,17 +130,20 @@ export async function DELETE(
                 if (expenseDelError) {
                     console.error('Failed to delete linked expenses:', expenseDelError);
                 } else {
+                    await logDeletedRows(request, 'expenses', expensesToDelete, e => `Расход «${e.name}» ${rowMoney(e)}${linkedSuffix}`);
                     console.log(`Deleted ${expensesToDelete.length} linked expenses for payroll ${id}`);
                 }
             } else if (payroll.payment_date) {
                 // Fallback specific date match
-                const { error: dateDelError } = await supabaseAdmin
+                const { data: deletedByDate, error: dateDelError } = await supabaseAdmin
                     .from('expenses')
                     .delete()
                     .eq('expense_date', payroll.payment_date)
-                    .eq('name', empName);
+                    .eq('name', empName)
+                    .select();
 
                 if (dateDelError) console.error('Failed to delete linked expenses (fallback):', dateDelError);
+                else await logDeletedRows(request, 'expenses', deletedByDate ?? [], e => `Расход «${e.name}» ${rowMoney(e)}${linkedSuffix}`);
             }
         }
 

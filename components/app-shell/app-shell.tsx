@@ -44,16 +44,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-  CommandShortcut,
-} from '@/components/ui/command'
+import { CommandPalette } from '@/components/app-shell/command-palette'
+import { NotificationsBell } from '@/components/app-shell/notifications-bell'
 
 export interface CreateAction {
   id: string
@@ -234,6 +226,7 @@ export function AppShell({
               </DropdownMenu>
             )}
 
+            <NotificationsBell role={role} />
             <UserMenu name={displayName} role={role} onLogout={onLogout} />
           </div>
         </div>
@@ -294,10 +287,11 @@ export function AppShell({
       <CommandPalette
         open={paletteOpen}
         onOpenChange={setPaletteOpen}
+        role={role}
         sections={sections}
         createActions={createActions}
-        onNavigate={(p, action) => {
-          navigate(p, action)
+        onNavigate={(p, action, payload) => {
+          navigate(p, action, payload)
           setPaletteOpen(false)
         }}
       />
@@ -440,70 +434,5 @@ function MobileDrawer({
         </nav>
       </SheetContent>
     </Sheet>
-  )
-}
-
-function CommandPalette({
-  open,
-  onOpenChange,
-  sections,
-  createActions,
-  onNavigate,
-}: {
-  open: boolean
-  onOpenChange: (o: boolean) => void
-  sections: NavSection[]
-  createActions: CreateAction[]
-  onNavigate: (p: PageType, action?: string) => void
-}) {
-  const { setTheme } = useTheme()
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-        showCloseButton={false}
-        className="top-[18%] translate-y-0 gap-0 overflow-hidden p-0 sm:max-w-[560px]"
-      >
-        <DialogTitle className="sr-only">Поиск и команды</DialogTitle>
-        <Command loop>
-          <CommandInput placeholder="Куда перейти или что сделать?" autoFocus />
-          <CommandList>
-            <CommandEmpty>Ничего не найдено</CommandEmpty>
-            {createActions.length > 0 && (
-              <CommandGroup heading="Создать">
-                {createActions.map(a => (
-                  <CommandItem key={a.id} value={`создать ${a.label} ${a.hint}`} onSelect={() => onNavigate(a.page, a.id)}>
-                    <Plus />
-                    Новое: {a.label.toLowerCase()}
-                    <span className="text-muted-foreground">— {a.hint.toLowerCase()}</span>
-                  </CommandItem>
-                ))}
-              </CommandGroup>
-            )}
-            {sections.map(s => (
-              <CommandGroup key={s.id} heading={s.label}>
-                {s.pages.map(id => {
-                  const p = PAGES[id]
-                  return (
-                    <CommandItem key={id} value={`${p.label} ${p.title} ${s.label} ${p.description}`} onSelect={() => onNavigate(id)}>
-                      <p.icon />
-                      {p.label}
-                      <CommandShortcut className="max-sm:hidden">{p.description}</CommandShortcut>
-                    </CommandItem>
-                  )
-                })}
-              </CommandGroup>
-            ))}
-            <CommandGroup heading="Оформление">
-              <CommandItem value="тема светлая" onSelect={() => { setTheme('light'); onOpenChange(false) }}>
-                <Sun /> Светлая тема
-              </CommandItem>
-              <CommandItem value="тема тёмная темная" onSelect={() => { setTheme('dark'); onOpenChange(false) }}>
-                <Moon /> Тёмная тема
-              </CommandItem>
-            </CommandGroup>
-          </CommandList>
-        </Command>
-      </DialogContent>
-    </Dialog>
   )
 }

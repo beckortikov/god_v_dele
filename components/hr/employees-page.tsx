@@ -69,6 +69,19 @@ export function EmployeesPage() {
 
   useNavAction('new-employee', openCreate)
 
+  // «open-employee» from search or notifications: open the card once the list is loaded
+  const [pendingOpenId, setPendingOpenId] = React.useState<string | null>(null)
+  useNavAction('open-employee', payload => {
+    if (typeof payload?.id === 'string') setPendingOpenId(payload.id)
+  })
+  React.useEffect(() => {
+    if (!pendingOpenId || isLoading) return
+    const target = employees.find(e => e.id === pendingOpenId)
+    setPendingOpenId(null)
+    if (target) openView(target)
+    else toast.error('Сотрудник не найден', { description: 'Возможно, карточку удалили' })
+  }, [pendingOpenId, isLoading, employees])
+
   const handleDelete = async (employee: HrEmployee) => {
     const ok = await confirm({
       title: 'Удалить сотрудника?',

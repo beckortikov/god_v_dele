@@ -1,5 +1,11 @@
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-client'
+import { fetchRow, logAudit } from '@/lib/audit'
+import { changeSuffix, monthLabel, rowMoney, roundMoneyFields } from '@/lib/audit-labels'
+import { participantName } from '@/app/api/audit/_server'
+
+const paymentSummary = (name: string, row: any) =>
+    `Платёж: ${name || 'участник'}, ${monthLabel(row?.month_number, row?.year)} — ${rowMoney(row, 'fact_amount')}`
 
 // GET - Fetch monthly payments with optional filters
 export async function GET(req: Request) {
@@ -48,7 +54,7 @@ export async function GET(req: Request) {
 
             // If past month and not fully paid, mark as overdue
             if (isPastMonth && payment.status !== 'paid') {
-                const planAmount = payment.amount || 0
+                const planAmount = payment.plan_amount ?? payment.amount ?? 0
                 const factAmount = payment.fact_amount || 0
 
                 if (factAmount < planAmount) {
@@ -69,7 +75,20 @@ export async function GET(req: Request) {
 // POST - Create or update payment record
 export async function POST(req: Request) {
     try {
-        const body = await req.json()
+        const body = roundMoneyFields(await req.json())
+
+        // Upsert: read the current row first so the журнал records update vs create
+        let before: any = null
+        if (body?.participant_id && body?.month_number != null && body?.year != null) {
+            const { data: existing } = await supabaseAdmin
+                .from('monthly_payments')
+                .select('*')
+                .eq('participant_id', body.participant_id)
+                .eq('month_number', body.month_number)
+                .eq('year', body.year)
+                .maybeSingle()
+            before = existing ?? null
+        }
 
         const { data, error } = await supabaseAdmin
             .from('monthly_payments')
@@ -81,6 +100,20 @@ export async function POST(req: Request) {
       `)
 
         if (error) throw error
+
+        const saved = data?.[0]
+        if (saved) {
+            const { participant, program, ...after } = saved as any
+            const summary = paymentSummary(participant?.name ?? '', after)
+            await logAudit(req, {
+                table: 'monthly_payments',
+                recordId: after.id,
+                action: before ? 'update' : 'create',
+                summary: before ? `${summary}${changeSuffix(before, after)}` : summary,
+                before,
+                after,
+            })
+        }
 
         return NextResponse.json({ data }, { status: 201 })
     } catch (error: any) {
@@ -98,12 +131,25 @@ export async function DELETE(req: Request) {
 
         if (!id) return NextResponse.json({ error: 'ID is required' }, { status: 400 })
 
+        const before = await fetchRow('monthly_payments', id)
+        const name = before ? await participantName(before.participant_id) : ''
+
         const { error } = await supabaseAdmin
             .from('monthly_payments')
             .delete()
             .eq('id', id)
 
         if (error) throw error
+
+        if (before) {
+            await logAudit(req, {
+                table: 'monthly_payments',
+                recordId: id,
+                action: 'delete',
+                summary: paymentSummary(name, before),
+                before,
+            })
+        }
 
         return NextResponse.json({ success: true }, { status: 200 })
     } catch (error: any) {

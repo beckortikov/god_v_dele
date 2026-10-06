@@ -1,14 +1,18 @@
 
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-client'
+import { fetchRow, logAudit } from '@/lib/audit'
+import { changeSuffix, rowMoney, roundMoneyFields } from '@/lib/audit-labels'
+import { eventName } from '@/app/api/audit/_server'
 
 export async function PUT(
     req: Request,
     { params }: { params: Promise<{ id: string; expenseId: string }> }
 ) {
     try {
-        const { expenseId } = await params
-        const body = await req.json()
+        const { id, expenseId } = await params
+        const body = roundMoneyFields(await req.json())
+        const before = await fetchRow('expenses', expenseId)
 
         const { data, error } = await supabaseAdmin
             .from('expenses')
@@ -17,6 +21,18 @@ export async function PUT(
             .select()
 
         if (error) throw error
+
+        if (data?.[0]) {
+            const ev = await eventName(data[0].event_id ?? id)
+            await logAudit(req, {
+                table: 'expenses',
+                recordId: expenseId,
+                action: 'update',
+                summary: `Расход «${data[0].name}» ${rowMoney(data[0])} — мероприятие «${ev || '—'}»${changeSuffix(before, data[0])}`,
+                before,
+                after: data[0],
+            })
+        }
 
         return NextResponse.json({ data }, { status: 200 })
     } catch (error: any) {
@@ -30,7 +46,9 @@ export async function DELETE(
     { params }: { params: Promise<{ id: string; expenseId: string }> }
 ) {
     try {
-        const { expenseId } = await params
+        const { id, expenseId } = await params
+        const before = await fetchRow('expenses', expenseId)
+        const ev = before ? await eventName(before.event_id ?? id) : ''
 
         const { error } = await supabaseAdmin
             .from('expenses')
@@ -38,6 +56,16 @@ export async function DELETE(
             .eq('id', expenseId)
 
         if (error) throw error
+
+        if (before) {
+            await logAudit(req, {
+                table: 'expenses',
+                recordId: expenseId,
+                action: 'delete',
+                summary: `Расход «${before.name}» ${rowMoney(before)} — мероприятие «${ev || '—'}»`,
+                before,
+            })
+        }
 
         return NextResponse.json({ success: true }, { status: 200 })
     } catch (error: any) {

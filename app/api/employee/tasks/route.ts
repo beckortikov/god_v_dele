@@ -1,5 +1,13 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-client';
+import { fetchRow, logAudit } from '@/lib/audit';
+import { changeSuffix } from '@/lib/audit-labels';
+import { employeeName } from '@/app/api/audit/_server';
+
+async function taskSummary(row: any) {
+    const name = await employeeName(row?.assignee_id);
+    return `Задача «${row?.title ?? ''}»${name ? ` — ${name}` : ''}`;
+}
 
 export async function GET(request: Request) {
     try {
@@ -56,6 +64,10 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: error.message }, { status: 500 });
         }
 
+        if (data) {
+            await logAudit(request, { table: 'tasks', recordId: data.id, action: 'create', summary: await taskSummary(data), after: data });
+        }
+
         return NextResponse.json(data);
     } catch (error: any) {
         console.error('Internal Server Error creating task:', error);
@@ -76,6 +88,8 @@ export async function PUT(request: Request) {
         if (status) updateData.status = status;
         if (result_comment !== undefined) updateData.result_comment = result_comment;
 
+        const before = await fetchRow('tasks', id);
+
         const { data, error } = await supabaseAdmin
             .from('tasks')
             .update(updateData)
@@ -85,6 +99,17 @@ export async function PUT(request: Request) {
 
         if (error) {
             return NextResponse.json({ error: error.message }, { status: 500 });
+        }
+
+        if (data) {
+            await logAudit(request, {
+                table: 'tasks',
+                recordId: id,
+                action: 'update',
+                summary: `${await taskSummary(data)}${changeSuffix(before, data)}`,
+                before,
+                after: data,
+            });
         }
 
         return NextResponse.json(data);
@@ -102,6 +127,8 @@ export async function DELETE(request: Request) {
             return NextResponse.json({ error: 'Task ID is required' }, { status: 400 });
         }
 
+        const before = await fetchRow('tasks', id);
+
         const { error } = await supabaseAdmin
             .from('tasks')
             .delete()
@@ -109,6 +136,10 @@ export async function DELETE(request: Request) {
 
         if (error) {
             return NextResponse.json({ error: error.message }, { status: 500 });
+        }
+
+        if (before) {
+            await logAudit(request, { table: 'tasks', recordId: id, action: 'delete', summary: await taskSummary(before), before });
         }
 
         return NextResponse.json({ success: true });

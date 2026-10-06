@@ -1,5 +1,9 @@
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-client'
+import { fetchRow, logAudit } from '@/lib/audit'
+import { roundMoney } from '@/lib/money'
+import { changeSuffix, monthLabel, rowMoney, roundMoneyFields } from '@/lib/audit-labels'
+import { employeeName } from '@/app/api/audit/_server'
 
 // GET - Fetch expenses with optional filters
 export async function GET(req: Request) {
@@ -50,7 +54,7 @@ export async function GET(req: Request) {
 // POST - Create new expense
 export async function POST(req: Request) {
     try {
-        const body = await req.json()
+        const body = roundMoneyFields(await req.json())
 
         const { data, error } = await supabaseAdmin
             .from('expenses')
@@ -58,6 +62,17 @@ export async function POST(req: Request) {
             .select()
 
         if (error) throw error
+
+        const created = data?.[0]
+        if (created) {
+            await logAudit(req, {
+                table: 'expenses',
+                recordId: created.id,
+                action: 'create',
+                summary: `Расход «${created.name}» ${rowMoney(created)}`,
+                after: created,
+            })
+        }
 
         // HR Integration: If this is a salary payment (has employee_id)
         if (body.employee_id) {
@@ -68,22 +83,38 @@ export async function POST(req: Request) {
             // 1. Check if payroll record exists
             const { data: payroll, error: payrollError } = await supabaseAdmin
                 .from('payroll')
-                .select('id')
+                .select('*')
                 .eq('employee_id', body.employee_id)
                 .eq('month_number', month)
                 .eq('year', year)
                 .single();
 
+            const empName = await employeeName(body.employee_id);
+            const payrollLabel = `Зарплата: ${empName || 'сотрудник'}, ${monthLabel(month, year)}`;
+
             // 2. If exists, update to PAID
             if (payroll) {
-                await supabaseAdmin
+                const { data: updatedPayroll } = await supabaseAdmin
                     .from('payroll')
                     .update({
                         status: 'paid',
-                        total_amount: body.original_amount || body.amount * (body.exchange_rate || 1), // Use TJS amount if available
+                        total_amount: roundMoney(body.original_amount || body.amount * (body.exchange_rate || 1)), // Use TJS amount if available
                         payment_date: body.expense_date
                     })
-                    .eq('id', payroll.id);
+                    .eq('id', payroll.id)
+                    .select()
+                    .maybeSingle();
+
+                if (updatedPayroll) {
+                    await logAudit(req, {
+                        table: 'payroll',
+                        recordId: payroll.id,
+                        action: 'update',
+                        summary: `${payrollLabel} — выплачено по расходу`,
+                        before: payroll,
+                        after: updatedPayroll,
+                    });
+                }
             }
             // 3. If not exists, CREATE as PAID
             else {
@@ -95,9 +126,9 @@ export async function POST(req: Request) {
                     .eq('id', body.employee_id)
                     .single();
 
-                const salaryAmount = body.original_amount || body.amount * (body.exchange_rate || 1); // Best guess at TJS amount
+                const salaryAmount = roundMoney(body.original_amount || body.amount * (body.exchange_rate || 1)); // Best guess at TJS amount
 
-                await supabaseAdmin
+                const { data: createdPayroll } = await supabaseAdmin
                     .from('payroll')
                     .insert([{
                         employee_id: body.employee_id,
@@ -109,7 +140,19 @@ export async function POST(req: Request) {
                         total_amount: salaryAmount,
                         status: 'paid',
                         payment_date: body.expense_date
-                    }]);
+                    }])
+                    .select()
+                    .maybeSingle();
+
+                if (createdPayroll) {
+                    await logAudit(req, {
+                        table: 'payroll',
+                        recordId: createdPayroll.id,
+                        action: 'create',
+                        summary: `${payrollLabel} — создано по расходу`,
+                        after: createdPayroll,
+                    });
+                }
             }
         }
 
@@ -124,9 +167,12 @@ export async function POST(req: Request) {
 export async function PUT(req: Request) {
     try {
         const body = await req.json()
-        const { id, ...updates } = body
+        const { id, ...rawUpdates } = body
 
         if (!id) return NextResponse.json({ error: 'ID is required' }, { status: 400 })
+
+        const updates = roundMoneyFields(rawUpdates)
+        const before = await fetchRow('expenses', id)
 
         const { data, error } = await supabaseAdmin
             .from('expenses')
@@ -135,6 +181,18 @@ export async function PUT(req: Request) {
             .select()
 
         if (error) throw error
+
+        const after = data?.[0]
+        if (after) {
+            await logAudit(req, {
+                table: 'expenses',
+                recordId: id,
+                action: 'update',
+                summary: `Расход «${after.name}» ${rowMoney(after)}${changeSuffix(before, after)}`,
+                before,
+                after,
+            })
+        }
 
         return NextResponse.json({ data }, { status: 200 })
     } catch (error: any) {
@@ -151,12 +209,24 @@ export async function DELETE(req: Request) {
 
         if (!id) return NextResponse.json({ error: 'ID is required' }, { status: 400 })
 
+        const before = await fetchRow('expenses', id)
+
         const { error } = await supabaseAdmin
             .from('expenses')
             .delete()
             .eq('id', id)
 
         if (error) throw error
+
+        if (before) {
+            await logAudit(req, {
+                table: 'expenses',
+                recordId: id,
+                action: 'delete',
+                summary: `Расход «${before.name}» ${rowMoney(before)}`,
+                before,
+            })
+        }
 
         return NextResponse.json({ success: true }, { status: 200 })
     } catch (error: any) {

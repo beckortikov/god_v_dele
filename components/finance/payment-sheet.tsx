@@ -206,6 +206,7 @@ export function PaymentSheet({
                   onCurrencyChange={setCurrency}
                   rate={rate}
                   onRateChange={setRate}
+                  rateDate={form.paid_date}
                   invalid={!!errors.amount}
                 />
               </Field>

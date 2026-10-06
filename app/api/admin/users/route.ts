@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-client';
+import { logAudit } from '@/lib/audit';
+import { enumLabel, stripSecrets } from '@/lib/audit-labels';
 
 export async function GET(request: Request) {
     try {
@@ -55,6 +57,16 @@ export async function POST(request: Request) {
         if (error) {
             console.error('Error creating user:', error);
             return NextResponse.json({ error: error.message }, { status: 500 });
+        }
+
+        if (data) {
+            await logAudit(request, {
+                table: 'app_users',
+                recordId: data.id,
+                action: 'create',
+                summary: `Пользователь «${data.username}» (${enumLabel('app_users', 'role', data.role) ?? data.role})`,
+                after: stripSecrets(data), // never store passwords in the журнал
+            });
         }
 
         return NextResponse.json(data);
