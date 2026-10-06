@@ -3,11 +3,17 @@
 import * as React from 'react'
 import type { PageType } from '@/lib/navigation'
 
+export interface NavAction {
+  name: string
+  /** Optional data for the action, e.g. { id } for "open-participant". */
+  payload?: Record<string, unknown>
+}
+
 interface NavContextValue {
   page: PageType
-  navigate: (page: PageType, action?: string) => void
+  navigate: (page: PageType, action?: string, payload?: Record<string, unknown>) => void
   /** One-shot action requested for the current page (e.g. "new-payment"). */
-  pendingAction: string | null
+  pendingAction: NavAction | null
   clearAction: () => void
 }
 
@@ -33,7 +39,7 @@ export function NavProvider({
   )
 
   const [page, setPage] = React.useState<PageType>(() => resolve(readUrlPage()))
-  const [pendingAction, setPendingAction] = React.useState<string | null>(null)
+  const [pendingAction, setPendingAction] = React.useState<NavAction | null>(null)
 
   // Normalise the URL once (unknown or forbidden pages fall back to the default)
   React.useEffect(() => {
@@ -53,7 +59,7 @@ export function NavProvider({
   }, [resolve])
 
   const navigate = React.useCallback(
-    (next: PageType, action?: string) => {
+    (next: PageType, action?: string, payload?: Record<string, unknown>) => {
       const target = resolve(next)
       if (target !== page) {
         const url = new URL(window.location.href)
@@ -61,7 +67,7 @@ export function NavProvider({
         window.history.pushState(null, '', url)
         setPage(target)
       }
-      setPendingAction(action ?? null)
+      setPendingAction(action ? { name: action, payload } : null)
     },
     [page, resolve]
   )
@@ -82,15 +88,21 @@ export function useNav() {
   return ctx
 }
 
-/** Runs `handler` when the shell requests `action` for the current page. */
-export function useNavAction(action: string, handler: () => void) {
+/**
+ * Runs `handler` when the shell requests `action` for the current page.
+ * The handler fires once, possibly before the page has loaded its data, so
+ * for actions with a payload (e.g. "open-participant" with { id }) store the
+ * id in state and open the record once the data is there.
+ */
+export function useNavAction(action: string, handler: (payload?: Record<string, unknown>) => void) {
   const ctx = React.useContext(NavContext)
   const handlerRef = React.useRef(handler)
   handlerRef.current = handler
   React.useEffect(() => {
-    if (ctx?.pendingAction === action) {
+    if (ctx?.pendingAction?.name === action) {
+      const payload = ctx.pendingAction.payload
       ctx.clearAction()
-      handlerRef.current()
+      handlerRef.current(payload)
     }
   }, [ctx, action])
 }

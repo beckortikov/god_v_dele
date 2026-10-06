@@ -19,6 +19,9 @@ import {
   ShieldCheck,
   UserCircle2,
   ListChecks,
+  PieChart,
+  History,
+  Receipt,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -27,6 +30,7 @@ export type PageType =
   | 'life-wheel' | 'life-balance' | 'business-wheel'
   | 'hr-dashboard' | 'employees' | 'schedule' | 'payroll' | 'vacations' | 'timesheet'
   | 'users' | 'employee-dashboard' | 'manager-dashboard'
+  | 'analytics' | 'audit' | 'my-payments'
 
 export type UserRole = 'admin' | 'finance' | 'employee' | 'manager' | 'wheels_manager' | 'participant'
 
@@ -66,16 +70,19 @@ export const PAGES: Record<PageType, NavPage> = {
   users: { id: 'users', label: 'Пользователи', title: 'Пользователи', description: 'Доступы и роли', icon: ShieldCheck },
   'employee-dashboard': { id: 'employee-dashboard', label: 'Мой кабинет', title: 'Мой кабинет', description: 'Задачи, время и заявки', icon: UserCircle2 },
   'manager-dashboard': { id: 'manager-dashboard', label: 'Задачи команды', title: 'Задачи сотрудников', description: 'Постановка и контроль задач', icon: ListChecks },
+  analytics: { id: 'analytics', label: 'Аналитика', title: 'Аналитика', description: 'Долги по срокам, удержание и доход на участника', icon: PieChart },
+  audit: { id: 'audit', label: 'Журнал изменений', title: 'Журнал изменений', description: 'Кто и что изменил, корзина удалённого', icon: History },
+  'my-payments': { id: 'my-payments', label: 'Мои оплаты', title: 'Мои оплаты', description: 'График платежей и задолженность', icon: Receipt },
 }
 
 const S = {
   home: { id: 'home', label: 'Главное', icon: LayoutDashboard, pages: ['dashboard'] },
   people: { id: 'people', label: 'Участники', icon: Users, pages: ['participants', 'programs'] },
   finance: { id: 'finance', label: 'Финансы', icon: ArrowLeftRight, pages: ['income', 'plan-fact', 'balance', 'offline'] },
-  reports: { id: 'reports', label: 'Отчёты', icon: FileSpreadsheet, pages: ['opiu-reports'] },
+  reports: { id: 'reports', label: 'Отчёты', icon: FileSpreadsheet, pages: ['opiu-reports', 'analytics'] },
   wheels: { id: 'wheels', label: 'Колёса баланса', icon: Compass, pages: ['life-wheel', 'life-balance', 'business-wheel'] },
   hr: { id: 'hr', label: 'Персонал', icon: UserSquare2, pages: ['hr-dashboard', 'employees', 'schedule', 'timesheet', 'payroll', 'vacations'] },
-  admin: { id: 'admin', label: 'Администрирование', icon: ShieldCheck, pages: ['users'] },
+  admin: { id: 'admin', label: 'Администрирование', icon: ShieldCheck, pages: ['users', 'audit'] },
 } satisfies Record<string, NavSection>
 
 export function getSections(role: UserRole): NavSection[] {
@@ -91,7 +98,7 @@ export function getSections(role: UserRole): NavSection[] {
     case 'employee':
       return [{ id: 'cabinet', label: 'Кабинет', icon: UserCircle2, pages: ['employee-dashboard'] }, S.wheels]
     case 'participant':
-      return [S.wheels]
+      return [{ id: 'cabinet', label: 'Кабинет', icon: UserCircle2, pages: ['my-payments'] }, S.wheels]
   }
 }
 

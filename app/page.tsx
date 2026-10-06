@@ -6,6 +6,7 @@ import { NavProvider, useNav } from '@/components/app-shell/nav-context'
 import { AppShell } from '@/components/app-shell/app-shell'
 import { ConfirmProvider } from '@/components/erp/confirm'
 import { TooltipProvider } from '@/components/ui/tooltip'
+import { installActorHeaders } from '@/lib/client-actor'
 import { Dashboard } from '@/components/dashboard'
 import { ParticipantsPage } from '@/components/participants-page'
 import { IncomeExpensesPage } from '@/components/income-expenses-page'
@@ -28,6 +29,9 @@ import { VacationsPage } from '@/components/hr/vacations-page'
 import { UsersPage } from '@/components/admin/users-page'
 import { EmployeeDashboard } from '@/components/employee/employee-dashboard'
 import { ManagerDashboard } from '@/components/employee/manager-dashboard'
+import { AnalyticsPage } from '@/components/reports/analytics-page'
+import { AuditPage } from '@/components/admin/audit-page'
+import { MyPaymentsPage } from '@/components/cabinet/my-payments-page'
 
 interface SessionUser {
   role: UserRole
@@ -56,6 +60,7 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
+    installActorHeaders()
     setSession(readSession())
     setIsLoading(false)
   }, [])
@@ -129,5 +134,8 @@ function PageRouter({ session }: { session: SessionUser }) {
     case 'users': return <UsersPage />
     case 'employee-dashboard': return <EmployeeDashboard />
     case 'manager-dashboard': return <ManagerDashboard />
+    case 'analytics': return <AnalyticsPage />
+    case 'audit': return <AuditPage />
+    case 'my-payments': return <MyPaymentsPage participantId={session.participantId} participantName={session.fullName} />
   }
 }
