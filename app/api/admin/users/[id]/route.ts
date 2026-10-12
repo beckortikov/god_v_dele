@@ -47,7 +47,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
             });
         }
 
-        return NextResponse.json(data);
+        return NextResponse.json(stripSecrets(data));
     } catch (error: any) {
         console.error('Unexpected error:', error);
         return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
