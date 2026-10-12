@@ -4,6 +4,11 @@ import { fetchRow, logAudit } from '@/lib/audit'
 import { roundMoney } from '@/lib/money'
 import { changeSuffix, monthLabel, rowMoney, roundMoneyFields } from '@/lib/audit-labels'
 import { employeeName } from '@/app/api/audit/_server'
+import { writeWithOptionalColumns } from '@/lib/db-columns'
+
+// Added by migrations/017_expenses_employee.sql. Until it is applied the expense
+// is saved without the link; the payroll update below still uses body.employee_id.
+const OPTIONAL_COLUMNS = ['employee_id']
 
 // GET - Fetch expenses with optional filters
 export async function GET(req: Request) {
@@ -56,10 +61,9 @@ export async function POST(req: Request) {
     try {
         const body = roundMoneyFields(await req.json())
 
-        const { data, error } = await supabaseAdmin
-            .from('expenses')
-            .insert([body])
-            .select()
+        const { data, error } = await writeWithOptionalColumns(body, OPTIONAL_COLUMNS, row =>
+            supabaseAdmin.from('expenses').insert([row]).select()
+        )
 
         if (error) throw error
 
@@ -174,11 +178,9 @@ export async function PUT(req: Request) {
         const updates = roundMoneyFields(rawUpdates)
         const before = await fetchRow('expenses', id)
 
-        const { data, error } = await supabaseAdmin
-            .from('expenses')
-            .update(updates)
-            .eq('id', id)
-            .select()
+        const { data, error } = await writeWithOptionalColumns(updates, OPTIONAL_COLUMNS, row =>
+            supabaseAdmin.from('expenses').update(row).eq('id', id).select()
+        )
 
         if (error) throw error
 
