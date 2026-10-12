@@ -159,6 +159,8 @@ function toGroups(r: SearchResults): RecordGroup[] {
   return groups.filter(g => g.hits.length > 0)
 }
 
+const RECORD_SEARCH_ROLES: UserRole[] = ['admin', 'finance', 'wheels_manager']
+
 /** Debounced record search; stale requests are aborted. */
 function useRecordSearch(query: string, role: UserRole) {
   const [state, setState] = React.useState<{ groups: RecordGroup[]; loading: boolean; error: boolean; settledQuery: string }>({
@@ -170,7 +172,8 @@ function useRecordSearch(query: string, role: UserRole) {
 
   React.useEffect(() => {
     const q = query.trim()
-    if (q.length < MIN_QUERY) {
+    // The server searches records only for these roles (see /api/search); the others just get commands
+    if (q.length < MIN_QUERY || !RECORD_SEARCH_ROLES.includes(role)) {
       setState({ groups: [], loading: false, error: false, settledQuery: '' })
       return
     }

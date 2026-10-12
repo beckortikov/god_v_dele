@@ -1,13 +1,13 @@
 'use client'
 
-import { useState, useEffect, useMemo, type ReactNode } from 'react'
+import { useState, useEffect, useMemo, useCallback, type ReactNode } from 'react'
 import { PAGES, getAllowedPages, getDefaultPage, type UserRole } from '@/lib/navigation'
 import { NavProvider, useNav } from '@/components/app-shell/nav-context'
 import { AppShell } from '@/components/app-shell/app-shell'
 import { ConfirmProvider } from '@/components/erp/confirm'
 import { ErrorBoundary } from '@/components/erp/error-boundary'
 import { TooltipProvider } from '@/components/ui/tooltip'
-import { installActorHeaders } from '@/lib/client-actor'
+import { clearLocalSession, installAuthGuard } from '@/lib/client-actor'
 import { Dashboard } from '@/components/dashboard'
 import { ParticipantsPage } from '@/components/participants-page'
 import { IncomeExpensesPage } from '@/components/income-expenses-page'
@@ -63,20 +63,24 @@ export default function Home() {
   const [session, setSession] = useState<SessionUser | null>(null)
   const [isLoading, setIsLoading] = useState(true)
 
-  useEffect(() => {
-    installActorHeaders()
-    setSession(readSession())
-    setIsLoading(false)
-  }, [])
-
-  const handleLogout = () => {
-    localStorage.removeItem('isAuthenticated')
-    localStorage.removeItem('userRole')
-    localStorage.removeItem('user')
+  const showLogin = useCallback(() => {
+    clearLocalSession()
     const url = new URL(window.location.href)
     url.searchParams.delete('page')
     window.history.replaceState(null, '', url)
     setSession(null)
+  }, [])
+
+  useEffect(() => {
+    installAuthGuard(showLogin)
+    setSession(readSession())
+    setIsLoading(false)
+  }, [showLogin])
+
+  const handleLogout = () => {
+    // End the server session first; the screen switches even if the request fails
+    fetch('/api/auth/logout', { method: 'POST' }).catch(() => {})
+    showLogin()
   }
 
   if (isLoading) {

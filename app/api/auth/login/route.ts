@@ -1,4 +1,6 @@
 import { NextResponse } from 'next/server';
+import { createSessionToken, SESSION_COOKIE, sessionCookieOptions } from '@/lib/session';
+import { clientIp, recordFailure, recordSuccess, retryAfterMs } from '@/lib/login-limiter';
 import { supabaseAdmin } from '@/lib/supabase-client';
 import { fakeVerify, hashPassword, isHashed, verifyPassword } from '@/lib/password';
 
@@ -10,6 +12,15 @@ export async function POST(request: Request) {
 
         if (!login || !password) {
             return NextResponse.json({ error: 'Username and password are required' }, { status: 400 });
+        }
+
+        const ip = clientIp(request);
+        const wait = retryAfterMs(login, ip);
+        if (wait > 0) {
+            return NextResponse.json(
+                { error: 'Слишком много попыток. Подождите немного и попробуйте снова.' },
+                { status: 429, headers: { 'Retry-After': String(Math.ceil(wait / 1000)) } }
+            );
         }
 
         // Look the account up by login only; the password is checked here, never in the query.
@@ -34,8 +45,10 @@ export async function POST(request: Request) {
         if (!user) {
             // An unknown login must not answer faster than a wrong password
             if (!candidates?.length) await fakeVerify(password);
+            recordFailure(login, ip);
             return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
         }
+        recordSuccess(login, ip);
 
         // Plain-text passwords from before hashing are replaced with a hash on the first login
         if (!isHashed(user.password)) {
@@ -64,7 +77,7 @@ export async function POST(request: Request) {
             .update({ last_login_at: new Date().toISOString() })
             .eq('id', user.id);
 
-        return NextResponse.json({
+        const response = NextResponse.json({
             success: true,
             user: {
                 id: user.id,
@@ -77,6 +90,8 @@ export async function POST(request: Request) {
                 participant_id: user.participant_id,
             }
         });
+        response.cookies.set(SESSION_COOKIE, createSessionToken({ ...user, full_name: user.full_name || user.username }), sessionCookieOptions);
+        return response;
     } catch (error: any) {
         console.error('Unexpected error:', error);
         return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });

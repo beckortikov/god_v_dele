@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { forbidden, mayUseEmployee } from '@/lib/api-auth'
 import { supabaseAdmin } from '@/lib/supabase-client';
 import { logAudit } from '@/lib/audit';
 import { employeeName } from '@/app/api/audit/_server';
@@ -43,6 +44,7 @@ export async function POST(request: Request) {
         if (!employee_id || !action) {
             return NextResponse.json({ error: 'employee_id and action are required' }, { status: 400 });
         }
+        if (!mayUseEmployee(request, employee_id)) return forbidden();
 
         if (action === 'start') {
             const { data, error } = await supabaseAdmin

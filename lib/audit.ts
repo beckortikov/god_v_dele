@@ -1,4 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabase-client'
+import { getSession } from '@/lib/session'
 
 export type AuditAction = 'create' | 'update' | 'delete' | 'restore'
 
@@ -8,21 +9,15 @@ export interface Actor {
 }
 
 /**
- * Who made the request. The client adds these headers to every /api call
- * (see lib/client-actor.ts). Not a security boundary — real auth comes later.
+ * Who made the request, from the signed session cookie. The browser can send
+ * any x-actor-* header it likes, so those are not trusted.
  */
 export function getActor(req: Request): Actor {
-  const decode = (v: string | null) => {
-    if (!v) return null
-    try {
-      return decodeURIComponent(v)
-    } catch {
-      return v
-    }
-  }
-  return {
-    id: decode(req.headers.get('x-actor-id')),
-    name: decode(req.headers.get('x-actor-name')),
+  try {
+    const s = getSession(req)
+    return { id: s?.uid ?? null, name: s?.name ?? null }
+  } catch {
+    return { id: null, name: null }
   }
 }
 

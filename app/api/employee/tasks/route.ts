@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { forbidden, mayUseEmployee } from '@/lib/api-auth'
 import { supabaseAdmin } from '@/lib/supabase-client';
 import { fetchRow, logAudit } from '@/lib/audit';
 import { changeSuffix } from '@/lib/audit-labels';
@@ -49,6 +50,7 @@ export async function POST(request: Request) {
         if (!assignee_id || !title) {
             return NextResponse.json({ error: 'assignee_id and title are required' }, { status: 400 });
         }
+        if (!mayUseEmployee(request, assignee_id)) return forbidden();
 
         const { data, error } = await supabaseAdmin
             .from('tasks')
@@ -89,6 +91,7 @@ export async function PUT(request: Request) {
         if (result_comment !== undefined) updateData.result_comment = result_comment;
 
         const before = await fetchRow('tasks', id);
+        if (before && !mayUseEmployee(request, before.assignee_id)) return forbidden();
 
         const { data, error } = await supabaseAdmin
             .from('tasks')
@@ -128,6 +131,7 @@ export async function DELETE(request: Request) {
         }
 
         const before = await fetchRow('tasks', id);
+        if (before && !mayUseEmployee(request, before.assignee_id)) return forbidden();
 
         const { error } = await supabaseAdmin
             .from('tasks')

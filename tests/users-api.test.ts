@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 // A fake database: every query chain resolves to whatever the test put in `h.result`.
 const h = vi.hoisted(() => ({
+  env: (process.env.SUPABASE_SERVICE_ROLE_KEY ||= 'service-key-for-tests'),
   result: { data: null, error: null } as { data: unknown; error: unknown },
   writes: [] as { op: 'insert' | 'update'; row: Record<string, unknown> }[],
 }))
@@ -27,6 +28,9 @@ import { GET, POST } from '@/app/api/admin/users/route'
 import { PUT } from '@/app/api/admin/users/[id]/route'
 import { POST as LOGIN } from '@/app/api/auth/login/route'
 import { hashPassword, isHashed } from '@/lib/password'
+import { MAX_FAILURES, resetLimiter } from '@/lib/login-limiter'
+import { POST as LOGOUT } from '@/app/api/auth/logout/route'
+import { readSessionToken, SESSION_COOKIE } from '@/lib/session'
 
 const SECRET = 'plain-text-secret-123'
 const user = (over: Record<string, unknown> = {}) => ({
@@ -126,10 +130,11 @@ describe('passwords are stored hashed', () => {
 })
 
 describe('login', () => {
-  const login = (body: unknown) =>
-    LOGIN(new Request('http://test/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }))
+  const login = (body: unknown, ip = '10.0.0.1') =>
+    LOGIN(new Request('http://test/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-forwarded-for': ip }, body: JSON.stringify(body) }))
 
   beforeEach(() => {
+    resetLimiter()
     h.result = { data: null, error: null }
     h.writes = []
     vi.spyOn(console, 'error').mockImplementation(() => {})
@@ -171,5 +176,59 @@ describe('login', () => {
   it('rejects non-string input instead of querying with it', async () => {
     expect((await login({ login: { $ne: '' }, password: SECRET })).status).toBe(400)
     expect((await login({ login: 'ali', password: ['x'] })).status).toBe(400)
+  })
+})
+
+describe('login session cookie', () => {
+  const login = (body: unknown, ip = '10.0.0.2') =>
+    LOGIN(new Request('http://test/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-forwarded-for': ip }, body: JSON.stringify(body) }))
+
+  beforeEach(() => {
+    resetLimiter()
+    h.result = { data: null, error: null }
+    h.writes = []
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+  })
+
+  it('sets an HttpOnly signed session cookie with the user, role and links', async () => {
+    h.result = { data: [user({ role: 'participant', participant_id: 'p1', employee_id: null, password: await hashPassword(SECRET) })], error: null }
+    const res = await login({ login: 'ali', password: SECRET })
+    const cookie = res.headers.get('set-cookie') ?? ''
+    expect(cookie).toContain(`${SESSION_COOKIE}=`)
+    expect(cookie.toLowerCase()).toContain('httponly')
+    expect(cookie.toLowerCase()).toContain('samesite=lax')
+    const token = decodeURIComponent(cookie.split(';')[0].split('=').slice(1).join('='))
+    expect(readSessionToken(token)).toMatchObject({ uid: 'u1', role: 'participant', pid: 'p1', eid: null })
+  })
+
+  it('sets no cookie when the password is wrong', async () => {
+    h.result = { data: [user({ password: await hashPassword(SECRET) })], error: null }
+    const res = await login({ login: 'ali', password: 'wrong' })
+    expect(res.status).toBe(401)
+    expect(res.headers.get('set-cookie')).toBeNull()
+  })
+
+  it(`refuses further attempts after ${MAX_FAILURES} wrong passwords, only for that login and address`, async () => {
+    h.result = { data: [user({ password: await hashPassword(SECRET) })], error: null }
+    for (let i = 0; i < MAX_FAILURES; i++) expect((await login({ login: 'ali', password: 'bad' })).status).toBe(401)
+    const blocked = await login({ login: 'ali', password: SECRET })
+    expect(blocked.status).toBe(429)
+    expect(Number(blocked.headers.get('retry-after'))).toBeGreaterThan(0)
+    expect(blocked.headers.get('set-cookie')).toBeNull()
+    expect((await login({ login: 'ali', password: SECRET }, '10.0.0.99')).status).toBe(200)
+  })
+
+  it('a successful login clears the failure count', async () => {
+    h.result = { data: [user({ password: await hashPassword(SECRET) })], error: null }
+    for (let i = 0; i < MAX_FAILURES - 1; i++) await login({ login: 'ali', password: 'bad' })
+    expect((await login({ login: 'ali', password: SECRET })).status).toBe(200)
+    for (let i = 0; i < MAX_FAILURES - 1; i++) expect((await login({ login: 'ali', password: 'bad' })).status).toBe(401)
+  })
+
+  it('logout clears the cookie', async () => {
+    const res = await LOGOUT()
+    const cookie = res.headers.get('set-cookie') ?? ''
+    expect(cookie).toContain(`${SESSION_COOKIE}=;`)
+    expect(cookie.toLowerCase()).toMatch(/max-age=0|expires=/)
   })
 })

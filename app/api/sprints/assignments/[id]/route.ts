@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-client'
 import { getActor, logAudit } from '@/lib/audit'
+import { forbidden, isSprintCurator, sessionOf } from '@/lib/api-auth'
 import { participantName } from '@/app/api/audit/_server'
 import { applyAction, shortDate, type AssignmentAction, type TaskEvent } from '@/lib/sprints'
 import {
@@ -20,10 +21,12 @@ import {
 export const dynamic = 'force-dynamic'
 
 /** GET → { data: { assignment, task, events } } */
-export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const id = requireUuid((await params).id, 'id')
     const assignment = await getAssignment(id)
+    const session = sessionOf(req)
+    if (session?.role === 'participant' && session.pid !== assignment.participant_id) return forbidden()
     const task = await getTask(assignment.task_id)
     const { data: events, error } = await supabaseAdmin.from(EVENTS).select('*').eq('assignment_id', id).order('created_at')
     check(error)
@@ -38,7 +41,7 @@ const PARTICIPANT_ACTIONS = new Set(['submit', 'mark', 'unmark'])
 
 /**
  * POST { type: 'submit' | 'mark' | 'unmark' | 'accept' | 'return', ... , participant_id? }
- * Participant actions must name the participant the task belongs to.
+ * Participant actions need the session of the participant the task belongs to; accept / return need a curator.
  */
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -48,8 +51,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const task = await getTask(assignment.task_id)
 
     const type = String(body.type ?? '')
-    if (PARTICIPANT_ACTIONS.has(type) && body.participant_id !== assignment.participant_id) {
-      return NextResponse.json({ error: 'Это не ваша задача' }, { status: 403 })
+    // Who is acting comes from the session, never from the request body
+    const session = sessionOf(req)
+    if (PARTICIPANT_ACTIONS.has(type)) {
+      if (session?.role !== 'participant' || session.pid !== assignment.participant_id) return forbidden('Это не ваша задача')
+    } else if (!isSprintCurator(session)) {
+      return forbidden('Принимать и возвращать работы может куратор')
     }
 
     let action: AssignmentAction

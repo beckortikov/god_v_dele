@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { forbidden, mayUsePerson } from '@/lib/api-auth'
 import { supabaseAdmin } from '@/lib/supabase-client'
 import { logAudit, fetchRow } from '@/lib/audit'
 import { participantName } from '@/app/api/audit/_server'
@@ -44,6 +45,7 @@ export async function POST(req: Request) {
         if (!participant_id || !period_type || !period_label || !categories) {
             return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
         }
+        if (!mayUsePerson(req, participant_id)) return forbidden()
 
         const { data: existing } = await supabaseAdmin
             .from('life_wheel_entries')
@@ -101,6 +103,7 @@ export async function DELETE(req: Request) {
 
         // Keep the full row on delete so it can be restored from the корзина
         const before = await fetchRow('life_wheel_entries', id)
+        if (before && !mayUsePerson(req, before.participant_id)) return forbidden()
 
         const { error } = await supabaseAdmin
             .from('life_wheel_entries')

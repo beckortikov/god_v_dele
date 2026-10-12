@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getActor } from '@/lib/audit'
+import { forbidden, sessionOf } from '@/lib/api-auth'
 import { LINK_CODE_TTL_DAYS, buildDeepLink, generateCode, isTelegramConfigured } from '@/lib/telegram'
 import { errorResponse, getOrCreateCode, getSubject, isSupportedSubjectType, isUuid } from '../_lib/store'
 
@@ -25,6 +26,9 @@ export async function POST(req: Request) {
   if (!isUuid(subjectId)) {
     return NextResponse.json({ error: 'subjectId must be a UUID' }, { status: 400 })
   }
+  // A participant may link only their own Telegram
+  const session = sessionOf(req)
+  if (session?.role === 'participant' && session.pid !== subjectId) return forbidden()
   if (!isTelegramConfigured()) {
     return NextResponse.json({ configured: false })
   }

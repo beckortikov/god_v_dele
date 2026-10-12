@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { forbidden, mayUseEmployee, sessionOf } from '@/lib/api-auth'
 import { supabaseAdmin } from '@/lib/supabase-client';
 import { fetchRow, logAudit } from '@/lib/audit';
 import { enumLabel } from '@/lib/audit-labels';
@@ -45,6 +46,7 @@ export async function POST(request: Request) {
         if (!employee_id || !start_date || !end_date || !reason) {
             return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
         }
+        if (!mayUseEmployee(request, employee_id)) return forbidden();
 
         const { data, error } = await supabaseAdmin
             .from('leave_requests')
@@ -70,6 +72,8 @@ export async function PUT(request: Request) {
     try {
         const body = await request.json();
         const { id, status, approved_by } = body;
+        // Only a manager (or admin) approves or rejects; an employee must not decide their own request
+        if (sessionOf(request)?.role === 'employee') return forbidden('Подтверждать заявки может руководитель');
 
         if (!id || !status) {
             return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
