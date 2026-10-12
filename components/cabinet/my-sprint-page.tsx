@@ -26,6 +26,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Sheet, SheetBody, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { EmptyState } from '@/components/erp/empty-state'
 import { MigrationRequired, api } from '@/components/sprints/shared'
+import { FileChips, FileUploader, useReportFiles } from '@/components/sprints/report-files'
 import { TelegramLinkCard } from '@/components/telegram/telegram-link-card'
 
 type Filter = 'all' | 'todo' | 'review' | 'done'
@@ -543,6 +544,8 @@ function TaskSheet({
   const [editing, setEditing] = React.useState(false)
   const [saving, setSaving] = React.useState(false)
   const id = t?.assignment.id
+  const attachable = !!t && t.task.submission_type !== 'mark'
+  const { files, reload: reloadFiles } = useReportFiles(id, attachable)
 
   React.useEffect(() => {
     if (!t) return
@@ -644,7 +647,7 @@ function TaskSheet({
                 </div>
                 <div>
                   <label htmlFor="ms-link" className="mb-2 ml-1 block text-[15px] font-semibold">
-                    Ссылка {task.submission_type === 'link' ? '' : <span className="font-normal text-muted-foreground">· необязательно</span>}
+                    Ссылка <span className="font-normal text-muted-foreground">· необязательно</span>
                   </label>
                   <Input
                     id="ms-link"
@@ -655,12 +658,18 @@ function TaskSheet({
                     placeholder="https://docs.google.com/…"
                     className="h-12 rounded-xl text-base"
                   />
-                  <p className="mt-1.5 ml-1 text-xs text-muted-foreground">Файл загрузите в Google Диск и вставьте ссылку с доступом для просмотра</p>
+                  <p className="mt-1.5 ml-1 text-xs text-muted-foreground">Большой файл или видео: загрузите в Google Диск и вставьте ссылку с доступом для просмотра</p>
+                </div>
+                <div>
+                  <p className="mb-2 ml-1 text-[15px] font-semibold">
+                    Файлы {task.submission_type === 'link' ? <span className="font-normal text-muted-foreground">· вместо ссылки</span> : <span className="font-normal text-muted-foreground">· необязательно</span>}
+                  </p>
+                  <FileUploader assignmentId={a.id} files={files} reload={reloadFiles} />
                 </div>
               </div>
             )}
 
-            {!editing && (a.report_text || a.report_link) && (
+            {!editing && (a.report_text || a.report_link || files.length > 0) && (
               <div className="rounded-xl border p-3.5">
                 <p className="mb-2 text-sm font-semibold">Ваш отчёт</p>
                 {a.report_text && <p className="text-[15px] leading-relaxed whitespace-pre-wrap">{a.report_text}</p>}
@@ -670,6 +679,7 @@ function TaskSheet({
                     <span className="truncate">{a.report_link}</span>
                   </a>
                 )}
+                <FileChips assignmentId={a.id} files={files} className={a.report_text || a.report_link ? 'mt-2' : undefined} />
               </div>
             )}
 

@@ -206,7 +206,7 @@ export function isOverdue(task: Pick<SprintTask, 'due_date'>, a: Pick<Assignment
 }
 
 export type AssignmentAction =
-  | { type: 'submit'; report_text?: string | null; report_link?: string | null }
+  | { type: 'submit'; report_text?: string | null; report_link?: string | null; /** Files already attached to the report. */ files?: number }
   | { type: 'mark' }
   | { type: 'unmark' }
   | { type: 'accept'; comment?: string | null }
@@ -239,7 +239,7 @@ export function applyAction(
       const text = action.report_text?.trim() || null
       const link = action.report_link?.trim() || null
       if (task.submission_type === 'text' && !text) throw new ActionError('Напишите отчёт')
-      if (task.submission_type === 'link' && !link && !text) throw new ActionError('Добавьте ссылку на файл')
+      if (task.submission_type === 'link' && !link && !text && !action.files) throw new ActionError('Добавьте ссылку или прикрепите файл')
       if (link && !/^https?:\/\//i.test(link)) throw new ActionError('Ссылка должна начинаться с http:// или https://')
       return {
         patch: { status: task.requires_review ? 'review' : 'done', report_text: text, report_link: link, submitted_at: now() },

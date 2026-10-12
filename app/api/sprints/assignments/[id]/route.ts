@@ -3,6 +3,7 @@ import { supabaseAdmin } from '@/lib/supabase-client'
 import { getActor, logAudit } from '@/lib/audit'
 import { forbidden, isSprintCurator, sessionOf } from '@/lib/api-auth'
 import { participantName } from '@/app/api/audit/_server'
+import { countFiles } from '../../_lib/report-storage'
 import { applyAction, shortDate, type AssignmentAction, type TaskEvent } from '@/lib/sprints'
 import {
   ASSIGNMENTS,
@@ -62,7 +63,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     let action: AssignmentAction
     switch (type) {
       case 'submit':
-        action = { type, report_text: body.report_text ?? null, report_link: body.report_link ?? null }
+        action = { type, report_text: body.report_text ?? null, report_link: body.report_link ?? null, files: await countFiles(id) }
         break
       case 'mark':
       case 'unmark':

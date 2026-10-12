@@ -197,3 +197,15 @@ describe('unfinishedTasks', () => {
     expect(r.map(x => x.task.title)).toEqual(['А', 'Я'])
   })
 })
+
+describe('submit with attached files', () => {
+  const link = { submission_type: 'link', requires_review: true } as const
+  it('a file alone is enough for a «ссылка или файл» task', () => {
+    expect(applyAction(link, { status: 'todo' }, { type: 'submit', files: 1 }).patch.status).toBe('review')
+    expect(() => applyAction(link, { status: 'todo' }, { type: 'submit', files: 0 })).toThrow('прикрепите файл')
+    expect(() => applyAction(link, { status: 'todo' }, { type: 'submit' })).toThrow(ActionError)
+  })
+  it('a text report still needs its text even with files', () => {
+    expect(() => applyAction({ submission_type: 'text', requires_review: true }, { status: 'todo' }, { type: 'submit', files: 2 })).toThrow('Напишите отчёт')
+  })
+})

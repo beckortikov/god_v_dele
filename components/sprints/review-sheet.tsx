@@ -23,6 +23,7 @@ import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Sheet, SheetBody, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { api } from './shared'
+import { FileChips, useReportFiles } from './report-files'
 
 export function ReviewSheet({
   open,
@@ -117,6 +118,8 @@ function AssignmentCard({
   const [comment, setComment] = React.useState('')
   const [returning, setReturning] = React.useState(false)
   const [busy, setBusy] = React.useState(false)
+  // Attachments exist once something was sent; nothing to ask for before that.
+  const { files } = useReportFiles(a.id, task.submission_type !== 'mark' && a.status !== 'todo')
   const today = todayISO()
   const due = effectiveDue(task, a)
   // One button per date: «оставить» wins over «+2 дня», which wins over «конец спринта».
@@ -169,7 +172,7 @@ function AssignmentCard({
         <Badge variant={overdue ? 'destructive' : st.variant}>{overdue ? 'Просрочено' : st.label}</Badge>
       </div>
 
-      {(a.report_text || a.report_link) && (
+      {(a.report_text || a.report_link || files.length > 0) && (
         <div className="mt-3 space-y-2 text-sm">
           {a.report_text && <p className="whitespace-pre-wrap leading-relaxed">{a.report_text}</p>}
           {a.report_link && (
@@ -183,6 +186,7 @@ function AssignmentCard({
               <span className="truncate">{a.report_link}</span>
             </a>
           )}
+          <FileChips assignmentId={a.id} files={files} />
         </div>
       )}
       {a.review_comment && a.status !== 'review' && (
