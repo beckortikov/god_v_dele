@@ -13,6 +13,7 @@ import { Segmented } from '@/components/erp/segmented'
 import { EmptyState } from '@/components/erp/empty-state'
 import { useConfirm } from '@/components/erp/confirm'
 import { MONTH_COLORS } from '@/components/wheels/colors'
+import { LifeBalanceSelf } from '@/components/cabinet/life-balance-self'
 import { FillReport, type FillRow } from '@/components/wheels/fill-report'
 import {
     Meter,
@@ -456,6 +457,49 @@ export function LifeBalancePage({ participantId: fixedParticipantId, participant
             {editCats ? 'Готово' : <><Settings2 /> Категории</>}
         </Button>
     )
+
+    // A participant gets the phone-first view: − / + instead of typing, the radar on top.
+    if (isParticipantMode) {
+        return (
+            <PageContainer>
+                <PageHeader
+                    title="Колесо жизни"
+                    description={`${participantName ? participantName + ' · ' : ''}Оцените каждую сферу жизни от 0 до 10`}
+                    actions={<YearSelect value={year} onChange={y => guard(() => setYear(y))} />}
+                />
+                <LifeBalanceSelf
+                    months={MONTHS}
+                    year={year}
+                    focusIdx={focusIdx}
+                    onFocusIdx={i => setFocusMonth(MONTHS[i])}
+                    curMonthIdx={curMonthIdx}
+                    isCurrentYear={isCurrentYear}
+                    categories={categories}
+                    defaultCategories={DEFAULT_CATEGORY_NAMES}
+                    ideals={idealValues}
+                    monthly={monthlyValues}
+                    loading={isLoading}
+                    onScore={(cat, v) => handleScoreChange(focusMonth, cat, String(v))}
+                    onIdeal={(cat, v) => handleIdealChange(cat, String(v))}
+                    onCopyMonth={from => {
+                        setMonthlyValues(prev => ({ ...prev, [focusMonth]: { ...(prev[MONTHS[from]] || {}) } }))
+                        setHasUnsavedChanges(true)
+                    }}
+                    onRename={handleCustomCategoryChange}
+                    onRemove={removeCategory}
+                    onAdd={addCustomCategory}
+                />
+                <SaveBar dirty={hasUnsavedChanges} saving={isSaving} onSave={handleSave}>
+                    <div className="min-w-0">
+                        <p className="truncate font-medium">{focusMonth}: оценено {ratedInFocus} из {categories.length}</p>
+                        <div className="text-xs">
+                            <SaveStatus dirty={hasUnsavedChanges} />
+                        </div>
+                    </div>
+                </SaveBar>
+            </PageContainer>
+        )
+    }
 
     return (
         <PageContainer>
