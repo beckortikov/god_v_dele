@@ -1,12 +1,12 @@
 'use client'
 
 import React, { useState } from 'react'
-import { AlertCircle, Eye, EyeOff, Loader2 } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Field } from '@/components/erp/field'
+import Image from 'next/image'
+import { AlertCircle, ArrowLeft, Eye, EyeOff, Loader2 } from 'lucide-react'
+import { unbounded } from '@/components/landing/fonts'
+import '@/components/landing/landing.css'
 
-export function LoginPage({ onLoginSuccess }: { onLoginSuccess: () => void }) {
+export function LoginPage({ onLoginSuccess, onBack }: { onLoginSuccess: () => void; onBack?: () => void }) {
   const [login, setLogin] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -45,66 +45,79 @@ export function LoginPage({ onLoginSuccess }: { onLoginSuccess: () => void }) {
   }
 
   return (
-    <div className="flex min-h-dvh w-full items-center justify-center bg-background p-4">
-      <div className="w-full max-w-[380px]">
-        <div className="mb-8 flex flex-col items-center text-center">
-          <span className="mb-4 flex size-12 items-center justify-center rounded-xl bg-primary text-lg font-bold text-primary-foreground shadow-sm">
-            ГД
-          </span>
-          <h1 className="text-2xl font-semibold tracking-tight">Год в деле</h1>
-          <p className="mt-1.5 text-sm text-muted-foreground">Финансы, участники и команда в одном месте</p>
+    <div className={`landing login-screen ${unbounded.variable}`}>
+      <aside className="login-side">
+        <div className="glow" />
+        <div className="logo"><i>ГВД</i>Год в деле</div>
+        <p className="quote">Бизнес в цифрах. Рост — <em>кратно.</em></p>
+        <div className="who">
+          <Image src="/landing/anvar-cutout.png" alt="" width={868} height={1300} sizes="420px" />
         </div>
+      </aside>
 
-        <form onSubmit={handleLogin} className="rounded-2xl border bg-card p-6 shadow-sm">
-          {error && (
-            <div role="alert" className="mb-5 flex gap-2.5 rounded-lg bg-destructive-soft px-3 py-2.5 text-sm text-destructive">
-              <AlertCircle className="mt-0.5 size-4 shrink-0" />
-              <p>{error}</p>
-            </div>
-          )}
+      <main className="login-main">
+        <div className="glow" />
+        <div className="login-box">
+          <div className="logo"><i>ГВД</i>Год в деле</div>
+          <h1>Вход</h1>
+          <p className="lead">Финансы, участники и команда в одном месте</p>
 
-          <div className="space-y-4">
-            <Field label="Логин" htmlFor="login">
-              <Input
+          <form onSubmit={handleLogin} className="login-card card">
+            {error && (
+              <div role="alert" className="form-error" style={{ display: 'flex', gap: '.6rem', alignItems: 'flex-start' }}>
+                <AlertCircle size={18} style={{ marginTop: 3, flexShrink: 0 }} />
+                <p>{error}</p>
+              </div>
+            )}
+
+            <label>
+              Логин
+              <input
                 id="login"
                 autoComplete="username"
                 autoFocus
                 value={login}
                 onChange={e => setLogin(e.target.value)}
                 disabled={isLoading}
-                className="h-10"
               />
-            </Field>
+            </label>
 
-            <Field label="Пароль" htmlFor="password">
-              <div className="relative">
-                <Input
+            <label>
+              Пароль
+              <div className="pw">
+                <input
                   id="password"
                   type={showPassword ? 'text' : 'password'}
                   autoComplete="current-password"
                   value={password}
                   onChange={e => setPassword(e.target.value)}
                   disabled={isLoading}
-                  className="h-10 pr-10"
                 />
                 <button
                   type="button"
+                  className="pw-toggle"
                   onClick={() => setShowPassword(s => !s)}
-                  className="absolute top-1/2 right-1.5 flex size-7 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
                   aria-label={showPassword ? 'Скрыть пароль' : 'Показать пароль'}
                 >
-                  {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                 </button>
               </div>
-            </Field>
-          </div>
+            </label>
 
-          <Button type="submit" disabled={isLoading || !login || !password} className="mt-6 h-10 w-full">
-            {isLoading && <Loader2 className="animate-spin" />}
-            {isLoading ? 'Вход…' : 'Войти'}
-          </Button>
-        </form>
-      </div>
+            <button type="submit" className="btn btn-gold" disabled={isLoading || !login || !password}>
+              {isLoading && <Loader2 size={18} className="animate-spin" />}
+              {isLoading ? 'Вход…' : 'Войти'}
+            </button>
+          </form>
+
+          {onBack && (
+            <button type="button" onClick={onBack} className="login-back">
+              <ArrowLeft size={18} />
+              На главную
+            </button>
+          )}
+        </div>
+      </main>
     </div>
   )
 }

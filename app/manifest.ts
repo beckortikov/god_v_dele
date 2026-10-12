@@ -10,7 +10,8 @@ export default function manifest(): MetadataRoute.Manifest {
     description: 'Прозрачный финансовый и кадровый учёт для образовательных проектов',
     lang: 'ru',
     dir: 'ltr',
-    start_url: '/',
+    // Installed app opens straight to the sign-in form, not the public landing page.
+    start_url: '/?login',
     scope: '/',
     display: 'standalone',
     orientation: 'any',

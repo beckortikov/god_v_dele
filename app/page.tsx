@@ -17,6 +17,7 @@ import { BalanceForecastPage } from '@/components/balance-forecast-page'
 import { ProgramsPage } from '@/components/programs-page'
 import OPiUReportsPage from '@/components/opiu-reports-page'
 import { LoginPage } from '@/components/login'
+import { LandingPage } from '@/components/landing/landing-page'
 import { LifeWheelPage } from '@/components/life-wheel-page'
 import { LifeBalancePage } from '@/components/life-balance-page'
 import { BusinessWheelPage } from '@/components/business-wheel-page'
@@ -62,6 +63,8 @@ function readSession(): SessionUser | null {
 export default function Home() {
   const [session, setSession] = useState<SessionUser | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  // Signed-out visitors see the public landing; the login form opens on request (button, ?login, or after logout).
+  const [loginRequested, setLoginRequested] = useState(false)
 
   const showLogin = useCallback(() => {
     clearLocalSession()
@@ -69,11 +72,13 @@ export default function Home() {
     url.searchParams.delete('page')
     window.history.replaceState(null, '', url)
     setSession(null)
+    setLoginRequested(true)
   }, [])
 
   useEffect(() => {
     installAuthGuard(showLogin)
     setSession(readSession())
+    if (new URLSearchParams(window.location.search).has('login')) setLoginRequested(true)
     setIsLoading(false)
   }, [showLogin])
 
@@ -92,7 +97,8 @@ export default function Home() {
   }
 
   if (!session) {
-    return <LoginPage onLoginSuccess={() => setSession(readSession())} />
+    if (!loginRequested) return <LandingPage onLogin={() => setLoginRequested(true)} />
+    return <LoginPage onLoginSuccess={() => setSession(readSession())} onBack={() => setLoginRequested(false)} />
   }
 
   return <AuthedApp session={session} onLogout={handleLogout} />
