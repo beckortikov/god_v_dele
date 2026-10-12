@@ -16,7 +16,7 @@ const EXPECTED_SECTIONS: Record<UserRole, string[]> = {
   admin: ['home', 'people', 'finance', 'reports', 'wheels', 'hr', 'admin'],
   finance: ['home', 'people', 'finance', 'reports', 'wheels'],
   wheels_manager: ['wheels', 'people'],
-  manager: ['cabinet', 'wheels'],
+  manager: ['cabinet', 'people', 'wheels'],
   employee: ['cabinet', 'wheels'],
   participant: ['cabinet', 'wheels'],
 }
@@ -40,9 +40,12 @@ describe('getSections', () => {
     }
   })
 
-  it('wheels_manager sees participants but not programs', () => {
-    const people = getSections('wheels_manager').find(s => s.id === 'people')
-    expect(people?.pages).toEqual(['participants'])
+  it('people section depends on the role', () => {
+    const people = (r: UserRole) => getSections(r).find(s => s.id === 'people')?.pages
+    expect(people('admin')).toEqual(['participants', 'programs', 'sprints'])
+    expect(people('finance')).toEqual(['participants', 'programs'])
+    expect(people('wheels_manager')).toEqual(['participants', 'sprints'])
+    expect(people('manager')).toEqual(['sprints'])
   })
 
   it('cabinet section depends on the role', () => {
@@ -104,6 +107,12 @@ describe('getAllowedPages', () => {
   it('only participants see «Мои оплаты»', () => {
     for (const role of ROLES) {
       expect(getAllowedPages(role).includes('my-payments')).toBe(role === 'participant')
+    }
+  })
+
+  it('curators reach «Спринты»: admin, wheels_manager, manager', () => {
+    for (const role of ROLES) {
+      expect(getAllowedPages(role).includes('sprints')).toBe(['admin', 'wheels_manager', 'manager'].includes(role))
     }
   })
 })

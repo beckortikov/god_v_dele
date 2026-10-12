@@ -22,6 +22,7 @@ import {
   PieChart,
   History,
   Receipt,
+  Flag,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -31,6 +32,7 @@ export type PageType =
   | 'hr-dashboard' | 'employees' | 'schedule' | 'payroll' | 'vacations' | 'timesheet'
   | 'users' | 'employee-dashboard' | 'manager-dashboard'
   | 'analytics' | 'audit' | 'my-payments'
+  | 'sprints'
 
 export type UserRole = 'admin' | 'finance' | 'employee' | 'manager' | 'wheels_manager' | 'participant'
 
@@ -73,11 +75,12 @@ export const PAGES: Record<PageType, NavPage> = {
   analytics: { id: 'analytics', label: 'Аналитика', title: 'Аналитика', description: 'Долги по срокам, удержание и доход на участника', icon: PieChart },
   audit: { id: 'audit', label: 'Журнал изменений', title: 'Журнал изменений', description: 'Кто и что изменил, корзина удалённого', icon: History },
   'my-payments': { id: 'my-payments', label: 'Мои оплаты', title: 'Мои оплаты', description: 'График платежей и задолженность', icon: Receipt },
+  sprints: { id: 'sprints', label: 'Спринты', title: 'Спринты', description: 'Задачи участников потока по спринтам', icon: Flag },
 }
 
 const S = {
   home: { id: 'home', label: 'Главное', icon: LayoutDashboard, pages: ['dashboard'] },
-  people: { id: 'people', label: 'Участники', icon: Users, pages: ['participants', 'programs'] },
+  people: { id: 'people', label: 'Участники', icon: Users, pages: ['participants', 'programs', 'sprints'] },
   finance: { id: 'finance', label: 'Финансы', icon: ArrowLeftRight, pages: ['income', 'plan-fact', 'balance', 'offline'] },
   reports: { id: 'reports', label: 'Отчёты', icon: FileSpreadsheet, pages: ['opiu-reports', 'analytics'] },
   wheels: { id: 'wheels', label: 'Колёса баланса', icon: Compass, pages: ['life-wheel', 'life-balance', 'business-wheel'] },
@@ -90,11 +93,15 @@ export function getSections(role: UserRole): NavSection[] {
     case 'admin':
       return [S.home, S.people, S.finance, S.reports, S.wheels, S.hr, S.admin]
     case 'finance':
-      return [S.home, S.people, S.finance, S.reports, S.wheels]
+      return [S.home, { ...S.people, pages: ['participants', 'programs'] }, S.finance, S.reports, S.wheels]
     case 'wheels_manager':
-      return [S.wheels, { ...S.people, pages: ['participants'] }]
+      return [S.wheels, { ...S.people, pages: ['participants', 'sprints'] }]
     case 'manager':
-      return [{ id: 'cabinet', label: 'Кабинет', icon: UserCircle2, pages: ['employee-dashboard', 'manager-dashboard'] }, S.wheels]
+      return [
+        { id: 'cabinet', label: 'Кабинет', icon: UserCircle2, pages: ['employee-dashboard', 'manager-dashboard'] },
+        { ...S.people, pages: ['sprints'] },
+        S.wheels,
+      ]
     case 'employee':
       return [{ id: 'cabinet', label: 'Кабинет', icon: UserCircle2, pages: ['employee-dashboard'] }, S.wheels]
     case 'participant':
