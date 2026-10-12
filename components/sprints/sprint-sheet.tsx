@@ -3,7 +3,7 @@
 import * as React from 'react'
 import { toast } from 'sonner'
 import { todayISO } from '@/lib/format'
-import { addDays, dateRange, daysBetween, nextSprintDates, type Sprint, type SprintTask } from '@/lib/sprints'
+import { addDays, dateRange, daysBetween, nextSprintDates, unfinishedTasks, type BoardData, type Sprint, type SprintTask, type UnfinishedTask } from '@/lib/sprints'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -41,6 +41,8 @@ export function SprintSheet({
   const [start, setStart] = React.useState('')
   const [end, setEnd] = React.useState('')
   const [picked, setPicked] = React.useState<string[]>([])
+  const [leftovers, setLeftovers] = React.useState<UnfinishedTask[]>([])
+  const [carry, setCarry] = React.useState<string[]>([])
   const [errors, setErrors] = React.useState<Record<string, string>>({})
   const [saving, setSaving] = React.useState(false)
 
@@ -53,7 +55,24 @@ export function SprintSheet({
     setStart(d.start_date)
     setEnd(d.end_date)
     setPicked([])
+    setLeftovers([])
+    setCarry([])
     setErrors({})
+    // Unfinished work of the previous sprint is offered for carrying over (all ticked: the usual case).
+    let cancelled = false
+    if (last) {
+      api<{ data: BoardData }>(`/api/sprints/${last.id}/board`)
+        .then(r => {
+          if (cancelled) return
+          const rest = unfinishedTasks(r.data.tasks, r.data.assignments)
+          setLeftovers(rest)
+          setCarry(rest.map(x => x.task.id))
+        })
+        .catch(() => {})
+    }
+    return () => {
+      cancelled = true
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
 
@@ -79,9 +98,9 @@ export function SprintSheet({
     try {
       const res = await api<{ data: Sprint }>('/api/sprints', {
         method: 'POST',
-        json: { program_id: programId, title, goal, start_date: start, end_date: end, backlog_task_ids: picked },
+        json: { program_id: programId, title, goal, start_date: start, end_date: end, backlog_task_ids: picked, carry_task_ids: carry },
       })
-      toast.success(`Спринт ${number} создан`, { description: dateRange(start, end) })
+      toast.success(`Спринт ${number} создан`, { description: dateRange(start, end) + (carry.length ? ` · перенесено задач: ${carry.length}` : '') })
       onCreated(res.data)
       onOpenChange(false)
     } catch (e: any) {
@@ -173,6 +192,28 @@ export function SprintSheet({
                 />
               </Field>
 
+              {leftovers.length > 0 && last && (
+                <Field
+                  label={`Не закрыто в спринте ${last.number}`}
+                  hint="Перенесённая задача получит срок — конец нового спринта. Кто уже сдал, остаётся с зачётом"
+                >
+                  <div className="divide-y rounded-lg border">
+                    {leftovers.map(({ task, open, total }) => (
+                      <label key={task.id} className="flex cursor-pointer items-center gap-2.5 px-3 py-2.5 text-sm hover:bg-accent">
+                        <Checkbox
+                          checked={carry.includes(task.id)}
+                          onCheckedChange={() => setCarry(c => (c.includes(task.id) ? c.filter(x => x !== task.id) : [...c, task.id]))}
+                        />
+                        <span className="flex-1">{task.title}</span>
+                        <span className="num text-xs text-muted-foreground">
+                          не сдали {open} из {total}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </Field>
+              )}
+
               {backlog.length > 0 && (
                 <Field label="Взять из бэклога" hint="Задачи без срока получат срок — конец спринта">
                   <div className="divide-y rounded-lg border">
@@ -193,7 +234,7 @@ export function SprintSheet({
           </SheetBody>
           <SheetFooter>
             <Button type="submit" disabled={saving}>
-              {saving ? 'Сохранение…' : picked.length ? `Создать спринт · задач: ${picked.length}` : 'Создать спринт'}
+              {saving ? 'Сохранение…' : picked.length + carry.length ? `Создать спринт · задач: ${picked.length + carry.length}` : 'Создать спринт'}
             </Button>
             <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
               Отмена

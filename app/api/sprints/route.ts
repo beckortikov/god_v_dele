@@ -67,9 +67,12 @@ export async function GET(req: Request) {
 }
 
 /**
- * POST { program_id, title, goal?, start_date, end_date, backlog_task_ids? }
+ * POST { program_id, title, goal?, start_date, end_date, backlog_task_ids?, carry_task_ids? }
  * Creates the next sprint of the program. Tasks picked from the backlog move
  * into it (deadline = sprint end if they had none) and go to their audience.
+ * Tasks carried over from an earlier sprint move too, with a new deadline (the
+ * sprint end); whoever already passed them keeps «done», the rest see them in
+ * the new sprint and an outdated personal deadline is dropped.
  */
 export async function POST(req: Request) {
   try {
@@ -82,6 +85,7 @@ export async function POST(req: Request) {
     if (!start || !end) throw new BadRequest('Укажите даты начала и конца')
     if (end < start) throw new BadRequest('Конец спринта раньше начала')
     const pick: string[] = Array.isArray(body.backlog_task_ids) ? body.backlog_task_ids.filter(isUuid) : []
+    const carry: string[] = Array.isArray(body.carry_task_ids) ? body.carry_task_ids.filter(isUuid) : []
 
     const { data: last, error: lastErr } = await supabaseAdmin
       .from(SPRINTS)
@@ -120,11 +124,37 @@ export async function POST(req: Request) {
       }
     }
 
+    let carried = 0
+    if (carry.length) {
+      // Only tasks of this program that already sit in some sprint (not the backlog).
+      const { data: tasks, error: cErr } = await supabaseAdmin
+        .from(TASKS)
+        .select('id')
+        .in('id', carry)
+        .eq('program_id', programId)
+        .not('sprint_id', 'is', null)
+        .neq('sprint_id', sprint.id)
+      check(cErr)
+      const ids = (tasks ?? []).map((t: { id: string }) => t.id)
+      if (ids.length) {
+        const { error: uErr } = await supabaseAdmin.from(TASKS).update({ sprint_id: sprint.id, due_date: end, updated_at: new Date().toISOString() }).in('id', ids)
+        check(uErr)
+        const { error: dErr } = await supabaseAdmin
+          .from(ASSIGNMENTS)
+          .update({ due_date: null })
+          .in('task_id', ids)
+          .in('status', ['todo', 'rework'])
+          .lt('due_date', start)
+        check(dErr)
+        carried = ids.length
+      }
+    }
+
     await logAudit(req, {
       table: SPRINTS,
       recordId: sprint.id,
       action: 'create',
-      summary: `Спринт ${number} «${title}», ${dateRange(start, end)}${moved ? `, из бэклога: ${moved}` : ''}`,
+      summary: `Спринт ${number} «${title}», ${dateRange(start, end)}${moved ? `, из бэклога: ${moved}` : ''}${carried ? `, перенесено: ${carried}` : ''}`,
       after: sprint,
     })
 

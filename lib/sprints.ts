@@ -273,6 +273,27 @@ export function tally(assignments: Pick<Assignment, 'status'>[]) {
   return t
 }
 
+/** A task of a finished sprint that someone has not closed yet. */
+export interface UnfinishedTask {
+  task: SprintTask
+  /** Participants who have not passed it: not started, on review or returned. */
+  open: number
+  total: number
+}
+
+/** Tasks with at least one assignment that is not done, most unfinished first. Nobody assigned = nothing to carry. */
+export function unfinishedTasks(tasks: SprintTask[], assignments: Pick<Assignment, 'task_id' | 'status'>[]): UnfinishedTask[] {
+  const byTask = new Map<string, Pick<Assignment, 'status'>[]>()
+  for (const a of assignments) byTask.set(a.task_id, [...(byTask.get(a.task_id) ?? []), a])
+  return tasks
+    .map(task => {
+      const rows = byTask.get(task.id) ?? []
+      return { task, open: rows.filter(r => r.status !== 'done').length, total: rows.length }
+    })
+    .filter(x => x.open > 0)
+    .sort((a, b) => b.open - a.open || a.task.title.localeCompare(b.task.title, 'ru'))
+}
+
 /** Whole percent, 0 when there is nothing to count. */
 export const percent = (part: number, total: number) => (total > 0 ? Math.round((part / total) * 100) : 0)
 

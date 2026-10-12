@@ -15,6 +15,7 @@ import {
   shortDate,
   sprintProgress,
   tally,
+  unfinishedTasks,
 } from '@/lib/sprints'
 
 const sprint = (start: string, end: string) => ({ start_date: start, end_date: end })
@@ -170,5 +171,29 @@ describe('focusTasks', () => {
 
   it('is empty when everything is done', () => {
     expect(focusTasks([mk('a', 'done', null)], '2026-10-08')).toEqual({ items: [], rest: 0 })
+  })
+})
+
+describe('unfinishedTasks', () => {
+  const t = (id: string, title: string) => ({ id, title }) as never
+  const a = (task_id: string, status: 'todo' | 'review' | 'rework' | 'done') => ({ task_id, status })
+
+  it('keeps tasks that someone has not passed, most unfinished first', () => {
+    const tasks = [t('1', 'Б'), t('2', 'А'), t('3', 'В'), t('4', 'Г')]
+    const rows = [a('1', 'done'), a('1', 'todo'), a('2', 'todo'), a('2', 'review'), a('3', 'done'), a('3', 'done')]
+    const r = unfinishedTasks(tasks, rows)
+    expect(r.map(x => x.task.title)).toEqual(['А', 'Б'])
+    expect(r[0]).toMatchObject({ open: 2, total: 2 })
+    expect(r[1]).toMatchObject({ open: 1, total: 2 })
+  })
+
+  it('counts review and rework as not finished, and skips tasks nobody has', () => {
+    const r = unfinishedTasks([t('1', 'А'), t('2', 'Б')], [a('1', 'rework')])
+    expect(r.map(x => x.task.id)).toEqual(['1'])
+  })
+
+  it('breaks ties by title', () => {
+    const r = unfinishedTasks([t('1', 'Я'), t('2', 'А')], [a('1', 'todo'), a('2', 'todo')])
+    expect(r.map(x => x.task.title)).toEqual(['А', 'Я'])
   })
 })
