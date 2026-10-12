@@ -1,24 +1,45 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-client';
+import { fakeVerify, hashPassword, isHashed, verifyPassword } from '@/lib/password';
 
 export async function POST(request: Request) {
     try {
         const body = await request.json();
-        const { login, password } = body;
+        const login = typeof body?.login === 'string' ? body.login.trim() : '';
+        const password = typeof body?.password === 'string' ? body.password : '';
 
         if (!login || !password) {
             return NextResponse.json({ error: 'Username and password are required' }, { status: 400 });
         }
 
-        const { data: user, error } = await supabaseAdmin
+        // Look the account up by login only; the password is checked here, never in the query.
+        const { data: candidates, error } = await supabaseAdmin
             .from('app_users')
             .select('*')
-            .eq('username', login)
-            .eq('password', password) // Validating plaintext password as requested
-            .single();
+            .eq('username', login);
 
-        if (error || !user) {
+        if (error) {
+            console.error('Login lookup failed:', error.message);
+            return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+        }
+
+        let user: any = null;
+        for (const c of candidates ?? []) {
+            if (await verifyPassword(password, c.password)) {
+                user = c;
+                break;
+            }
+        }
+
+        if (!user) {
+            // An unknown login must not answer faster than a wrong password
+            if (!candidates?.length) await fakeVerify(password);
             return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
+        }
+
+        // Plain-text passwords from before hashing are replaced with a hash on the first login
+        if (!isHashed(user.password)) {
+            await supabaseAdmin.from('app_users').update({ password: await hashPassword(password) }).eq('id', user.id);
         }
 
         let position = null;

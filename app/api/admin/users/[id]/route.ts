@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-client';
 import { fetchRow, logAudit } from '@/lib/audit';
 import { changeSuffix, stripSecrets } from '@/lib/audit-labels';
+import { hashPassword } from '@/lib/password';
 
 // UPDATE - Update user (password, role, etc)
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -10,6 +11,12 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
         const { id } = await params;
 
         const updateData: any = { ...body };
+        // An empty password field means «leave it as it is»; it must never wipe the stored one
+        if (typeof updateData.password !== 'string' || !updateData.password.trim()) {
+            delete updateData.password;
+        } else {
+            updateData.password = await hashPassword(updateData.password);
+        }
         if (updateData.employee_id === '') {
             updateData.employee_id = null;
         }

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-client';
 import { logAudit } from '@/lib/audit';
 import { enumLabel, stripSecrets } from '@/lib/audit-labels';
+import { hashPassword } from '@/lib/password';
 
 export async function GET(request: Request) {
     try {
@@ -45,7 +46,7 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
         }
 
-        const insertData: any = { username, password, role, full_name };
+        const insertData: any = { username, password: await hashPassword(String(password)), role, full_name };
         if (employee_id) insertData.employee_id = employee_id;
         if (participant_id) insertData.participant_id = participant_id;
 
