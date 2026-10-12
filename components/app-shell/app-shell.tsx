@@ -17,6 +17,9 @@ import {
   UserPlus,
   CalendarPlus,
   UserSquare2,
+  Flag,
+  Wallet,
+  PieChart,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -118,6 +121,12 @@ export function AppShell({
     if (current) remember(current.id, page)
   }, [current, page, remember])
 
+  // A new page starts at the top instead of keeping the previous page's scroll.
+  const mainRef = React.useRef<HTMLElement>(null)
+  React.useEffect(() => {
+    mainRef.current?.scrollTo({ top: 0 })
+  }, [page])
+
   React.useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
@@ -135,6 +144,8 @@ export function AppShell({
   }
 
   const displayName = userName || ROLE_LABELS[role]
+  // Participants live on phones: a bottom tab bar replaces the drawer and the cabinet tabs there.
+  const tabBar = role === 'participant'
 
   return (
     <div className="flex h-dvh flex-col bg-background text-foreground">
@@ -144,7 +155,7 @@ export function AppShell({
           <Button
             variant="ghost"
             size="icon-sm"
-            className="lg:hidden"
+            className={cn('lg:hidden', tabBar && 'hidden')}
             onClick={() => setDrawerOpen(true)}
             aria-label="Открыть меню"
           >
@@ -233,7 +244,12 @@ export function AppShell({
 
         {/* Row 2: pages of the current section */}
         {current && (
-          <div className="flex h-11 items-stretch gap-1 overflow-x-auto px-3 scrollbar-none sm:px-5">
+          <div
+            className={cn(
+              'flex h-11 items-stretch gap-1 overflow-x-auto px-3 scrollbar-none sm:px-5',
+              tabBar && current.id === 'cabinet' && 'max-lg:hidden'
+            )}
+          >
             {current.pages.map(id => {
               const p = PAGES[id]
               const active = id === page
@@ -269,7 +285,9 @@ export function AppShell({
         )}
       </header>
 
-      <main className="relative flex-1 overflow-auto">{children}</main>
+      <main ref={mainRef} className="relative flex-1 overflow-auto">{children}</main>
+
+      {tabBar && <ParticipantTabBar page={page} sections={sections} onNavigate={navigate} onOpenSection={openSection} />}
 
       <MobileDrawer
         open={drawerOpen}
@@ -296,6 +314,60 @@ export function AppShell({
         }}
       />
     </div>
+  )
+}
+
+const PARTICIPANT_TABS: { label: string; icon: LucideIcon; page?: PageType; section?: string }[] = [
+  { label: 'Сегодня', icon: Sun, page: 'my-today' },
+  { label: 'Спринт', icon: Flag, page: 'my-sprint' },
+  { label: 'Оплаты', icon: Wallet, page: 'my-payments' },
+  { label: 'Колёса', icon: PieChart, section: 'wheels' },
+]
+
+function ParticipantTabBar({
+  page,
+  sections,
+  onNavigate,
+  onOpenSection,
+}: {
+  page: PageType
+  sections: NavSection[]
+  onNavigate: (p: PageType) => void
+  onOpenSection: (s: NavSection) => void
+}) {
+  return (
+    <nav
+      aria-label="Разделы"
+      className="grid shrink-0 grid-cols-4 border-t border-nav-border bg-nav px-2 pt-1.5 pb-[max(0.5rem,env(safe-area-inset-bottom))] lg:hidden"
+    >
+      {PARTICIPANT_TABS.map(t => {
+        const section = t.section ? sections.find(s => s.id === t.section) : undefined
+        if (t.section && !section) return null
+        const active = t.page ? page === t.page : !!section?.pages.includes(page)
+        return (
+          <button
+            key={t.label}
+            type="button"
+            aria-current={active ? 'page' : undefined}
+            onClick={() => (t.page ? onNavigate(t.page) : section && onOpenSection(section))}
+            className={cn(
+              'flex flex-col items-center gap-0.5 rounded-xl py-1 text-[11.5px] outline-none focus-visible:ring-[3px] focus-visible:ring-ring/30',
+              active ? 'font-semibold text-nav-foreground' : 'font-medium text-nav-muted'
+            )}
+          >
+            <span
+              className={cn(
+                'flex h-[30px] w-14 items-center justify-center rounded-full transition-colors duration-200',
+                active && 'bg-primary-soft text-primary-soft-foreground'
+              )}
+            >
+              <t.icon className="size-5" />
+            </span>
+            {t.label}
+          </button>
+        )
+      })}
+    </nav>
   )
 }
 

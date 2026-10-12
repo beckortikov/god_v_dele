@@ -23,6 +23,7 @@ import {
   History,
   Receipt,
   Flag,
+  Sun,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -32,7 +33,7 @@ export type PageType =
   | 'hr-dashboard' | 'employees' | 'schedule' | 'payroll' | 'vacations' | 'timesheet'
   | 'users' | 'employee-dashboard' | 'manager-dashboard'
   | 'analytics' | 'audit' | 'my-payments'
-  | 'sprints'
+  | 'sprints' | 'my-sprint' | 'my-today'
 
 export type UserRole = 'admin' | 'finance' | 'employee' | 'manager' | 'wheels_manager' | 'participant'
 
@@ -76,6 +77,8 @@ export const PAGES: Record<PageType, NavPage> = {
   audit: { id: 'audit', label: 'Журнал изменений', title: 'Журнал изменений', description: 'Кто и что изменил, корзина удалённого', icon: History },
   'my-payments': { id: 'my-payments', label: 'Мои оплаты', title: 'Мои оплаты', description: 'График платежей и задолженность', icon: Receipt },
   sprints: { id: 'sprints', label: 'Спринты', title: 'Спринты', description: 'Задачи участников потока по спринтам', icon: Flag },
+  'my-today': { id: 'my-today', label: 'Сегодня', title: 'Сегодня', description: 'Главное на сегодня: задачи, оплата, колёса', icon: Sun },
+  'my-sprint': { id: 'my-sprint', label: 'Мой спринт', title: 'Мой спринт', description: 'Задачи спринта и отчёты куратору', icon: Flag },
 }
 
 const S = {
@@ -105,7 +108,7 @@ export function getSections(role: UserRole): NavSection[] {
     case 'employee':
       return [{ id: 'cabinet', label: 'Кабинет', icon: UserCircle2, pages: ['employee-dashboard'] }, S.wheels]
     case 'participant':
-      return [{ id: 'cabinet', label: 'Кабинет', icon: UserCircle2, pages: ['my-payments'] }, S.wheels]
+      return [{ id: 'cabinet', label: 'Кабинет', icon: UserCircle2, pages: ['my-today', 'my-sprint', 'my-payments'] }, S.wheels]
   }
 }
 
@@ -113,9 +116,10 @@ export function getDefaultPage(role: UserRole): PageType {
   switch (role) {
     case 'manager':
       return 'manager-dashboard'
+    case 'participant':
+      return 'my-today'
     case 'wheels_manager':
     case 'employee':
-    case 'participant':
       return 'life-wheel'
     default:
       return 'dashboard'

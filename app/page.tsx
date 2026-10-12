@@ -33,6 +33,8 @@ import { ManagerDashboard } from '@/components/employee/manager-dashboard'
 import { AnalyticsPage } from '@/components/reports/analytics-page'
 import { AuditPage } from '@/components/admin/audit-page'
 import { MyPaymentsPage } from '@/components/cabinet/my-payments-page'
+import { MySprintPage } from '@/components/cabinet/my-sprint-page'
+import { MyTodayPage } from '@/components/cabinet/my-today-page'
 import { SprintsPage } from '@/components/sprints/sprints-page'
 
 interface SessionUser {
@@ -148,5 +150,7 @@ function PageRouter({ session }: { session: SessionUser }) {
     case 'audit': return <AuditPage />
     case 'my-payments': return <MyPaymentsPage participantId={session.participantId} participantName={session.fullName} />
     case 'sprints': return <SprintsPage />
+    case 'my-sprint': return <MySprintPage participantId={session.participantId} />
+    case 'my-today': return <MyTodayPage participantId={session.participantId} participantName={session.fullName} />
   }
 }

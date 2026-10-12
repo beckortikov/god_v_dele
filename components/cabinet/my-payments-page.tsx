@@ -2,7 +2,7 @@
 
 import { TelegramLinkCard } from '@/components/telegram/telegram-link-card'
 import * as React from 'react'
-import { CalendarCheck2, Inbox, MessageCircleQuestion, RefreshCw } from 'lucide-react'
+import { AlertCircle, CalendarCheck2, Check, Inbox, MessageCircleQuestion, RefreshCw } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 import { formatDate, formatMoney, MONTHS_RU, plural } from '@/lib/format'
@@ -68,7 +68,7 @@ const monthName = (m: number, y: number) => `${MONTHS_RU[m - 1]} ${y}`
  * months from the start date for the program duration, plus any month with a
  * payment; overdue by the same rule as the participants page.
  */
-function buildView(participant: ParticipantInfo, program: ProgramInfo | null, payments: PaymentRow[], receipts: Receipt[]) {
+export function buildView(participant: ParticipantInfo, program: ProgramInfo | null, payments: PaymentRow[], receipts: Receipt[]) {
   const s = buildSchedule({ ...participant, program }, payments)
   const byMonth = new Map<string, Receipt[]>()
   for (const t of receipts) {
@@ -115,7 +115,7 @@ async function getJSON(url: string, signal: AbortSignal) {
   return json
 }
 
-function useMyPayments(participantId: string | null) {
+export function useMyPayments(participantId: string | null) {
   const [state, setState] = React.useState<{
     loading: boolean
     error: string | null
@@ -264,98 +264,77 @@ function MyPaymentsView({
 }) {
   const s = React.useMemo(() => buildView(participant, program, payments, receipts), [participant, program, payments, receipts])
   const pct = s.totalPlan > 0 ? Math.min(100, Math.round((s.totalPaid / s.totalPlan) * 100)) : 0
-  const paidMonths = s.paidMonths
   const finished = participant.status === 'completed' || participant.status === 'archived'
+  const [open, setOpen] = React.useState<Record<number, boolean>>({})
 
   const nextRemaining = s.next ? s.next.remaining : 0
 
   return (
     <PageContainer className="max-w-3xl">
       <PageHeader title="Мои оплаты" description={greeting} />
-      <div className="mb-4">
-        <TelegramLinkCard participantId={participant.id} participantName={participant.name} />
-      </div>
 
-      {/* Program and tariff */}
-      <Panel className="mb-4 p-4 sm:p-5">
-        <div className="flex flex-wrap items-start gap-x-3 gap-y-1">
-          <div className="min-w-0 flex-1">
-            <p className="text-xs text-muted-foreground">Программа</p>
-            <p className="mt-0.5 text-base font-semibold tracking-tight sm:text-lg">{program?.name || 'Программа не указана'}</p>
-          </div>
-          {finished && <Badge variant="secondary">{participant.status === 'completed' ? 'Обучение завершено' : 'В архиве'}</Badge>}
+      {/* Program, progress and the next payment */}
+      <section className="mb-4 rounded-2xl border bg-card p-4 shadow-xs sm:p-5">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-sm text-muted-foreground">{program?.name || 'Программа не указана'}</p>
+          {finished ? (
+            <Badge variant="secondary">{participant.status === 'completed' ? 'Обучение завершено' : 'В архиве'}</Badge>
+          ) : s.debt > 0 ? (
+            <Badge variant="destructive">Долг {formatMoney(s.debt)}</Badge>
+          ) : (
+            <Badge variant="success">Долга нет</Badge>
+          )}
         </div>
-        <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 text-sm sm:grid-cols-3">
+        <p className="num mt-2 text-[30px] leading-none font-bold tracking-tight">
+          {formatMoney(s.totalPaid)}
+          {s.totalPlan > 0 && <span className="ml-2 text-[17px] font-medium tracking-normal text-muted-foreground">из {formatMoney(s.totalPlan)}</span>}
+        </p>
+        {s.totalPlan > 0 && (
+          <div
+            className="mt-4 h-2 overflow-hidden rounded-full bg-muted"
+            role="progressbar"
+            aria-valuenow={pct}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-label={`Оплачено ${pct}% стоимости программы`}
+          >
+            <div className="h-full rounded-full bg-success" style={{ width: `${pct}%` }} />
+          </div>
+        )}
+        <dl className="mt-4 grid grid-cols-3 gap-x-3 text-sm">
           <div>
-            <dt className="text-xs text-muted-foreground">Тариф</dt>
-            <dd className="num mt-0.5 font-medium">{s.tariff ? `${formatMoney(s.tariff)} в месяц` : '—'}</dd>
+            <dt className="text-[13px] text-muted-foreground">Тариф</dt>
+            <dd className="num mt-0.5 font-semibold">{s.tariff ? `${formatMoney(s.tariff)}/мес` : '—'}</dd>
           </div>
           <div>
-            <dt className="text-xs text-muted-foreground">Срок</dt>
-            <dd className="mt-0.5 font-medium">
-              {s.duration ? `${s.duration} ${plural(s.duration, ['месяц', 'месяца', 'месяцев'])}` : '—'}
-            </dd>
+            <dt className="text-[13px] text-muted-foreground">Срок</dt>
+            <dd className="mt-0.5 font-semibold">{s.duration ? `${s.duration} ${plural(s.duration, ['месяц', 'месяца', 'месяцев'])}` : '—'}</dd>
           </div>
-          <div className="col-span-2 sm:col-span-1">
-            <dt className="text-xs text-muted-foreground">Период</dt>
-            <dd className="mt-0.5 font-medium">
-              {MONTHS_RU[s.startIdx % 12].toLowerCase()} {Math.floor(s.startIdx / 12)} — {MONTHS_RU[s.endIdx % 12].toLowerCase()}{' '}
-              {Math.floor(s.endIdx / 12)}
+          <div>
+            <dt className="text-[13px] text-muted-foreground">Период</dt>
+            <dd className="num mt-0.5 font-semibold">
+              {MONTHS_RU[s.startIdx % 12].slice(0, 3).toLowerCase()} – {MONTHS_RU[s.endIdx % 12].slice(0, 3).toLowerCase()}
             </dd>
           </div>
         </dl>
-        {s.totalPlan > 0 && (
-          <div className="mt-4">
-            <div className="flex items-baseline justify-between gap-3 text-xs text-muted-foreground">
-              <span>
-                Оплачено <span className="num font-medium text-foreground">{formatMoney(s.totalPaid)}</span> из{' '}
-                <span className="num">{formatMoney(s.totalPlan)}</span>
-              </span>
-              <span className="num">{pct}%</span>
-            </div>
-            <div
-              className="mt-1.5 h-2 overflow-hidden rounded-full bg-muted"
-              role="progressbar"
-              aria-valuenow={pct}
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-label="Оплачено от стоимости программы"
-            >
-              <div className="h-full rounded-full bg-success transition-[width] duration-200" style={{ width: `${pct}%` }} />
-            </div>
-          </div>
-        )}
-      </Panel>
+      </section>
 
-      <StatStrip
-        className="mb-6"
-        stats={[
-          {
-            label: 'Оплачено',
-            value: formatMoney(s.totalPaid),
-            sub: paidMonths
-              ? `${paidMonths} ${plural(paidMonths, ['месяц', 'месяца', 'месяцев'])} полностью`
-              : 'Полностью оплаченных месяцев пока нет',
-          },
-          {
-            label: 'Текущий долг',
-            value: s.debt ? formatMoney(s.debt) : 'Нет',
-            tone: s.debt ? 'destructive' : 'success',
-            sub: s.debt
-              ? `за ${s.debtMonths} ${plural(s.debtMonths, ['месяц', 'месяца', 'месяцев'])}`
-              : 'Все прошлые месяцы оплачены',
-          },
-          {
-            label: 'Следующий платёж',
-            value: s.next ? formatMoney(nextRemaining) : '—',
-            sub: s.next
-              ? `${s.next.isCurrent ? 'в этом месяце, ' : ''}${monthName(s.next.month, s.next.year).toLowerCase()}`
-              : s.debt
-                ? 'Новых начислений нет, остался только долг'
-                : 'Программа полностью оплачена',
-          },
-        ]}
-      />
+      {s.next && nextRemaining > 0 ? (
+        <section className="mb-5 rounded-2xl bg-primary-soft p-4 text-primary-soft-foreground sm:p-5">
+          <p className="text-sm font-medium">
+            {s.next.isCurrent ? 'В этом месяце осталось оплатить' : `К оплате за ${MONTHS_RU[s.next.month - 1].toLowerCase()}`}
+          </p>
+          <p className="num mt-1 text-[30px] leading-none font-bold tracking-tight text-foreground">{formatMoney(nextRemaining)}</p>
+          <p className="num mt-2 text-sm">
+            {monthName(s.next.month, s.next.year)}
+            {s.next.fact > 0 ? `: внесено ${formatMoney(s.next.fact)} из ${formatMoney(s.next.plan)}` : `: по плану ${formatMoney(s.next.plan)}`}
+          </p>
+        </section>
+      ) : (
+        <p className="mb-5 px-1 text-sm text-muted-foreground">
+          {s.debt ? 'Новых начислений нет, остался только долг' : 'Программа полностью оплачена. Спасибо!'}
+        </p>
+      )}
 
       <h2 className="mb-2 text-sm font-semibold">График платежей</h2>
       {s.months.length === 0 ? (
@@ -369,29 +348,50 @@ function MyPaymentsView({
       ) : (
         <Panel>
           {/* Phones: a simple list */}
-          <ul className="divide-y sm:hidden">
-            {s.months.map(m => (
-              <li key={m.idx} className={cn('px-4 py-3', m.isCurrent && 'bg-primary-soft/40', m.status === 'future' && 'text-muted-foreground')}>
-                <div className="flex items-center gap-2">
-                  <p className="min-w-0 flex-1 font-medium">{monthName(m.month, m.year)}</p>
-                  <Badge variant={SCHEDULE_STATUS[m.status].variant}>{SCHEDULE_STATUS[m.status].label}</Badge>
-                </div>
-                <p className="num mt-1 text-sm text-muted-foreground">
-                  {m.row || m.fact > 0 ? (
-                    <span className={cn('font-medium', m.fact > 0 ? 'text-foreground' : '')}>{formatMoney(m.fact)}</span>
-                  ) : (
-                    <span className={cn(m.overdue ? 'font-medium text-destructive' : '')}>Нет оплаты</span>
-                  )}{' '}
-                  из {formatMoney(m.plan)}
-                  {!m.receipts.length && m.paidDate && m.fact > 0 && <span> · {formatDate(m.paidDate)}</span>}
-                </p>
-                {m.remaining > 0 && m.fact > 0 && (
-                  <p className="num mt-0.5 text-xs text-muted-foreground">Осталось {formatMoney(m.remaining)}</p>
-                )}
-                <ReceiptList receipts={m.receipts} className="mt-1.5" />
-                {m.notes && !m.receipts.length && <p className="mt-1 text-xs text-muted-foreground">{m.notes}</p>}
-              </li>
-            ))}
+          <ul className="sm:hidden" aria-label="График платежей по месяцам">
+            {s.months.map(m => {
+              const isOpen = !!open[m.idx]
+              const hasMore = m.receipts.length > 0 || !!m.notes || !!m.paidDate
+              const paid = m.status === 'paid'
+              return (
+                <li key={m.idx} className={cn('border-b last:border-b-0', m.isCurrent && 'bg-primary-soft/40')}>
+                  <button
+                    type="button"
+                    aria-expanded={hasMore ? isOpen : undefined}
+                    disabled={!hasMore}
+                    onClick={() => setOpen(o => ({ ...o, [m.idx]: !o[m.idx] }))}
+                    className="flex min-h-[68px] w-full items-center gap-3.5 px-4 py-3 text-left outline-none focus-visible:ring-[3px] focus-visible:ring-inset focus-visible:ring-ring/30 enabled:hover:bg-accent"
+                  >
+                    <span
+                      aria-hidden
+                      className={cn(
+                        'flex size-8 shrink-0 items-center justify-center rounded-full',
+                        paid ? 'bg-success text-white' : m.status === 'partial' ? 'bg-warning-soft text-[color-mix(in_oklch,var(--warning)_75%,var(--foreground))]' : m.overdue ? 'bg-destructive-soft text-destructive' : 'border-2 border-dashed border-muted-foreground/50'
+                      )}
+                    >
+                      {paid && <Check className="size-4" strokeWidth={3} />}
+                      {m.status === 'partial' && <span className="size-3 rounded-full bg-current opacity-80" />}
+                      {m.overdue && m.status !== 'partial' && <AlertCircle className="size-4" />}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className={cn('block text-base font-medium', m.status === 'future' && 'text-muted-foreground')}>{monthName(m.month, m.year)}</span>
+                      <span className="num mt-0.5 block text-[13px] text-muted-foreground">
+                        {m.row || m.fact > 0 ? `${formatMoney(m.fact)} из ${formatMoney(m.plan)}` : m.overdue ? 'Нет оплаты' : formatMoney(m.plan)}
+                        {m.remaining > 0 && m.fact > 0 ? ` · осталось ${formatMoney(m.remaining)}` : ''}
+                      </span>
+                    </span>
+                    <Badge variant={SCHEDULE_STATUS[m.status].variant}>{m.isCurrent && m.status === 'partial' ? 'Текущий' : SCHEDULE_STATUS[m.status].label}</Badge>
+                  </button>
+                  {isOpen && hasMore && (
+                    <div className="space-y-1.5 px-4 pb-3.5 pl-[62px]">
+                      <ReceiptList receipts={m.receipts} />
+                      {!m.receipts.length && m.paidDate && m.fact > 0 && <p className="num text-[13px] text-muted-foreground">Оплачено {formatDate(m.paidDate)}</p>}
+                      {m.notes && !m.receipts.length && <p className="text-[13px] text-muted-foreground">{m.notes}</p>}
+                    </div>
+                  )}
+                </li>
+              )
+            })}
           </ul>
 
           {/* Wider screens: a table */}
@@ -450,6 +450,10 @@ function MyPaymentsView({
           <TotalsBar label={`оплачено из ${formatMoney(s.totalPlan)}`} value={formatMoney(s.totalPaid)} />
         </Panel>
       )}
+
+      <div className="mt-6">
+        <TelegramLinkCard participantId={participant.id} participantName={participant.name} />
+      </div>
 
       <p className="mt-4 text-center text-xs text-muted-foreground">
         Суммы указаны в долларах. Если что-то не сходится, напишите менеджеру программы.
