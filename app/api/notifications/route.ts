@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-client'
+import { participantSprintNotices, reviewQueueNotices, type OpenAssignment } from '@/lib/sprint-notices'
+import { isMissingSprintTable } from '@/app/api/sprints/_lib/store'
 
 /**
  * GET /api/notifications?role=&userId=&employeeId=&participantId=
@@ -18,6 +20,9 @@ export type NotificationKind =
   | 'event'
   | 'payroll'
   | 'overdue-tasks'
+  | 'sprint-rework'
+  | 'sprint-due'
+  | 'sprint-review'
 
 export interface NotificationDetail {
   key: string
@@ -429,6 +434,51 @@ async function overdueTasks(employeeId: string, today: Date): Promise<AppNotific
   ]
 }
 
+// ---------- sprints ----------
+
+/** The participant's open sprint work: returned, overdue, due soon. Sprints that have not started yet stay quiet. */
+async function mySprintWork(participantId: string, today: Date): Promise<AppNotification[]> {
+  const { data, error } = await supabaseAdmin
+    .from('sprint_task_assignments')
+    .select('id, status, due_date, review_comment, reviewed_at, task:sprint_tasks(id, title, due_date, sprint:sprints(start_date))')
+    .eq('participant_id', participantId)
+    .in('status', ['todo', 'rework'])
+  if (error) {
+    if (isMissingSprintTable(error)) return [] // migration 016 not applied yet
+    throw error
+  }
+  const todayISO = localISO(today)
+  const rows: OpenAssignment[] = []
+  for (const r of data ?? []) {
+    const task = one((r as any).task) as any
+    const sprint = one(task?.sprint) as any
+    if (!task || !sprint || sprint.start_date > todayISO) continue
+    rows.push({
+      id: r.id,
+      status: r.status,
+      due_date: r.due_date,
+      review_comment: r.review_comment,
+      reviewed_at: r.reviewed_at,
+      task: { id: task.id, title: task.title, due_date: task.due_date },
+    })
+  }
+  return participantSprintNotices(rows, todayISO)
+}
+
+/** Reports waiting for a curator. */
+async function sprintReviewQueue(today: Date): Promise<AppNotification[]> {
+  const { data, error } = await supabaseAdmin
+    .from('sprint_task_assignments')
+    .select('id, participant_id, submitted_at')
+    .eq('status', 'review')
+    .limit(1000)
+  if (error) {
+    if (isMissingSprintTable(error)) return []
+    throw error
+  }
+  return reviewQueueNotices(data ?? [], localISO(today))
+}
+
 // ---------- handler ----------
 
 const PRIORITY_ORDER: Record<NotificationPriority, number> = { high: 0, normal: 1, low: 2 }
@@ -455,17 +505,22 @@ export async function GET(req: Request) {
           pendingLeaves('vacations', employees, now),
           unpaidPayroll(now),
           upcomingEvents(today),
-          Promise.resolve(birthdays(employees, today, 'employees'))
+          Promise.resolve(birthdays(employees, today, 'employees')),
+          sprintReviewQueue(today)
         )
         break
       case 'finance':
         tasks.push(overduePayments(now), upcomingEvents(today))
         break
+      case 'wheels_manager':
+        tasks.push(sprintReviewQueue(today))
+        break
       case 'manager':
         tasks.push(
           longTimers('manager-dashboard', employees, now),
           pendingLeaves('manager-dashboard', employees, now),
-          Promise.resolve(birthdays(employees, today, null))
+          Promise.resolve(birthdays(employees, today, null)),
+          sprintReviewQueue(today)
         )
         if (employeeId) tasks.push(overdueTasks(employeeId, today))
         break
@@ -474,7 +529,7 @@ export async function GET(req: Request) {
         tasks.push(Promise.resolve(birthdays(employees, today, null)))
         break
       case 'participant':
-        if (participantId) tasks.push(myDebt(participantId, now))
+        if (participantId) tasks.push(mySprintWork(participantId, today), myDebt(participantId, now))
         break
     }
 
