@@ -24,6 +24,7 @@ import {
   Receipt,
   Flag,
   Sun,
+  UserRound,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -33,7 +34,7 @@ export type PageType =
   | 'hr-dashboard' | 'employees' | 'schedule' | 'payroll' | 'vacations' | 'timesheet'
   | 'users' | 'employee-dashboard' | 'manager-dashboard'
   | 'analytics' | 'audit' | 'my-payments'
-  | 'sprints' | 'my-sprint' | 'my-today'
+  | 'sprints' | 'my-sprint' | 'my-today' | 'my-profile'
 
 export type UserRole = 'admin' | 'finance' | 'employee' | 'manager' | 'wheels_manager' | 'participant'
 
@@ -78,6 +79,7 @@ export const PAGES: Record<PageType, NavPage> = {
   'my-payments': { id: 'my-payments', label: 'Мои оплаты', title: 'Мои оплаты', description: 'График платежей и задолженность', icon: Receipt },
   sprints: { id: 'sprints', label: 'Спринты', title: 'Спринты', description: 'Задачи участников потока по спринтам', icon: Flag },
   'my-today': { id: 'my-today', label: 'Сегодня', title: 'Сегодня', description: 'Главное на сегодня: задачи, оплата, колёса', icon: Sun },
+  'my-profile': { id: 'my-profile', label: 'Мой профиль', title: 'Мой профиль', description: 'Личные данные, паспорт, бизнес и динамика по годам', icon: UserRound },
   'my-sprint': { id: 'my-sprint', label: 'Мой спринт', title: 'Мой спринт', description: 'Задачи спринта и отчёты куратору', icon: Flag },
 }
 
@@ -108,7 +110,7 @@ export function getSections(role: UserRole): NavSection[] {
     case 'employee':
       return [{ id: 'cabinet', label: 'Кабинет', icon: UserCircle2, pages: ['employee-dashboard'] }, S.wheels]
     case 'participant':
-      return [{ id: 'cabinet', label: 'Кабинет', icon: UserCircle2, pages: ['my-today', 'my-sprint', 'my-payments'] }, S.wheels]
+      return [{ id: 'cabinet', label: 'Кабинет', icon: UserCircle2, pages: ['my-today', 'my-sprint', 'my-payments', 'my-profile'] }, S.wheels]
   }
 }
 
@@ -132,6 +134,16 @@ export function getAllowedPages(role: UserRole): PageType[] {
 
 export function findSection(sections: NavSection[], page: PageType) {
   return sections.find(s => s.pages.includes(page))
+}
+
+/** What each role can reach; shown wherever an administrator picks a role. */
+export const ROLE_DESCRIPTIONS: Record<UserRole, string> = {
+  admin: 'Полный доступ: финансы, участники, персонал и пользователи',
+  manager: 'Свой кабинет, задачи сотрудников, спринты, заявки на отгул, колёса баланса',
+  finance: 'Участники, финансы, отчёты и колёса баланса. Без раздела «Персонал»',
+  wheels_manager: 'Колёса баланса, участники, их профили и спринты',
+  employee: 'Свой кабинет: задачи, учёт времени, заявки на отгул; колёса баланса',
+  participant: 'Свой кабинет: сегодня, спринт, оплаты, профиль и колёса баланса',
 }
 
 export const ROLE_LABELS: Record<UserRole, string> = {

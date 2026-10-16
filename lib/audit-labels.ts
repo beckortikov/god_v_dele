@@ -45,6 +45,8 @@ export const TABLE_LABELS: Record<string, string> = {
   life_balance_entries: 'Баланс жизни',
   business_wheel_entries: 'Колесо бизнеса',
   participant_groups: 'Группы участников',
+  participant_profiles: 'Профили участников',
+  participant_business_years: 'Бизнес участников по годам',
 }
 
 export const tableLabel = (t: string) => TABLE_LABELS[t] ?? t

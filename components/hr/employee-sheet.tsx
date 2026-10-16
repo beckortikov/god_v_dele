@@ -13,6 +13,9 @@ import { Badge } from '@/components/ui/badge'
 import { Field, FieldGroup } from '@/components/erp/field'
 import { Segmented } from '@/components/erp/segmented'
 import { Avatar, DetailRow, errorHint, fullName, type EmployeeStatus, type HrEmployee } from '@/components/hr/shared'
+import { AccessCard, AccessFields, CredentialsDialog, accessPayload, accessProblems, newAccessDraft, type AccessDraft, type IssuedCredentials } from '@/components/access/access-fields'
+import { EMPLOYEE_ACCOUNT_ROLES } from '@/lib/access'
+import { ROLE_LABELS, type UserRole } from '@/lib/navigation'
 
 export const EMPLOYEE_STATUS: Record<EmployeeStatus, { label: string; variant: 'success' | 'secondary' | 'destructive' }> = {
   active: { label: 'Работает', variant: 'success' },
@@ -83,10 +86,15 @@ export function EmployeeSheet({
   const [form, setForm] = React.useState<FormState>(emptyForm)
   const [errors, setErrors] = React.useState<Record<string, string>>({})
   const [saving, setSaving] = React.useState(false)
+  const [access, setAccess] = React.useState<AccessDraft>(() => newAccessDraft('employee'))
+  const [accessErrors, setAccessErrors] = React.useState<{ username?: string; password?: string }>({})
+  const [issued, setIssued] = React.useState<IssuedCredentials | null>(null)
 
   React.useEffect(() => {
     if (!open) return
     setErrors({})
+    setAccessErrors({})
+    setAccess(newAccessDraft('employee'))
     setForm(mode !== 'create' && employee ? fromEmployee(employee) : emptyForm())
   }, [open, mode, employee])
 
@@ -101,7 +109,9 @@ export function EmployeeSheet({
     if (!form.last_name.trim()) errs.last_name = 'Укажите фамилию'
     if (!form.position.trim()) errs.position = 'Укажите должность'
     setErrors(errs)
-    if (Object.keys(errs).length) return
+    const aErrs = editingId ? {} : accessProblems(access)
+    setAccessErrors(aErrs)
+    if (Object.keys(errs).length || aErrs.username || aErrs.password) return
 
     setSaving(true)
     try {
@@ -112,18 +122,24 @@ export function EmployeeSheet({
         body: JSON.stringify({
           ...form,
           base_salary: Number(form.base_salary) || 0,
+          ...(editingId ? {} : { account: accessPayload(access) }),
         }),
       })
       if (!res.ok) {
         const error = await res.json().catch(() => ({}))
         throw new Error(error.error || `Ошибка ${res.status}`)
       }
-      toast.success(editingId ? 'Карточка сотрудника обновлена' : 'Сотрудник добавлен', {
-        description: `${form.first_name} ${form.last_name}`.trim(),
-      })
+      const created = await res.json().catch(() => null)
+      const personName = `${form.first_name} ${form.last_name}`.trim()
+      toast.success(editingId ? 'Карточка сотрудника обновлена' : 'Сотрудник добавлен', { description: personName })
+      // The password exists only now: show it before it is gone from the form
+      if (!editingId && created?.account && access.enabled) {
+        setIssued({ kind: 'created', person: personName, username: created.account.username, password: access.password, roleLabel: ROLE_LABELS[access.role] })
+      }
       onSaved()
       if (addAnother && !editingId) {
         setForm(f => ({ ...emptyForm(), department: f.department }))
+        setAccess(newAccessDraft(access.role))
       } else {
         onOpenChange(false)
       }
@@ -135,6 +151,7 @@ export function EmployeeSheet({
   }
 
   return (
+    <>
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent>
         {mode === 'view' && employee ? (
@@ -253,6 +270,18 @@ export function EmployeeSheet({
                     className="min-h-24"
                   />
                 </Field>
+
+                {!editingId && (
+                  <AccessFields
+                    draft={access}
+                    onChange={setAccess}
+                    nameHint={`${form.last_name} ${form.first_name}`.trim()}
+                    roles={EMPLOYEE_ACCOUNT_ROLES as unknown as readonly UserRole[]}
+                    errors={accessErrors}
+                    idPrefix="emp-acc"
+                    offText="Сотрудник не сможет войти. Доступ можно выдать позже в его карточке."
+                  />
+                )}
               </FieldGroup>
             </SheetBody>
             <SheetFooter>
@@ -274,6 +303,8 @@ export function EmployeeSheet({
         )}
       </SheetContent>
     </Sheet>
+    <CredentialsDialog credentials={issued} onClose={() => setIssued(null)} />
+    </>
   )
 }
 
@@ -350,6 +381,10 @@ function EmployeeDetails({ employee: e, onEdit, onDelete }: { employee: HrEmploy
             <p className="text-sm text-muted-foreground">Не указаны</p>
           )}
         </section>
+
+        <div className="mt-6">
+          <AccessCard kind="employee" id={e.id} name={fullName(e)} roles={EMPLOYEE_ACCOUNT_ROLES as unknown as readonly UserRole[]} />
+        </div>
       </SheetBody>
       <SheetFooter>
         <Button onClick={onEdit}>

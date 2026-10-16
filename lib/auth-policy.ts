@@ -63,6 +63,12 @@ const RULES: Rule[] = [
   { prefix: '/api/sprints', read: ['wheels_manager', 'manager'], write: ['wheels_manager', 'manager'] },
   { prefix: '/api/my-sprint', read: ['participant'], write: NONE, scope: { kind: 'self-participant', param: 'participant_id' } },
 
+  // Sign-ins of people the user manages. The route itself limits employees' sign-ins to admin and participants' to the roles below.
+  { prefix: '/api/access', read: ['finance', 'wheels_manager'], write: ['finance', 'wheels_manager'] },
+
+  // Passports and business figures: the participant, wheels_manager and admin. The participant id must be in the query.
+  { prefix: '/api/participant-profile', read: ['wheels_manager', 'participant'], write: ['wheels_manager', 'participant'], scope: { kind: 'self-participant', param: 'participant_id' } },
+
   { prefix: '/api/programs', read: ['finance', 'wheels_manager', 'manager'], write: ['finance'] },
   {
     prefix: '/api/participants',

@@ -15,6 +15,7 @@ import {
   Plus,
   Receipt as ReceiptIcon,
   Trash2,
+  UserRound,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Sheet, SheetBody, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet'
@@ -26,6 +27,9 @@ import { EmptyState } from '@/components/erp/empty-state'
 import { useConfirm } from '@/components/erp/confirm'
 import { dangerIconCls } from '@/components/erp/table-parts'
 import { TelegramAdminPanel } from '@/components/telegram/telegram-admin-panel'
+import { AccessCard } from '@/components/access/access-fields'
+import { useRole } from '@/components/access/use-role'
+import { ParticipantProfileSheet } from '@/components/participants/participant-profile-sheet'
 import { useParticipantPayments, type MonthRow, type Receipt } from '@/components/finance/use-ledger'
 import { MONTHS_RU, MONTHS_SHORT_RU, formatDate, formatMoney, plural } from '@/lib/format'
 import { roundMoney } from '@/lib/money'
@@ -77,6 +81,10 @@ export function ParticipantDetailSheet({
 }) {
   const p = participant
   const confirm = useConfirm()
+  // Passports and business figures are for the roles that run participants; the server checks it too
+  const role = useRole()
+  const canSeeProfile = role === 'admin' || role === 'wheels_manager'
+  const [profileOpen, setProfileOpen] = React.useState(false)
   const info = useParticipantPayments(open && p ? p.id : null)
   // Fresh rows once loaded; the list's rows until then
   const rows: (MonthRow | MonthlyPayment)[] = info.forId === p?.id && !info.loading ? info.rows : payments
@@ -253,6 +261,8 @@ export function ParticipantDetailSheet({
 
           <TelegramAdminPanel key={p.id} participantId={p.id} participantName={p.name} participantPhone={p.phone} />
 
+          <AccessCard key={`access-${p.id}`} kind="participant" id={p.id} name={p.name} />
+
           <section>
             <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1.5">
               <h3 className="text-sm font-semibold">Платежи по месяцам</h3>
@@ -323,6 +333,11 @@ export function ParticipantDetailSheet({
           <Button type="button" variant="outline" onClick={() => onEdit(p)}>
             <Pencil /> Изменить
           </Button>
+          {canSeeProfile && (
+            <Button type="button" variant="outline" onClick={() => setProfileOpen(true)}>
+              <UserRound /> Профиль и документы
+            </Button>
+          )}
           {p.status !== 'archived' && (
             <Button type="button" variant="ghost" onClick={() => onArchive(p)}>
               <Archive /> В архив
@@ -338,6 +353,7 @@ export function ParticipantDetailSheet({
           </Button>
         </SheetFooter>
       </SheetContent>
+      <ParticipantProfileSheet open={profileOpen} onOpenChange={setProfileOpen} participant={p} />
     </Sheet>
   )
 }

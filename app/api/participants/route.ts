@@ -6,6 +6,7 @@ import { fetchRowsWhere, logDeletedRows } from '@/app/api/audit/_server'
 import { plural } from '@/lib/format'
 import { LEDGER_TABLE, ledgerEnabled, ledgerMock } from '@/lib/payments-ledger'
 import { receiptsOfMonths, receiptSummary } from '@/app/api/payments/_server'
+import { AccountError, assertLoginFree, insertAccount, validateCredentials } from '@/app/api/_lib/accounts'
 
 // GET - Fetch all participants with their program details (optionally one by ?id=)
 export async function GET(req: Request) {
@@ -29,10 +30,19 @@ export async function GET(req: Request) {
     }
 }
 
-// POST - Create new participant
+// POST - Create new participant. With `account: { username, password }` they also get a
+// sign-in to their cabinet (role «participant», never anything else).
 export async function POST(req: Request) {
     try {
-        const body = roundMoneyFields(await req.json())
+        const { account, ...fields } = await req.json()
+        const body = roundMoneyFields(fields)
+
+        // Check the sign-in first, so a taken login does not leave half the work done
+        let creds: { username: string; password: string } | null = null
+        if (account) {
+            creds = validateCredentials(account)
+            await assertLoginFree(creds.username)
+        }
 
         const { data, error } = await supabaseAdmin
             .from('participants')
@@ -43,6 +53,17 @@ export async function POST(req: Request) {
       `)
 
         if (error) throw error
+
+        let created: { username: string } | null = null
+        if (creds && data?.[0]) {
+            try {
+                const user = await insertAccount(req, { ...creds, role: 'participant', full_name: data[0].name, participant_id: data[0].id })
+                created = { username: user.username }
+            } catch (e) {
+                await supabaseAdmin.from('participants').delete().eq('id', data[0].id)
+                throw e
+            }
+        }
 
         if (data?.[0]) {
             const { program, ...after } = data[0] as any
@@ -55,8 +76,9 @@ export async function POST(req: Request) {
             })
         }
 
-        return NextResponse.json({ data }, { status: 201 })
+        return NextResponse.json({ data, account: created }, { status: 201 })
     } catch (error: any) {
+        if (error instanceof AccountError) return NextResponse.json({ error: error.message }, { status: error.status })
         console.error('Error creating participant:', error)
         return NextResponse.json({ error: error.message }, { status: 500 })
     }

@@ -41,3 +41,14 @@ export function mayUseEmployee(req: Request, employeeId: unknown): boolean {
 /** Roles that run sprints: they review work and see everybody's. */
 export const SPRINT_CURATORS = ['admin', 'wheels_manager', 'manager'] as const
 export const isSprintCurator = (s: Session | null) => !!s && (SPRINT_CURATORS as readonly string[]).includes(s.role)
+
+/**
+ * Profile of a participant (personal data, passport, business): the participant themselves,
+ * and the roles that work with participants. Not finance, not employees: it holds passports.
+ */
+export function mayUseProfile(req: Request, participantId: unknown): boolean {
+  const s = sessionOf(req)
+  if (!s) return false
+  if (s.role === 'admin' || s.role === 'wheels_manager') return true
+  return s.role === 'participant' && typeof participantId === 'string' && !!s.pid && s.pid === participantId
+}

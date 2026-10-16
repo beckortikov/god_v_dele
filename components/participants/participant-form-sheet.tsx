@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Field, FieldGroup } from '@/components/erp/field'
 import { formatMoney, todayISO } from '@/lib/format'
 import type { Participant, Program } from '@/components/participants/types'
+import { AccessFields, CredentialsDialog, accessPayload, accessProblems, newAccessDraft, type AccessDraft, type IssuedCredentials } from '@/components/access/access-fields'
 
 type FormState = {
   name: string
@@ -48,10 +49,15 @@ export function ParticipantFormSheet({
   const [form, setForm] = React.useState<FormState>(emptyForm)
   const [errors, setErrors] = React.useState<Partial<Record<keyof FormState, string>>>({})
   const [saving, setSaving] = React.useState(false)
+  const [access, setAccess] = React.useState<AccessDraft>(() => newAccessDraft('participant'))
+  const [accessErrors, setAccessErrors] = React.useState<{ username?: string; password?: string }>({})
+  const [issued, setIssued] = React.useState<IssuedCredentials | null>(null)
 
   React.useEffect(() => {
     if (!open) return
     setErrors({})
+    setAccessErrors({})
+    setAccess(newAccessDraft('participant'))
     setForm(editing ? fromParticipant(editing) : emptyForm())
   }, [open, editing])
 
@@ -68,7 +74,9 @@ export function ParticipantFormSheet({
     if (!form.program_id) errs.program_id = 'Выберите программу'
     if (!form.start_date) errs.start_date = 'Укажите дату начала'
     setErrors(errs)
-    if (Object.keys(errs).length) return
+    const aErrs = editing ? {} : accessProblems(access)
+    setAccessErrors(aErrs)
+    if (Object.keys(errs).length || aErrs.username || aErrs.password) return
 
     setSaving(true)
     try {
@@ -92,6 +100,7 @@ export function ParticipantFormSheet({
         const payload = {
           ...form,
           tariff: form.tariff ? Number(form.tariff) : null,
+          account: accessPayload(access) && { username: access.username.trim(), password: access.password },
         }
         const response = await fetch('/api/participants', {
           method: 'POST',
@@ -102,9 +111,14 @@ export function ParticipantFormSheet({
         if (result.error) throw new Error(result.error)
         onSaved(result.data[0], 'create')
         toast.success('Участник добавлен', { description: `${form.name} · ${program?.name ?? ''}` })
+        // The password exists only now: show it before it is gone from the form
+        if (result.account && access.enabled) {
+          setIssued({ kind: 'created', person: form.name, username: result.account.username, password: access.password, roleLabel: 'Участник' })
+        }
         if (addAnother) {
           // Keep the program and start date: people usually join a cohort together
           setForm(f => ({ ...emptyForm(), program_id: f.program_id, start_date: f.start_date }))
+          setAccess(newAccessDraft('participant'))
         } else {
           onOpenChange(false)
         }
@@ -119,6 +133,7 @@ export function ParticipantFormSheet({
   const errorHint = (key: keyof FormState) => errors[key] && <span className="text-destructive">{errors[key]}</span>
 
   return (
+    <>
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent>
         <form
@@ -223,6 +238,18 @@ export function ParticipantFormSheet({
                   />
                 </Field>
               </div>
+
+              {!editing && (
+                <AccessFields
+                  draft={access}
+                  onChange={setAccess}
+                  nameHint={form.name}
+                  errors={accessErrors}
+                  idPrefix="pt-acc"
+                  title="Вход в личный кабинет"
+                  offText="Участник не сможет войти. Вход можно создать позже в его карточке."
+                />
+              )}
             </FieldGroup>
           </SheetBody>
           <SheetFooter>
@@ -243,5 +270,7 @@ export function ParticipantFormSheet({
         </form>
       </SheetContent>
     </Sheet>
+    <CredentialsDialog credentials={issued} onClose={() => setIssued(null)} />
+    </>
   )
 }

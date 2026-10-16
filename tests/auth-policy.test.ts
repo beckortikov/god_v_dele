@@ -101,6 +101,36 @@ describe('wheels_manager', () => {
   })
 })
 
+describe('sign-ins and participant profiles', () => {
+  it('lets finance and wheels_manager manage participants\' sign-ins; the route itself keeps employees\' for admin', () => {
+    for (const role of ['finance', 'wheels_manager'] as Role[]) {
+      expect(allowed(role, 'POST', '/api/access')).toBe(true)
+      expect(allowed(role, 'GET', '/api/access?participant_id=x')).toBe(true)
+    }
+    for (const role of ['manager', 'employee', 'participant'] as Role[]) {
+      expect(allowed(role, 'POST', '/api/access')).toBe(false)
+      expect(allowed(role, 'PUT', '/api/access')).toBe(false)
+    }
+    expect(allowed('admin', 'POST', '/api/access')).toBe(true)
+  })
+
+  it('keeps passports and business figures to the participant, wheels_manager and admin', () => {
+    const profile = (id: string) => `/api/participant-profile?participant_id=${id}`
+    expect(allowed('participant', 'GET', profile(P))).toBe(true)
+    expect(allowed('participant', 'PUT', profile(P))).toBe(true)
+    expect(allowed('participant', 'POST', `/api/participant-profile/files?participant_id=${P}`)).toBe(true)
+    expect(allowed('participant', 'GET', profile('other'))).toBe(false)
+    // a participant must name themselves: no id would read nobody's, but must not be waved through
+    expect(allowed('participant', 'GET', '/api/participant-profile')).toBe(false)
+    expect(allowed('wheels_manager', 'GET', profile('anyone'))).toBe(true)
+    expect(allowed('admin', 'GET', profile('anyone'))).toBe(true)
+    for (const role of ['finance', 'manager', 'employee'] as Role[]) {
+      expect(allowed(role, 'GET', profile(P))).toBe(false)
+      expect(allowed(role, 'PUT', profile(P))).toBe(false)
+    }
+  })
+})
+
 describe('manager and employee', () => {
   it('manager curates sprints and lists employees', () => {
     expect(allowed('manager', 'GET', '/api/sprints')).toBe(true)
