@@ -2,7 +2,7 @@
 
 import * as React from 'react'
 import { toast } from 'sonner'
-import { Archive, CalendarPlus, Inbox, MoreHorizontal, Pencil, Plus, Trash2, Users } from 'lucide-react'
+import { Archive, CalendarPlus, Inbox, MoreHorizontal, Pencil, Plus, Trash2, UserRound, Users } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 import { formatMoney, formatNumber, plural } from '@/lib/format'
@@ -29,6 +29,9 @@ import { useConfirm } from '@/components/erp/confirm'
 import { useNavAction } from '@/components/app-shell/nav-context'
 import { ParticipantFormSheet } from '@/components/participants/participant-form-sheet'
 import { ParticipantDetailSheet } from '@/components/participants/participant-detail-sheet'
+import { ParticipantProfileSheet } from '@/components/participants/participant-profile-sheet'
+import { useRole } from '@/components/access/use-role'
+import type { ProfileSummaryRow } from '@/app/api/participant-profile/summary/route'
 import { PaymentSheet, type PaymentPreset } from '@/components/finance/payment-sheet'
 import type { Account } from '@/components/finance/types'
 import { buildSchedule } from '@/lib/payment-schedule'
@@ -82,6 +85,25 @@ export function ParticipantsPage() {
   const [payPreset, setPayPreset] = React.useState<PaymentPreset | null>(null)
   const [accounts, setAccounts] = React.useState<Account[] | null>(null)
   const [scheduling, setScheduling] = React.useState(false)
+
+  // Profiles (passport, business): for admin and wheels_manager. null = not available (no right, or migration 019 not applied)
+  const role = useRole()
+  const canProfiles = role === 'admin' || role === 'wheels_manager'
+  const [profileSummary, setProfileSummary] = React.useState<Record<string, ProfileSummaryRow> | null>(null)
+  const [profileFor, setProfileFor] = React.useState<Participant | null>(null)
+  const [profileOpen, setProfileOpen] = React.useState(false)
+  const loadProfileSummary = React.useCallback(() => {
+    if (!canProfiles) return
+    fetch('/api/participant-profile/summary')
+      .then(r => (r.ok ? r.json() : null))
+      .then(j => setProfileSummary(j?.data ?? null))
+      .catch(() => setProfileSummary(null))
+  }, [canProfiles])
+  React.useEffect(loadProfileSummary, [loadProfileSummary])
+  const openProfile = (p: Participant) => {
+    setProfileFor(p)
+    setProfileOpen(true)
+  }
 
   const fetchData = React.useCallback(async () => {
     try {
@@ -501,6 +523,7 @@ export function ParticipantsPage() {
                     <TableHead className="text-right">Собрано</TableHead>
                     <TableHead className="max-sm:hidden">Оплата</TableHead>
                     <TableHead className="max-lg:hidden">Статус</TableHead>
+                    {profileSummary && <TableHead className="max-md:hidden">Профиль</TableHead>}
                     <TableHead className="w-12" />
                   </TableRow>
                 </TableHeader>
@@ -537,6 +560,11 @@ export function ParticipantsPage() {
                             {PARTICIPANT_STATUS[p.status]?.label ?? p.status}
                           </Badge>
                         </TableCell>
+                        {profileSummary && (
+                          <TableCell className="max-md:hidden" onClick={e => e.stopPropagation()}>
+                            <ProfileBadge row={profileSummary[p.id]} onOpen={() => openProfile(p)} />
+                          </TableCell>
+                        )}
                         <TableCell className="text-right" onClick={e => e.stopPropagation()}>
                           <div className={rowActionsCls}>
                             <DropdownMenu>
@@ -549,6 +577,11 @@ export function ParticipantsPage() {
                                 <DropdownMenuItem onSelect={() => openEdit(p)}>
                                   <Pencil /> Изменить
                                 </DropdownMenuItem>
+                                {canProfiles && (
+                                  <DropdownMenuItem onSelect={() => openProfile(p)}>
+                                    <UserRound /> Профиль и документы
+                                  </DropdownMenuItem>
+                                )}
                                 {p.status !== 'archived' && (
                                   <DropdownMenuItem onSelect={() => handleArchive(p)}>
                                     <Archive /> В архив
@@ -592,6 +625,15 @@ export function ParticipantsPage() {
         onChanged={fetchData}
       />
 
+      <ParticipantProfileSheet
+        open={profileOpen}
+        onOpenChange={o => {
+          setProfileOpen(o)
+          if (!o) loadProfileSummary()
+        }}
+        participant={profileFor}
+      />
+
       <PaymentSheet
         open={payOpen}
         onOpenChange={setPayOpen}
@@ -609,6 +651,18 @@ export function ParticipantsPage() {
         onSaved={handleSaved}
       />
     </PageContainer>
+  )
+}
+
+/** «4 из 6» for the profile column; a click opens the profile. */
+function ProfileBadge({ row, onOpen }: { row?: ProfileSummaryRow; onOpen: () => void }) {
+  const done = row?.done ?? 0
+  const total = row?.total ?? 6
+  const full = done === total
+  return (
+    <button type="button" onClick={onOpen} className="rounded-md outline-none focus-visible:ring-[3px] focus-visible:ring-ring/30" aria-label={`Профиль заполнен на ${done} из ${total}, открыть`}>
+      <Badge variant={full ? 'success' : done ? 'warning' : 'outline'}>{full ? 'Заполнен' : done ? `${done} из ${total}` : 'Пусто'}</Badge>
+    </button>
   )
 }
 

@@ -20,6 +20,7 @@ import {
   Flag,
   Wallet,
   PieChart,
+  UserRound,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -321,6 +322,7 @@ const PARTICIPANT_TABS: { label: string; icon: LucideIcon; page?: PageType; sect
   { label: 'Сегодня', icon: Sun, page: 'my-today' },
   { label: 'Спринт', icon: Flag, page: 'my-sprint' },
   { label: 'Оплаты', icon: Wallet, page: 'my-payments' },
+  { label: 'Профиль', icon: UserRound, page: 'my-profile' },
   { label: 'Колёса', icon: PieChart, section: 'wheels' },
 ]
 
@@ -338,7 +340,7 @@ function ParticipantTabBar({
   return (
     <nav
       aria-label="Разделы"
-      className="grid shrink-0 grid-cols-4 border-t border-nav-border bg-nav px-2 pt-1.5 pb-[max(0.5rem,env(safe-area-inset-bottom))] lg:hidden"
+      className="grid shrink-0 grid-cols-5 border-t border-nav-border bg-nav px-2 pt-1.5 pb-[max(0.5rem,env(safe-area-inset-bottom))] lg:hidden"
     >
       {PARTICIPANT_TABS.map(t => {
         const section = t.section ? sections.find(s => s.id === t.section) : undefined

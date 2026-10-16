@@ -103,10 +103,14 @@ const storage = {
   from: (bucket: string) => {
     const objects = () => fake.buckets.get(bucket) ?? new Map<string, number>()
     return {
-      list: async (folder: string) => ({
+      list: async (folder: string) =>
+        folder === ''
+          ? // like Storage: the top level lists one entry per «folder»
+            { data: [...new Set([...objects().keys()].map(p => p.split('/')[0]))].map(name => ({ name, metadata: null })), error: null }
+          : {
         data: [...objects().entries()].filter(([p]) => p.startsWith(`${folder}/`)).map(([p, size]) => ({ name: p.slice(folder.length + 1), metadata: { size } })),
         error: null,
-      }),
+      },
       createSignedUrl: async (path: string, _s: number, opts?: { download?: string }) =>
         objects().has(path) ? { data: { signedUrl: `https://storage.test/${bucket}/${path}?token=t&download=${encodeURIComponent(opts?.download ?? '')}` }, error: null } : { data: null, error: { message: 'Object not found' } },
       createSignedUploadUrl: async (path: string) => ({ data: { signedUrl: `https://storage.test/upload/${bucket}/${path}?token=t`, path }, error: null }),

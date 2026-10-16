@@ -261,6 +261,21 @@ export function ParticipantDetailSheet({
 
           <TelegramAdminPanel key={p.id} participantId={p.id} participantName={p.name} participantPhone={p.phone} />
 
+          {canSeeProfile && (
+            <button
+              type="button"
+              onClick={() => setProfileOpen(true)}
+              className="flex w-full items-center gap-3 rounded-lg border p-4 text-left transition-colors outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/30"
+            >
+              <UserRound className="size-5 shrink-0 text-muted-foreground" />
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm font-semibold">Профиль и документы</span>
+                <span className="block text-xs text-muted-foreground">Паспорт и сканы, род деятельности, оборот и прибыль по годам</span>
+              </span>
+              <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
+            </button>
+          )}
+
           <AccessCard key={`access-${p.id}`} kind="participant" id={p.id} name={p.name} />
 
           <section>

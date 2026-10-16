@@ -19,6 +19,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton'
 import { useNav } from '@/components/app-shell/nav-context'
 import { TelegramLinkCard } from '@/components/telegram/telegram-link-card'
+import { ProfilePrompt } from './profile-prompt'
 import { api } from '@/components/sprints/shared'
 import { buildView, useMyPayments } from './my-payments-page'
 
@@ -205,6 +206,8 @@ export function MyTodayPage({ participantId, participantName }: { participantId:
           </div>
         </section>
       )}
+
+      {participantId && <ProfilePrompt participantId={participantId} />}
 
       {participantId && !sprintUnavailable && (
         <TelegramLinkCard participantId={participantId} participantName={participantName} />

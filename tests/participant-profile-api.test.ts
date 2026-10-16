@@ -6,6 +6,7 @@ process.env.SUPABASE_SERVICE_ROLE_KEY ||= 'service-key-for-tests'
 import { GET, PUT } from '@/app/api/participant-profile/route'
 import { DELETE as deleteYear, PUT as putYear } from '@/app/api/participant-profile/years/route'
 import { DELETE as deleteScan, GET as getScans, POST as postScan } from '@/app/api/participant-profile/files/route'
+import { GET as getSummary } from '@/app/api/participant-profile/summary/route'
 import { SESSION_COOKIE, createSessionToken } from '@/lib/session'
 import { encodeKey } from '@/lib/report-files'
 import { fake } from './helpers/fake-db'
@@ -163,5 +164,34 @@ describe('passport scans', () => {
     expect((await deleteScan(req(`${files(P1)}&key=../x`, 'admin', undefined, undefined, 'DELETE'))).status).toBe(400)
     expect((await deleteScan(req(`${files(P1)}&key=${encodeURIComponent(key)}`, 'participant', P1, undefined, 'DELETE'))).status).toBe(200)
     expect(fake.buckets.get('participant-docs')!.size).toBe(0)
+  })
+})
+
+describe('profile summary for the participants list', () => {
+  const summary = (role: string, pid?: string) => getSummary(req(`${base}/summary`, role, pid))
+
+  it('is for admin and wheels_manager only', async () => {
+    expect((await summary('admin')).status).toBe(200)
+    expect((await summary('wheels_manager')).status).toBe(200)
+    for (const [role, pid] of [['participant', P1], ['finance'], ['manager'], ['employee']] as const) expect((await summary(role, pid)).status).toBe(403)
+  })
+
+  it('counts what each participant has filled in, and leaves out those with nothing', async () => {
+    fake.rows('participant_profiles').push({ participant_id: P1, birth_date: '1990-01-01', city: 'Душанбе', passport_number: PASSPORT, activity: 'Торговля' })
+    fake.rows('participant_business_years').push({ participant_id: P1, year: 2024 })
+    fake.buckets.get('participant-docs')!.set(`${P1}/${encodeKey('p.jpg', 'image/jpeg', 1700000000000)}`, 100)
+    fake.rows('participant_profiles').push({ participant_id: P2, city: 'Худжанд' })
+
+    const { data } = await (await summary('wheels_manager')).json()
+    expect(data[P1]).toEqual({ done: 6, total: 6 })
+    expect(data[P2]).toEqual({ done: 1, total: 6 })
+    expect(Object.keys(data)).toHaveLength(2)
+    // no values, only counts
+    expect(JSON.stringify(data)).not.toContain(PASSPORT)
+  })
+
+  it('says the migration is missing', async () => {
+    fake.missing.set('participant_profiles', { code: '42P01', message: 'relation "public.participant_profiles" does not exist' })
+    expect((await summary('admin')).status).toBe(503)
   })
 })
