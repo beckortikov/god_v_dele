@@ -19,7 +19,18 @@ export interface Sprint {
   goal: string | null
   start_date: string
   end_date: string
+  /** Group the sprint is for; null/absent — the whole program (every sprint made before groups existed). */
+  group_id?: string | null
   created_at?: string
+}
+
+/** Group of participants inside a program, as listed by GET /api/sprints/groups. */
+export interface SprintGroup {
+  id: string
+  program_id: string
+  name: string
+  /** Active participants in the group. */
+  members: number
 }
 
 export interface SprintTask {
@@ -173,6 +184,39 @@ export function sprintProgress(sprint: Pick<Sprint, 'start_date' | 'end_date'>, 
   const raw = daysBetween(sprint.start_date, today) + 1
   const day = Math.min(Math.max(raw, 0), total)
   return { day, total, left: Math.max(total - Math.max(raw, 0), 0), started: raw >= 1, finished: raw > total }
+}
+
+/** Which sprints a curator sees: a group's own, or the program-wide ones ('none'). */
+export const NO_GROUP = 'none'
+
+export function sprintsOfGroup<T extends Pick<Sprint, 'group_id'>>(sprints: T[], selection: string): T[] {
+  return sprints.filter(s => (selection === NO_GROUP ? !s.group_id : s.group_id === selection))
+}
+
+/**
+ * Number of the next sprint. A group's numbering continues the program-wide one
+ * (so its participants never see two sprints with the same number); a program-wide
+ * sprint takes the next number over all sprints of the program.
+ */
+export function nextSprintNumber(all: Pick<Sprint, 'number' | 'group_id'>[], groupId: string | null): number {
+  const pool = groupId ? all.filter(s => !s.group_id || s.group_id === groupId) : all
+  return pool.reduce((max, s) => Math.max(max, s.number), 0) + 1
+}
+
+/** Sprints a participant sees: program-wide ones and those of their own group. */
+export function sprintsForParticipant<T extends Pick<Sprint, 'group_id'>>(sprints: T[], groupId: string | null | undefined): T[] {
+  return sprints.filter(s => !s.group_id || s.group_id === groupId)
+}
+
+/**
+ * The group to open first: where the sprints are. Groups with sprints win over the
+ * program-wide ones only when no program-wide sprint exists, so nothing "disappears"
+ * for a program that has been running before groups were introduced.
+ */
+export function defaultGroupSelection(groups: Pick<SprintGroup, 'id'>[], sprints: Pick<Sprint, 'group_id'>[]): string {
+  if (!groups.length) return NO_GROUP
+  if (sprints.some(s => !s.group_id)) return NO_GROUP
+  return groups.find(g => sprints.some(s => s.group_id === g.id))?.id ?? groups[0].id
 }
 
 /** The running sprint; otherwise the next one; otherwise the latest. */

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-client'
-import { pickCurrentSprint, type Assignment, type MySprintData, type MyTask, type Sprint, type SprintTask, type TaskEvent } from '@/lib/sprints'
+import { pickCurrentSprint, sprintsForParticipant, type Assignment, type MySprintData, type MyTask, type Sprint, type SprintTask, type TaskEvent } from '@/lib/sprints'
 import { ASSIGNMENTS, EVENTS, NotFound, SPRINTS, check, errorResponse, requireUuid } from '../sprints/_lib/store'
 
 export const dynamic = 'force-dynamic'
@@ -18,7 +18,7 @@ export async function GET(req: Request) {
 
     const { data: participant, error: pErr } = await supabaseAdmin
       .from('participants')
-      .select('id, name, program_id, program:programs(id, name)')
+      .select('*, program:programs(id, name)')
       .eq('id', participantId)
       .maybeSingle()
     if (pErr) throw new Error(pErr.message)
@@ -37,7 +37,8 @@ export async function GET(req: Request) {
 
     const { data: sprints, error: sErr } = await supabaseAdmin.from(SPRINTS).select('*').eq('program_id', participant.program_id).order('number')
     check(sErr)
-    const list = (sprints ?? []) as Sprint[]
+    // Program-wide sprints and those of the participant's own group (group_id exists after migration 018).
+    const list = sprintsForParticipant((sprints ?? []) as Sprint[], (participant as { group_id?: string | null }).group_id)
     if (!list.length) return NextResponse.json({ data: empty })
 
     const { data: rows, error: aErr } = await supabaseAdmin

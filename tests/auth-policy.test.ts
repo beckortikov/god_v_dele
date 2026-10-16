@@ -87,6 +87,9 @@ describe('wheels_manager', () => {
   })
   it('curates sprints and sees every wheel', () => {
     expect(allowed('wheels_manager', 'POST', '/api/sprints/tasks')).toBe(true)
+    expect(allowed('wheels_manager', 'PUT', '/api/sprints/groups/assign')).toBe(true)
+    expect(allowed('participant', 'GET', '/api/sprints/groups?program_id=x')).toBe(false)
+    expect(allowed('finance', 'POST', '/api/sprints/groups')).toBe(false)
     expect(allowed('wheels_manager', 'GET', '/api/life-wheel?participant_id=someone-else')).toBe(true)
     expect(allowed('wheels_manager', 'GET', '/api/life-wheel')).toBe(true)
   })

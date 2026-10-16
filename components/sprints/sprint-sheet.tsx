@@ -21,6 +21,10 @@ export function SprintSheet({
   onOpenChange,
   programId,
   programName,
+  groupId,
+  groupName,
+  audience,
+  nextNumber,
   sprints,
   backlog,
   onCreated,
@@ -29,12 +33,18 @@ export function SprintSheet({
   onOpenChange: (o: boolean) => void
   programId: string
   programName: string
+  /** Group the new sprint is for; null — the whole program. */
+  groupId: string | null
+  groupName: string | null
+  /** Who gets the tasks, e.g. «9 участников группы Группа 1»; empty when unknown. */
+  audience: string
+  nextNumber: number
   sprints: Sprint[]
   backlog: SprintTask[]
   onCreated: (sprint: Sprint) => void
 }) {
   const last = sprints.length ? sprints[sprints.length - 1] : null
-  const number = (last?.number ?? 0) + 1
+  const number = nextNumber
   const [title, setTitle] = React.useState('')
   const [goal, setGoal] = React.useState('')
   const [length, setLength] = React.useState<LengthKey>('14')
@@ -98,7 +108,7 @@ export function SprintSheet({
     try {
       const res = await api<{ data: Sprint }>('/api/sprints', {
         method: 'POST',
-        json: { program_id: programId, title, goal, start_date: start, end_date: end, backlog_task_ids: picked, carry_task_ids: carry },
+        json: { program_id: programId, group_id: groupId, title, goal, start_date: start, end_date: end, backlog_task_ids: picked, carry_task_ids: carry },
       })
       toast.success(`Спринт ${number} создан`, { description: dateRange(start, end) + (carry.length ? ` · перенесено задач: ${carry.length}` : '') })
       onCreated(res.data)
@@ -130,10 +140,15 @@ export function SprintSheet({
         >
           <SheetHeader>
             <SheetTitle>Спринт {number}</SheetTitle>
-            <SheetDescription>{programName}</SheetDescription>
+            <SheetDescription>{groupName ? `${programName} · ${groupName}` : programName}</SheetDescription>
           </SheetHeader>
           <SheetBody>
             <FieldGroup>
+              {audience && (
+                <p className="rounded-lg bg-muted px-3 py-2 text-sm text-muted-foreground">
+                  Задачи получат: <span className="font-medium text-foreground">{audience}</span>
+                </p>
+              )}
               <Field label="Тема" htmlFor="sp-title" required hint={errors.title && <span className="text-destructive">{errors.title}</span>}>
                 <Input
                   id="sp-title"

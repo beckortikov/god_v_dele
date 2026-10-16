@@ -3,16 +3,21 @@
 import * as React from 'react'
 import { toast } from 'sonner'
 import { Check, CornerUpLeft, Flag, ListChecks, MoreHorizontal, Plus, Search, Trash2, Users } from 'lucide-react'
+import type { GroupsData } from '@/app/api/sprints/groups/route'
 import { cn } from '@/lib/utils'
 import { plural, todayISO } from '@/lib/format'
 import {
+  NO_GROUP,
   SUBMISSION,
   dateRange,
+  defaultGroupSelection,
   isOverdue,
+  nextSprintNumber,
   percent,
   pickCurrentSprint,
   shortDate,
   sprintProgress,
+  sprintsOfGroup,
   type Assignment,
   type BoardData,
   type SprintSummary,
@@ -32,6 +37,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { CellState, Legend, MigrationNotice, MigrationRequired, StatusCell, api, useStoredState } from './shared'
 import { TaskSheet } from './task-sheet'
 import { SprintSheet } from './sprint-sheet'
+import { GroupsSheet } from './groups-sheet'
 import { ReviewSheet } from './review-sheet'
 
 interface Program {
@@ -46,7 +52,11 @@ export function SprintsPage() {
   const today = todayISO()
   const [programs, setPrograms] = React.useState<Program[] | null>(null)
   const [programId, setProgramId] = useStoredState<string>('sprints-program', '')
-  const [sprints, setSprints] = React.useState<SprintSummary[] | null>(null)
+  const [allSprints, setAllSprints] = React.useState<SprintSummary[] | null>(null)
+  const [groupsData, setGroupsData] = React.useState<GroupsData | null>(null)
+  const [groupRaw, setGroupRaw] = useStoredState<string>(`sprints-group:${programId}`, '')
+  const [groupsOpen, setGroupsOpen] = React.useState(false)
+  const preferSprint = React.useRef<string | undefined>(undefined)
   const [sprintId, setSprintId] = React.useState<string | null>(null)
   const [board, setBoard] = React.useState<BoardData | null>(null)
   const [backlog, setBacklog] = React.useState<SprintTask[]>([])
@@ -80,25 +90,24 @@ export function SprintsPage() {
   const loadSprints = React.useCallback(
     async (prefer?: string) => {
       if (!programId) return
+      preferSprint.current = prefer
       try {
-        const [s, b] = await Promise.all([
+        const [s, b, g] = await Promise.all([
           api<{ data: SprintSummary[] }>(`/api/sprints?program_id=${programId}`),
           api<{ data: SprintTask[] }>(`/api/sprints/tasks?program_id=${programId}`),
+          // Groups come from migration 018; without it the page works as before.
+          api<{ data: GroupsData }>(`/api/sprints/groups?program_id=${programId}`).catch(() => null),
         ])
         setMigration(false)
-        setSprints(s.data)
+        setAllSprints(s.data)
         setBacklog(b.data)
-        setSprintId(cur => {
-          if (prefer && s.data.some(x => x.id === prefer)) return prefer
-          if (cur && s.data.some(x => x.id === cur)) return cur
-          return pickCurrentSprint(s.data, today)?.id ?? null
-        })
+        setGroupsData(g?.data ?? null)
       } catch (e) {
-        setSprints([])
+        setAllSprints([])
         fail(e, 'Не удалось загрузить спринты')
       }
     },
-    [programId, today, fail]
+    [programId, fail]
   )
 
   const loadBoard = React.useCallback(async () => {
@@ -115,11 +124,38 @@ export function SprintsPage() {
   }, [sprintId, fail])
 
   React.useEffect(() => {
-    setSprints(null)
+    setAllSprints(null)
+    setGroupsData(null)
     setBoard(null)
     setSprintId(null)
     loadSprints()
   }, [loadSprints])
+
+  // Groups of the program (only when migration 018 is applied and at least one exists).
+  const groups = groupsData?.available ? groupsData.groups : []
+  const grouped = groups.length > 0
+  const groupSel = !grouped
+    ? null
+    : groupRaw === NO_GROUP || groups.some(g => g.id === groupRaw)
+      ? groupRaw
+      : defaultGroupSelection(groups, allSprints ?? [])
+  const group = grouped && groupSel !== NO_GROUP ? (groups.find(g => g.id === groupSel) ?? null) : null
+  const sprints = React.useMemo(
+    () => (allSprints === null ? null : grouped && groupSel ? sprintsOfGroup(allSprints, groupSel) : allSprints),
+    [allSprints, grouped, groupSel]
+  )
+
+  // Keep the open sprint inside the visible list (after a group switch, a reload or a new sprint).
+  React.useEffect(() => {
+    if (!sprints) return
+    const prefer = preferSprint.current
+    preferSprint.current = undefined
+    setSprintId(cur => {
+      if (prefer && sprints.some(x => x.id === prefer)) return prefer
+      if (cur && sprints.some(x => x.id === cur)) return cur
+      return pickCurrentSprint(sprints, today)?.id ?? null
+    })
+  }, [sprints, today])
 
   React.useEffect(() => {
     loadBoard()
@@ -249,6 +285,24 @@ export function SprintsPage() {
               </SelectContent>
             </Select>
           )}
+          {grouped && groupSel && (
+            <Select value={groupSel} onValueChange={setGroupRaw}>
+              <SelectTrigger size="sm" className="w-48" aria-label="Группа">
+                <SelectValue placeholder="Группа" />
+              </SelectTrigger>
+              <SelectContent>
+                {groups.map(g => (
+                  <SelectItem key={g.id} value={g.id}>
+                    {g.name} · {g.members}
+                  </SelectItem>
+                ))}
+                <SelectItem value={NO_GROUP}>Вся программа</SelectItem>
+              </SelectContent>
+            </Select>
+          )}
+          <Button size="sm" variant="outline" disabled={!programId || migration} onClick={() => setGroupsOpen(true)}>
+            <Users /> Группы
+          </Button>
           <Button size="sm" variant="outline" disabled={!programId || migration} onClick={() => setSprintOpen(true)}>
             Новый спринт
           </Button>
@@ -294,8 +348,8 @@ export function SprintsPage() {
         <Panel>
           <EmptyState
             icon={Flag}
-            title="В этом потоке ещё нет спринтов"
-            description="Спринт — это одна-две недели с целью и набором задач для всех участников."
+            title={group ? `У группы «${group.name}» ещё нет спринтов` : grouped ? 'Для всей программы нет спринтов' : 'В этом потоке ещё нет спринтов'}
+            description={group ? 'Спринт — это одна-две недели с целью и набором задач для участников группы.' : 'Спринт — это одна-две недели с целью и набором задач для всех участников.'}
             action={
               <Button size="sm" onClick={() => setSprintOpen(true)}>
                 <Plus /> Первый спринт
@@ -338,6 +392,9 @@ export function SprintsPage() {
                     <h2 className="text-lg font-semibold tracking-tight">
                       Спринт {sprint.number} · {sprint.title}
                     </h2>
+                    {grouped && (
+                      <Badge variant="outline">{sprint.group_id ? (groups.find(g => g.id === sprint.group_id)?.name ?? 'Группа') : 'Вся программа'}</Badge>
+                    )}
                     <Badge variant={progress.finished ? 'secondary' : progress.started ? 'default' : 'outline'}>
                       {progress.finished ? 'Завершён' : progress.started ? 'Идёт' : 'Скоро'}
                     </Badge>
@@ -565,14 +622,33 @@ export function SprintsPage() {
             preselect={taskFor}
             onCreated={refresh}
           />
+          <GroupsSheet
+            open={groupsOpen}
+            onOpenChange={setGroupsOpen}
+            programId={program.id}
+            programName={program.name}
+            data={groupsData}
+            onChanged={refresh}
+          />
           <SprintSheet
             open={sprintOpen}
             onOpenChange={setSprintOpen}
             programId={program.id}
             programName={program.name}
+            groupId={group?.id ?? null}
+            groupName={group?.name ?? null}
+            audience={
+              !groupsData?.available
+                ? ''
+                : group
+                  ? `${group.members} ${plural(group.members, ['участник', 'участника', 'участников'])} группы «${group.name}»`
+                  : `${groupsData.participants.length} ${plural(groupsData.participants.length, ['участник', 'участника', 'участников'])} потока`
+            }
+            nextNumber={nextSprintNumber(allSprints ?? [], group?.id ?? null)}
             sprints={sprints ?? []}
             backlog={backlog}
             onCreated={s => {
+              if (grouped) setGroupRaw(s.group_id ?? NO_GROUP)
               setSprintId(s.id)
               loadSprints(s.id)
             }}

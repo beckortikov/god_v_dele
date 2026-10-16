@@ -1,15 +1,18 @@
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-client'
 import { logAudit } from '@/lib/audit'
-import { dateRange, type Sprint, type SprintSummary } from '@/lib/sprints'
+import { dateRange, nextSprintNumber, type Sprint, type SprintSummary } from '@/lib/sprints'
 import {
   ASSIGNMENTS,
   BadRequest,
+  GROUPS,
+  NotFound,
   SPRINTS,
   TASKS,
   activeParticipantIds,
   assign,
   check,
+  checkGroups,
   errorResponse,
   isUuid,
   notifyParticipants,
@@ -19,7 +22,7 @@ import {
 
 export const dynamic = 'force-dynamic'
 
-/** GET ?program_id=<uuid> → { data: SprintSummary[] } sorted by number. */
+/** GET ?program_id=<uuid> → { data: SprintSummary[] } of the whole program (every group), sorted by number. Each has group_id. */
 export async function GET(req: Request) {
   const programId = new URL(req.url).searchParams.get('program_id')
   if (!isUuid(programId)) return NextResponse.json({ error: 'program_id: нужен UUID' }, { status: 400 })
@@ -67,8 +70,8 @@ export async function GET(req: Request) {
 }
 
 /**
- * POST { program_id, title, goal?, start_date, end_date, backlog_task_ids?, carry_task_ids? }
- * Creates the next sprint of the program. Tasks picked from the backlog move
+ * POST { program_id, group_id?, title, goal?, start_date, end_date, backlog_task_ids?, carry_task_ids? }
+ * Creates the next sprint of the program, or of one group of it (group_id). Tasks picked from the backlog move
  * into it (deadline = sprint end if they had none) and go to their audience.
  * Tasks carried over from an earlier sprint move too, with a new deadline (the
  * sprint end); whoever already passed them keeps «done», the rest see them in
@@ -87,18 +90,33 @@ export async function POST(req: Request) {
     const pick: string[] = Array.isArray(body.backlog_task_ids) ? body.backlog_task_ids.filter(isUuid) : []
     const carry: string[] = Array.isArray(body.carry_task_ids) ? body.carry_task_ids.filter(isUuid) : []
 
-    const { data: last, error: lastErr } = await supabaseAdmin
-      .from(SPRINTS)
-      .select('number')
-      .eq('program_id', programId)
-      .order('number', { ascending: false })
-      .limit(1)
-    check(lastErr)
-    const number = (last?.[0]?.number ?? 0) + 1
+    // A sprint for a group: the group must belong to this program.
+    let groupId: string | null = null
+    let groupName: string | null = null
+    if (body.group_id) {
+      groupId = requireUuid(body.group_id, 'group_id')
+      const { data: group, error: gErr } = await supabaseAdmin.from(GROUPS).select('id, name, program_id').eq('id', groupId).maybeSingle()
+      checkGroups(gErr)
+      if (!group || group.program_id !== programId) throw new NotFound('Группа не найдена в этом потоке')
+      groupName = group.name
+    }
 
+    const { data: existing, error: lastErr } = await supabaseAdmin.from(SPRINTS).select('*').eq('program_id', programId)
+    check(lastErr)
+    const number = nextSprintNumber((existing ?? []) as Sprint[], groupId)
+
+    // group_id is sent only for a group sprint, so a database without migration 018 keeps working.
     const { data: sprint, error } = await supabaseAdmin
       .from(SPRINTS)
-      .insert({ program_id: programId, number, title, goal: String(body.goal ?? '').trim() || null, start_date: start, end_date: end })
+      .insert({
+        program_id: programId,
+        ...(groupId ? { group_id: groupId } : {}),
+        number,
+        title,
+        goal: String(body.goal ?? '').trim() || null,
+        start_date: start,
+        end_date: end,
+      })
       .select('*')
       .single()
     check(error)
@@ -112,7 +130,7 @@ export async function POST(req: Request) {
         .eq('program_id', programId)
         .is('sprint_id', null)
       check(tErr)
-      const everyone = await activeParticipantIds(programId)
+      const everyone = await activeParticipantIds(programId, groupId)
       for (const t of tasks ?? []) {
         const { error: uErr } = await supabaseAdmin
           .from(TASKS)
@@ -154,12 +172,12 @@ export async function POST(req: Request) {
       table: SPRINTS,
       recordId: sprint.id,
       action: 'create',
-      summary: `Спринт ${number} «${title}», ${dateRange(start, end)}${moved ? `, из бэклога: ${moved}` : ''}${carried ? `, перенесено: ${carried}` : ''}`,
+      summary: `Спринт ${number} «${title}»${groupName ? `, группа «${groupName}»` : ''}, ${dateRange(start, end)}${moved ? `, из бэклога: ${moved}` : ''}${carried ? `, перенесено: ${carried}` : ''}`,
       after: sprint,
     })
 
     if (start <= new Date().toISOString().slice(0, 10)) {
-      const everyone = await activeParticipantIds(programId)
+      const everyone = await activeParticipantIds(programId, groupId)
       // Awaited: on serverless hosts work left after the response may be cut off.
       await notifyParticipants(everyone, `Начался спринт ${number} «${title}» (${dateRange(start, end)}). Задачи — в кабинете, вкладка «Спринт».`)
     }

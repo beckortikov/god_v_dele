@@ -17,6 +17,10 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     if (!sprint) throw new NotFound('Спринт не найден')
 
     // Tasks and the program's people do not depend on each other.
+    // A sprint of a group shows only that group; a program-wide sprint shows everyone.
+    const groupId = (sprint as Sprint).group_id ?? null
+    let peopleQuery = supabaseAdmin.from('participants').select('id, name, phone, status').eq('program_id', (sprint as Sprint).program_id).eq('status', 'active')
+    if (groupId) peopleQuery = peopleQuery.eq('group_id', groupId)
     const [{ data: tasks, error: tErr }, { data: active, error: pErr }] = await Promise.all([
       supabaseAdmin
         .from(TASKS)
@@ -24,7 +28,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
         .eq('sprint_id', id)
         .order('due_date', { ascending: true, nullsFirst: false })
         .order('created_at'),
-      supabaseAdmin.from('participants').select('id, name, phone, status').eq('program_id', (sprint as Sprint).program_id).eq('status', 'active'),
+      peopleQuery,
     ])
     check(tErr)
     if (pErr) throw new Error(pErr.message)

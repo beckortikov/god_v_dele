@@ -58,11 +58,14 @@ export async function POST(req: Request) {
     if (audience === 'selected' && !selected.length) throw new BadRequest('Выберите хотя бы одного участника')
 
     let dueDate = optionalDate(body.due_date, 'due_date')
+    // A sprint of a group gives «всей группе» tasks only to that group.
+    let sprintGroupId: string | null = null
     if (sprintId) {
-      const { data: sprint, error } = await supabaseAdmin.from(SPRINTS).select('id, program_id, end_date').eq('id', sprintId).maybeSingle()
+      const { data: sprint, error } = await supabaseAdmin.from(SPRINTS).select('*').eq('id', sprintId).maybeSingle()
       check(error)
       if (!sprint || sprint.program_id !== programId) throw new NotFound('Спринт не найден в этом потоке')
       dueDate = dueDate ?? sprint.end_date
+      sprintGroupId = sprint.group_id ?? null
     }
 
     const { data: task, error } = await supabaseAdmin
@@ -85,7 +88,7 @@ export async function POST(req: Request) {
 
     let assigned: string[] = []
     if (sprintId) {
-      const audienceIds = audience === 'all' ? await activeParticipantIds(programId) : selected
+      const audienceIds = audience === 'all' ? await activeParticipantIds(programId, sprintGroupId) : selected
       assigned = await assign(task.id, audienceIds)
     }
 

@@ -50,7 +50,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (body.requires_review !== undefined) patch.requires_review = !!body.requires_review
     if (body.remind !== undefined) patch.remind = !!body.remind
 
-    let entering: { id: string; end_date: string } | null = null
+    let entering: { id: string; end_date: string; group_id?: string | null } | null = null
     if (body.sprint_id !== undefined && body.sprint_id !== before.sprint_id) {
       if (body.sprint_id === null) {
         const { count, error } = await supabaseAdmin
@@ -65,7 +65,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         patch.sprint_id = null
       } else {
         if (!isUuid(body.sprint_id)) throw new BadRequest('sprint_id: нужен UUID')
-        const { data: sprint, error } = await supabaseAdmin.from(SPRINTS).select('id, program_id, end_date').eq('id', body.sprint_id).maybeSingle()
+        const { data: sprint, error } = await supabaseAdmin.from(SPRINTS).select('*').eq('id', body.sprint_id).maybeSingle()
         check(error)
         if (!sprint || sprint.program_id !== before.program_id) throw new NotFound('Спринт не найден в этом потоке')
         patch.sprint_id = sprint.id
@@ -76,7 +76,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
     const { data, error } = await supabaseAdmin.from(TASKS).update(patch).eq('id', id).select('*').single()
     check(error)
-    if (entering && data.audience === 'all') await assign(id, await activeParticipantIds(data.program_id))
+    if (entering && data.audience === 'all') await assign(id, await activeParticipantIds(data.program_id, entering.group_id ?? null))
 
     await logAudit(req, {
       table: TASKS,

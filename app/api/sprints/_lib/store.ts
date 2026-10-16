@@ -11,6 +11,7 @@ export const SPRINTS = 'sprints'
 export const TASKS = 'sprint_tasks'
 export const ASSIGNMENTS = 'sprint_task_assignments'
 export const EVENTS = 'sprint_task_events'
+export const GROUPS = 'participant_groups'
 
 /** Thrown when migration 016 is not applied, so routes can answer 503. */
 export class MigrationRequiredError extends Error {
@@ -49,6 +50,12 @@ export function migrationRequired() {
 /** 503 for a missing migration, 400 for a rule the user broke, 500 otherwise. */
 export function errorResponse(e: unknown, context: string) {
   if (e instanceof MigrationRequiredError) return migrationRequired()
+  if (e instanceof GroupsMigrationError) {
+    return NextResponse.json(
+      { error: 'groups_migration_required', message: 'Группы ещё не подключены. Примените миграцию migrations/018_participant_groups.sql в Supabase (SQL Editor).' },
+      { status: 503 }
+    )
+  }
   if (e instanceof ActionError || e instanceof BadRequest) return NextResponse.json({ error: e.message }, { status: 400 })
   if (e instanceof NotFound) return NextResponse.json({ error: e.message }, { status: 404 })
   console.error(`[sprints] ${context}:`, e)
@@ -80,9 +87,36 @@ export async function getTask(id: string): Promise<SprintTask> {
   return data as SprintTask
 }
 
-/** Active participants of a program — the audience of a «весь поток» task. */
-export async function activeParticipantIds(programId: string): Promise<string[]> {
-  const { data, error } = await supabaseAdmin.from('participants').select('id').eq('program_id', programId).eq('status', 'active')
+/** True when migration 018 (participant groups) is not applied: the table or a group_id column is missing. */
+export function isMissingGroups(error: PgError) {
+  if (!error) return false
+  const msg = (error.message || '').toLowerCase()
+  if (!msg.includes('group')) return false
+  return error.code === '42P01' || error.code === '42703' || error.code === 'PGRST205' || error.code === 'PGRST204' || msg.includes('does not exist') || msg.includes('could not find')
+}
+
+/** Thrown by the group routes when migration 018 is not applied, so they can answer 503. */
+export class GroupsMigrationError extends Error {
+  constructor() {
+    super('Group tables are missing: apply migrations/018_participant_groups.sql')
+    this.name = 'GroupsMigrationError'
+  }
+}
+
+export function checkGroups(error: PgError) {
+  if (!error) return
+  if (isMissingGroups(error)) throw new GroupsMigrationError()
+  check(error)
+}
+
+/**
+ * Active participants who get a «весь поток» task: the whole program, or only
+ * the group when the sprint belongs to one.
+ */
+export async function activeParticipantIds(programId: string, groupId?: string | null): Promise<string[]> {
+  let query = supabaseAdmin.from('participants').select('id').eq('program_id', programId).eq('status', 'active')
+  if (groupId) query = query.eq('group_id', groupId)
+  const { data, error } = await query
   if (error) throw new Error(error.message)
   return (data ?? []).map((p: { id: string }) => p.id)
 }
