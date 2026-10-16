@@ -322,8 +322,8 @@ const PARTICIPANT_TABS: { label: string; icon: LucideIcon; page?: PageType; sect
   { label: 'Сегодня', icon: Sun, page: 'my-today' },
   { label: 'Спринт', icon: Flag, page: 'my-sprint' },
   { label: 'Оплаты', icon: Wallet, page: 'my-payments' },
-  { label: 'Профиль', icon: UserRound, page: 'my-profile' },
   { label: 'Колёса', icon: PieChart, section: 'wheels' },
+  { label: 'Профиль', icon: UserRound, page: 'my-profile' },
 ]
 
 function ParticipantTabBar({
