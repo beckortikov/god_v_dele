@@ -42,17 +42,17 @@ describe('getSections', () => {
 
   it('people section depends on the role', () => {
     const people = (r: UserRole) => getSections(r).find(s => s.id === 'people')?.pages
-    expect(people('admin')).toEqual(['participants', 'programs', 'sprints'])
+    expect(people('admin')).toEqual(['participants', 'programs', 'sprints', 'lessons'])
     expect(people('finance')).toEqual(['participants', 'programs'])
-    expect(people('wheels_manager')).toEqual(['participants', 'sprints'])
-    expect(people('manager')).toEqual(['sprints'])
+    expect(people('wheels_manager')).toEqual(['participants', 'sprints', 'lessons'])
+    expect(people('manager')).toEqual(['sprints', 'lessons'])
   })
 
   it('cabinet section depends on the role', () => {
     const cabinet = (r: UserRole) => getSections(r).find(s => s.id === 'cabinet')?.pages
     expect(cabinet('manager')).toEqual(['employee-dashboard', 'manager-dashboard'])
     expect(cabinet('employee')).toEqual(['employee-dashboard'])
-    expect(cabinet('participant')).toEqual(['my-today', 'my-sprint', 'my-payments', 'my-profile'])
+    expect(cabinet('participant')).toEqual(['my-today', 'my-lessons', 'my-sprint', 'my-payments', 'my-profile'])
   })
 })
 
@@ -69,7 +69,7 @@ describe('getAllowedPages', () => {
 
   it('admin can reach every page except the personal cabinets', () => {
     const adminPages = new Set(getAllowedPages('admin'))
-    const cabinetPages: PageType[] = ['employee-dashboard', 'manager-dashboard', 'my-payments', 'my-sprint', 'my-today', 'my-profile']
+    const cabinetPages: PageType[] = ['employee-dashboard', 'manager-dashboard', 'my-payments', 'my-sprint', 'my-today', 'my-profile', 'my-lessons']
     for (const id of Object.keys(PAGES) as PageType[]) {
       expect(adminPages.has(id)).toBe(!cabinetPages.includes(id))
     }
@@ -104,9 +104,9 @@ describe('getAllowedPages', () => {
     },
   )
 
-  it('only participants see «Сегодня», «Мой спринт», «Мои оплаты» and «Мой профиль»', () => {
+  it('only participants see «Сегодня», «Календарь», «Мой спринт», «Мои оплаты» and «Мой профиль»', () => {
     for (const role of ROLES) {
-      for (const page of ['my-today', 'my-sprint', 'my-payments', 'my-profile'] as PageType[]) {
+      for (const page of ['my-today', 'my-sprint', 'my-payments', 'my-profile', 'my-lessons'] as PageType[]) {
         expect(getAllowedPages(role).includes(page)).toBe(role === 'participant')
       }
     }
@@ -153,5 +153,11 @@ describe('findSection / metadata', () => {
 
   it('every role has a Russian label', () => {
     for (const role of ROLES) expect(ROLE_LABELS[role]).toMatch(/[А-Яа-яЁё]/)
+  })
+
+  it('curators reach the lesson calendar: admin, wheels_manager, manager', () => {
+    for (const role of ROLES) {
+      expect(getAllowedPages(role).includes('lessons')).toBe(['admin', 'wheels_manager', 'manager'].includes(role))
+    }
   })
 })

@@ -36,6 +36,8 @@ import { AuditPage } from '@/components/admin/audit-page'
 import { MyPaymentsPage } from '@/components/cabinet/my-payments-page'
 import { MySprintPage } from '@/components/cabinet/my-sprint-page'
 import { MyProfilePage } from '@/components/cabinet/my-profile-page'
+import { MyLessonsPage } from '@/components/cabinet/my-lessons-page'
+import { LessonsPage } from '@/components/lessons/lessons-page'
 import { MyTodayPage } from '@/components/cabinet/my-today-page'
 import { SprintsPage } from '@/components/sprints/sprints-page'
 
@@ -162,6 +164,8 @@ function PageRouter({ session }: { session: SessionUser }) {
     case 'my-payments': return <MyPaymentsPage participantId={session.participantId} participantName={session.fullName} />
     case 'sprints': return <SprintsPage />
     case 'my-sprint': return <MySprintPage participantId={session.participantId} />
+    case 'lessons': return <LessonsPage />
+    case 'my-lessons': return <MyLessonsPage participantId={session.participantId} />
     case 'my-profile': return <MyProfilePage participantId={session.participantId} />
     case 'my-today': return <MyTodayPage participantId={session.participantId} participantName={session.fullName} />
   }

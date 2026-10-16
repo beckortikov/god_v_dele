@@ -20,6 +20,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { useNav } from '@/components/app-shell/nav-context'
 import { TelegramLinkCard } from '@/components/telegram/telegram-link-card'
 import { ProfilePrompt } from './profile-prompt'
+import { NextLessonCard } from './next-lesson'
 import { api } from '@/components/sprints/shared'
 import { buildView, useMyPayments } from './my-payments-page'
 
@@ -96,6 +97,8 @@ export function MyTodayPage({ participantId, participantName }: { participantId:
           {greeting(now.getHours())}
         </h1>
       </header>
+
+      {participantId && <NextLessonCard participantId={participantId} />}
 
       {/* Sprint */}
       {!sprint && !sprintUnavailable ? (

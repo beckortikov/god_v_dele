@@ -69,6 +69,11 @@ const RULES: Rule[] = [
   // Passports and business figures: the participant, wheels_manager and admin. The participant id must be in the query.
   { prefix: '/api/participant-profile', read: ['wheels_manager', 'participant'], write: ['wheels_manager', 'participant'], scope: { kind: 'self-participant', param: 'participant_id' } },
 
+  // Lesson calendar: curators plan lessons and attach materials; a participant opens lessons meant for them
+  // (the route checks program and group) and lists them through /api/my-lessons.
+  { prefix: '/api/lessons', read: ['wheels_manager', 'manager', 'participant'], write: ['wheels_manager', 'manager'] },
+  { prefix: '/api/my-lessons', read: ['participant'], write: NONE, scope: { kind: 'self-participant', param: 'participant_id' } },
+
   { prefix: '/api/programs', read: ['finance', 'wheels_manager', 'manager'], write: ['finance'] },
   {
     prefix: '/api/participants',

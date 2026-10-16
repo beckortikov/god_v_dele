@@ -46,6 +46,8 @@ export const TABLE_LABELS: Record<string, string> = {
   business_wheel_entries: 'Колесо бизнеса',
   participant_groups: 'Группы участников',
   participant_profiles: 'Профили участников',
+  lessons: 'Уроки',
+  lesson_materials: 'Материалы уроков',
   participant_business_years: 'Бизнес участников по годам',
 }
 

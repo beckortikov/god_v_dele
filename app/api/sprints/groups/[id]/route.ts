@@ -43,6 +43,10 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
     checkGroups(cErr)
     if (count) throw new BadRequest('У группы есть спринты. Чтобы не потерять отчёты, удалить её нельзя.')
 
+    // Lessons of the group (migration 020) hold materials: keep them too. A missing table means no lessons.
+    const { count: lessonCount, error: lErr } = await supabaseAdmin.from('lessons').select('id', { count: 'exact', head: true }).eq('group_id', id)
+    if (!lErr && lessonCount) throw new BadRequest('У группы есть уроки в календаре. Чтобы не потерять материалы, удалить её нельзя.')
+
     const { error } = await supabaseAdmin.from(GROUPS).delete().eq('id', id)
     checkGroups(error)
     await logAudit(req, { table: GROUPS, recordId: id, action: 'delete', summary: `Группа «${before.name}»`, before })

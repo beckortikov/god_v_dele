@@ -131,6 +131,35 @@ describe('sign-ins and participant profiles', () => {
   })
 })
 
+describe('lesson calendar', () => {
+  it('lets curators plan lessons and attach materials; finance and employees cannot', () => {
+    for (const role of ['wheels_manager', 'manager'] as Role[]) {
+      expect(allowed(role, 'POST', '/api/lessons')).toBe(true)
+      expect(allowed(role, 'POST', '/api/lessons/abc/materials/prepare')).toBe(true)
+      expect(allowed(role, 'GET', '/api/lessons?program_id=x')).toBe(true)
+    }
+    for (const role of ['finance', 'employee'] as Role[]) {
+      expect(allowed(role, 'GET', '/api/lessons?program_id=x')).toBe(false)
+      expect(allowed(role, 'POST', '/api/lessons')).toBe(false)
+    }
+  })
+
+  it('lets a participant read lessons and download materials but never change them', () => {
+    expect(allowed('participant', 'GET', '/api/lessons/abc')).toBe(true)
+    expect(allowed('participant', 'GET', '/api/lessons/abc/materials?download=m1')).toBe(true)
+    for (const [method, url] of [['POST', '/api/lessons'], ['PATCH', '/api/lessons/abc'], ['DELETE', '/api/lessons/abc'], ['POST', '/api/lessons/abc/materials'], ['DELETE', '/api/lessons/abc/materials?material_id=1']] as const) {
+      expect(allowed('participant', method, url)).toBe(false)
+    }
+  })
+
+  it('shows a participant only their own calendar', () => {
+    expect(allowed('participant', 'GET', `/api/my-lessons?participant_id=${P}`)).toBe(true)
+    expect(allowed('participant', 'GET', '/api/my-lessons?participant_id=other')).toBe(false)
+    expect(allowed('participant', 'GET', '/api/my-lessons')).toBe(false)
+    expect(allowed('manager', 'GET', `/api/my-lessons?participant_id=${P}`)).toBe(false)
+  })
+})
+
 describe('manager and employee', () => {
   it('manager curates sprints and lists employees', () => {
     expect(allowed('manager', 'GET', '/api/sprints')).toBe(true)

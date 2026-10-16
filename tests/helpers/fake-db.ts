@@ -30,13 +30,15 @@ export const fake = {
 }
 
 function from(table: string) {
-  const q: { op: 'select' | 'insert' | 'update' | 'delete' | 'upsert'; filters: ((r: Row) => boolean)[]; payload: any; single: boolean; limit: number | null; conflict: string[] } = {
+  const q: { op: 'select' | 'insert' | 'update' | 'delete' | 'upsert'; filters: ((r: Row) => boolean)[]; payload: any; single: boolean; limit: number | null; conflict: string[]; head: boolean; order: { col: string; asc: boolean } | null } = {
     op: 'select',
     filters: [],
     payload: null,
     single: false,
     limit: null,
     conflict: [],
+    head: false,
+    order: null,
   }
   const run = () => {
     const miss = fake.missing.get(table)
@@ -44,7 +46,7 @@ function from(table: string) {
     const list = fake.rows(table)
     if (q.op === 'insert') {
       if (fake.failInsert.has(table)) return { data: null, error: { message: 'insert failed' } }
-      const made = q.payload.map((p: Row) => ({ id: `id-${++fake.seq}`, created_at: new Date().toISOString(), ...p }))
+      const made = q.payload.map((p: Row) => ({ id: crypto.randomUUID(), created_at: new Date().toISOString(), ...p }))
       list.push(...made)
       return { data: q.single ? made[0] : made, error: null }
     }
@@ -56,7 +58,7 @@ function from(table: string) {
           Object.assign(found, p)
           out.push(found)
         } else {
-          const made = { id: `id-${++fake.seq}`, created_at: new Date().toISOString(), ...p }
+          const made = { id: crypto.randomUUID(), created_at: new Date().toISOString(), ...p }
           list.push(made)
           out.push(made)
         }
@@ -72,11 +74,13 @@ function from(table: string) {
       for (const r of hit) Object.assign(r, q.payload)
       return { data: q.single ? (hit[0] ?? null) : hit, error: null }
     }
+    if (q.order) hit.sort((a, b) => (String(a[q.order!.col]) < String(b[q.order!.col]) ? -1 : String(a[q.order!.col]) > String(b[q.order!.col]) ? 1 : 0) * (q.order!.asc ? 1 : -1))
+    if (q.head) return { data: null, count: hit.length, error: null }
     const out = q.limit == null ? hit : hit.slice(0, q.limit)
     return { data: q.single ? (out[0] ?? null) : out, error: null }
   }
   const b: Record<string, any> = {
-    select: () => b,
+    select: (_cols?: string, opts?: { head?: boolean }) => ((q.head = !!opts?.head), b),
     insert: (r: Row | Row[]) => ((q.op = 'insert'), (q.payload = Array.isArray(r) ? r : [r]), b),
     upsert: (r: Row | Row[], opts?: { onConflict?: string }) => ((q.op = 'upsert'), (q.payload = Array.isArray(r) ? r : [r]), (q.conflict = (opts?.onConflict ?? 'id').split(',')), b),
     update: (r: Row) => ((q.op = 'update'), (q.payload = r), b),
@@ -88,7 +92,9 @@ function from(table: string) {
       q.filters.push(r => String(r[c] ?? '').toLowerCase() === want)
       return b
     },
-    order: () => b,
+    order: (col: string, opts?: { ascending?: boolean }) => ((q.order = { col, asc: opts?.ascending !== false }), b),
+    gte: (c: string, v: unknown) => (q.filters.push(r => String(r[c]) >= String(v)), b),
+    lt: (c: string, v: unknown) => (q.filters.push(r => String(r[c]) < String(v)), b),
     limit: (n: number) => ((q.limit = n), b),
     single: () => ((q.single = true), b),
     maybeSingle: () => ((q.single = true), b),
