@@ -21,7 +21,6 @@ import {
   Wallet,
   PieChart,
   UserRound,
-  CalendarRange,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -321,7 +320,6 @@ export function AppShell({
 
 const PARTICIPANT_TABS: { label: string; icon: LucideIcon; page?: PageType; section?: string }[] = [
   { label: 'Сегодня', icon: Sun, page: 'my-today' },
-  { label: 'Календарь', icon: CalendarRange, page: 'my-lessons' },
   { label: 'Спринт', icon: Flag, page: 'my-sprint' },
   { label: 'Оплаты', icon: Wallet, page: 'my-payments' },
   { label: 'Колёса', icon: PieChart, section: 'wheels' },
@@ -342,7 +340,7 @@ function ParticipantTabBar({
   return (
     <nav
       aria-label="Разделы"
-      className="grid shrink-0 grid-cols-6 border-t border-nav-border bg-nav px-2 pt-1.5 pb-[max(0.5rem,env(safe-area-inset-bottom))] lg:hidden"
+      className="grid shrink-0 grid-cols-5 border-t border-nav-border bg-nav px-1 pt-1.5 pb-[max(0.5rem,env(safe-area-inset-bottom))] lg:hidden"
     >
       {PARTICIPANT_TABS.map(t => {
         const section = t.section ? sections.find(s => s.id === t.section) : undefined
@@ -355,17 +353,17 @@ function ParticipantTabBar({
             aria-current={active ? 'page' : undefined}
             onClick={() => (t.page ? onNavigate(t.page) : section && onOpenSection(section))}
             className={cn(
-              'flex flex-col items-center gap-0.5 rounded-xl py-1 text-[11px] outline-none focus-visible:ring-[3px] focus-visible:ring-ring/30',
+              'flex min-h-14 flex-col items-center justify-center gap-0.5 rounded-xl py-1 text-xs transition-transform duration-150 outline-none active:scale-95 focus-visible:ring-[3px] focus-visible:ring-ring/30',
               active ? 'font-semibold text-nav-foreground' : 'font-medium text-nav-muted'
             )}
           >
             <span
               className={cn(
-                'flex h-[30px] w-12 items-center justify-center rounded-full transition-colors duration-200',
+                'flex h-8 w-16 items-center justify-center rounded-full transition-colors duration-200',
                 active && 'bg-primary-soft text-primary-soft-foreground'
               )}
             >
-              <t.icon className="size-5" />
+              <t.icon className="size-6" strokeWidth={active ? 2.25 : 1.75} />
             </span>
             {t.label}
           </button>

@@ -52,7 +52,7 @@ describe('getSections', () => {
     const cabinet = (r: UserRole) => getSections(r).find(s => s.id === 'cabinet')?.pages
     expect(cabinet('manager')).toEqual(['employee-dashboard', 'manager-dashboard'])
     expect(cabinet('employee')).toEqual(['employee-dashboard'])
-    expect(cabinet('participant')).toEqual(['my-today', 'my-lessons', 'my-sprint', 'my-payments', 'my-profile'])
+    expect(cabinet('participant')).toEqual(['my-today', 'my-sprint', 'my-payments', 'my-profile'])
   })
 })
 
@@ -69,7 +69,7 @@ describe('getAllowedPages', () => {
 
   it('admin can reach every page except the personal cabinets', () => {
     const adminPages = new Set(getAllowedPages('admin'))
-    const cabinetPages: PageType[] = ['employee-dashboard', 'manager-dashboard', 'my-payments', 'my-sprint', 'my-today', 'my-profile', 'my-lessons']
+    const cabinetPages: PageType[] = ['employee-dashboard', 'manager-dashboard', 'my-payments', 'my-sprint', 'my-today', 'my-profile']
     for (const id of Object.keys(PAGES) as PageType[]) {
       expect(adminPages.has(id)).toBe(!cabinetPages.includes(id))
     }
@@ -104,9 +104,9 @@ describe('getAllowedPages', () => {
     },
   )
 
-  it('only participants see «Сегодня», «Календарь», «Мой спринт», «Мои оплаты» and «Мой профиль»', () => {
+  it('only participants see «Сегодня», «Мой спринт», «Мои оплаты» and «Мой профиль»', () => {
     for (const role of ROLES) {
-      for (const page of ['my-today', 'my-sprint', 'my-payments', 'my-profile', 'my-lessons'] as PageType[]) {
+      for (const page of ['my-today', 'my-sprint', 'my-payments', 'my-profile'] as PageType[]) {
         expect(getAllowedPages(role).includes(page)).toBe(role === 'participant')
       }
     }

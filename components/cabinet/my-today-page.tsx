@@ -21,6 +21,7 @@ import { useNav } from '@/components/app-shell/nav-context'
 import { TelegramLinkCard } from '@/components/telegram/telegram-link-card'
 import { ProfilePrompt } from './profile-prompt'
 import { NextLessonCard } from './next-lesson'
+import { LessonsCalendarSection } from './lessons-calendar-section'
 import { api } from '@/components/sprints/shared'
 import { buildView, useMyPayments } from './my-payments-page'
 
@@ -209,6 +210,8 @@ export function MyTodayPage({ participantId, participantName }: { participantId:
           </div>
         </section>
       )}
+
+      {participantId && <LessonsCalendarSection participantId={participantId} />}
 
       {participantId && <ProfilePrompt participantId={participantId} />}
 
