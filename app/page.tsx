@@ -112,7 +112,7 @@ function AuthedApp({ session, onLogout }: { session: SessionUser; onLogout: () =
     <NavProvider allowedPages={allowedPages} defaultPage={getDefaultPage(session.role)}>
       <TooltipProvider>
         <ConfirmProvider>
-          <AppShell role={session.role} userName={session.fullName} onLogout={onLogout}>
+          <AppShell role={session.role} userName={session.fullName} participantId={session.participantId} onLogout={onLogout}>
             <PageBoundary>
               <PageRouter session={session} />
             </PageBoundary>

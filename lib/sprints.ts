@@ -249,6 +249,14 @@ export function isOverdue(task: Pick<SprintTask, 'due_date'>, a: Pick<Assignment
   return !!due && due < today && (a.status === 'todo' || a.status === 'rework')
 }
 
+/**
+ * Tasks of the current sprint that want the participant's attention now: sent back for rework
+ * or past their deadline. Counted once each, for the badge on the «Спринт» tab.
+ */
+export function tasksNeedingAttention(tasks: { task: Pick<SprintTask, 'due_date'>; assignment: Pick<Assignment, 'due_date' | 'status'> }[], today: string): number {
+  return tasks.filter(t => t.assignment.status === 'rework' || isOverdue(t.task, t.assignment, today)).length
+}
+
 export type AssignmentAction =
   | { type: 'submit'; report_text?: string | null; report_link?: string | null; /** Files already attached to the report. */ files?: number }
   | { type: 'mark' }

@@ -8,6 +8,7 @@ import {
   effectiveDue,
   focusTasks,
   isOverdue,
+  tasksNeedingAttention,
   nextSprintDates,
   percent,
   pickCurrentSprint,
@@ -207,5 +208,25 @@ describe('submit with attached files', () => {
   })
   it('a text report still needs its text even with files', () => {
     expect(() => applyAction({ submission_type: 'text', requires_review: true }, { status: 'todo' }, { type: 'submit', files: 2 })).toThrow('Напишите отчёт')
+  })
+})
+
+describe('tasksNeedingAttention (the badge on the «Спринт» tab)', () => {
+  const t = (due: string | null) => ({ due_date: due })
+  const a = (status: 'todo' | 'review' | 'rework' | 'done', due: string | null = null) => ({ status, due_date: due })
+  it('counts tasks sent back and tasks past their deadline, each once', () => {
+    const tasks = [
+      { task: t('2026-10-10'), assignment: a('todo') }, // overdue
+      { task: t('2026-10-30'), assignment: a('rework') }, // sent back, not yet due
+      { task: t('2026-10-01'), assignment: a('rework') }, // both: still one
+      { task: t('2026-10-30'), assignment: a('todo') }, // fine
+      { task: t('2026-10-01'), assignment: a('review') }, // waiting for the curator: not on the participant
+      { task: t('2026-10-01'), assignment: a('done') },
+    ]
+    expect(tasksNeedingAttention(tasks, '2026-10-19')).toBe(3)
+  })
+  it('uses a personal deadline over the task\'s and is zero for nothing', () => {
+    expect(tasksNeedingAttention([{ task: t('2026-10-01'), assignment: a('todo', '2026-11-01') }], '2026-10-19')).toBe(0)
+    expect(tasksNeedingAttention([], '2026-10-19')).toBe(0)
   })
 })

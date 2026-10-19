@@ -50,6 +50,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { CommandPalette } from '@/components/app-shell/command-palette'
 import { NotificationsBell } from '@/components/app-shell/notifications-bell'
+import { useTabBadges } from '@/components/app-shell/use-tab-badges'
 
 export interface CreateAction {
   id: string
@@ -102,15 +103,19 @@ function initials(name: string) {
 export function AppShell({
   role,
   userName,
+  participantId = null,
   onLogout,
   children,
 }: {
   role: UserRole
   userName: string | null
+  /** The participant's id: for the numbers on the tab bar (participants only). */
+  participantId?: string | null
   onLogout: () => void
   children: React.ReactNode
 }) {
   const { page, navigate } = useNav()
+  const badges = useTabBadges(role === 'participant' ? participantId : null, page)
   const sections = React.useMemo(() => getSections(role), [role])
   const current = findSection(sections, page) ?? sections[0]
   const { last, remember } = useLastPages()
@@ -288,7 +293,7 @@ export function AppShell({
 
       <main ref={mainRef} className="relative flex-1 overflow-auto">{children}</main>
 
-      {tabBar && <ParticipantTabBar page={page} sections={sections} onNavigate={navigate} onOpenSection={openSection} />}
+      {tabBar && <ParticipantTabBar page={page} sections={sections} badges={badges} onNavigate={navigate} onOpenSection={openSection} />}
 
       <MobileDrawer
         open={drawerOpen}
@@ -329,11 +334,14 @@ const PARTICIPANT_TABS: { label: string; icon: LucideIcon; page?: PageType; sect
 function ParticipantTabBar({
   page,
   sections,
+  badges,
   onNavigate,
   onOpenSection,
 }: {
   page: PageType
   sections: NavSection[]
+  /** How many things want attention behind a tab. */
+  badges: Partial<Record<PageType, number>>
   onNavigate: (p: PageType) => void
   onOpenSection: (s: NavSection) => void
 }) {
@@ -346,11 +354,13 @@ function ParticipantTabBar({
         const section = t.section ? sections.find(s => s.id === t.section) : undefined
         if (t.section && !section) return null
         const active = t.page ? page === t.page : !!section?.pages.includes(page)
+        const count = t.page ? (badges[t.page] ?? 0) : 0
         return (
           <button
             key={t.label}
             type="button"
             aria-current={active ? 'page' : undefined}
+            aria-label={count ? `${t.label}: требует внимания ${count}` : undefined}
             onClick={() => (t.page ? onNavigate(t.page) : section && onOpenSection(section))}
             className={cn(
               'flex min-h-14 flex-col items-center justify-center gap-0.5 rounded-xl py-1 text-xs transition-transform duration-150 outline-none active:scale-95 focus-visible:ring-[3px] focus-visible:ring-ring/30',
@@ -359,11 +369,16 @@ function ParticipantTabBar({
           >
             <span
               className={cn(
-                'flex h-8 w-16 items-center justify-center rounded-full transition-colors duration-200',
+                'relative flex h-8 w-16 items-center justify-center rounded-full transition-colors duration-200',
                 active && 'bg-primary-soft text-primary-soft-foreground'
               )}
             >
               <t.icon className="size-6" strokeWidth={active ? 2.25 : 1.75} />
+              {count > 0 && (
+                <span className="num absolute top-0 right-2 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] leading-none font-bold text-white ring-2 ring-nav" aria-hidden>
+                  {count > 9 ? '9+' : count}
+                </span>
+              )}
             </span>
             {t.label}
           </button>
