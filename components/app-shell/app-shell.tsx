@@ -17,10 +17,11 @@ import {
   UserPlus,
   CalendarPlus,
   UserSquare2,
-  Flag,
-  Wallet,
-  PieChart,
-  UserRound,
+  House,
+  Radar,
+  Target,
+  WalletCards,
+  CircleUserRound,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -51,6 +52,7 @@ import {
 import { CommandPalette } from '@/components/app-shell/command-palette'
 import { NotificationsBell } from '@/components/app-shell/notifications-bell'
 import { useTabBadges } from '@/components/app-shell/use-tab-badges'
+import { display } from '@/components/landing/fonts'
 
 export interface CreateAction {
   id: string
@@ -127,6 +129,34 @@ export function AppShell({
     if (current) remember(current.id, page)
   }, [current, page, remember])
 
+  // Participants get the landing's look. It sits on <html> so dialogs and sheets (portals) follow it.
+  React.useEffect(() => {
+    if (role !== 'participant') return
+    const html = document.documentElement
+    let addedDark = false
+    const apply = () => {
+      html.classList.add('participant-ui', display.variable)
+      if (!html.classList.contains('dark')) {
+        html.classList.add('dark')
+        addedDark = true
+      }
+    }
+    apply()
+    // The browser bar follows the dark look.
+    const metas = [...document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]')]
+    const before = metas.map(m => m.content)
+    metas.forEach(m => (m.content = '#080808'))
+    // next-themes rewrites the class list on a theme change; put ours back.
+    const observer = new MutationObserver(apply)
+    observer.observe(html, { attributes: true, attributeFilter: ['class'] })
+    return () => {
+      metas.forEach((m, i) => (m.content = before[i]))
+      observer.disconnect()
+      html.classList.remove('participant-ui', display.variable)
+      if (addedDark) html.classList.remove('dark')
+    }
+  }, [role])
+
   // A new page starts at the top instead of keeping the previous page's scroll.
   const mainRef = React.useRef<HTMLElement>(null)
   React.useEffect(() => {
@@ -154,8 +184,8 @@ export function AppShell({
   const tabBar = role === 'participant'
 
   return (
-    <div className="flex h-dvh flex-col bg-background text-foreground">
-      <header className="relative z-30 shrink-0 border-b border-nav-border bg-nav text-nav-foreground">
+    <div className={cn('flex h-dvh flex-col bg-background text-foreground', tabBar && 'pt-shell')}>
+      <header className={cn('relative z-30 shrink-0 border-b border-nav-border bg-nav text-nav-foreground', tabBar && 'backdrop-blur-xl')}>
         {/* Row 1: brand · sections · tools */}
         <div className="flex h-13 items-center gap-2 px-3 sm:px-5">
           <Button
@@ -172,8 +202,8 @@ export function AppShell({
             onClick={() => navigate(sections[0].pages[0])}
             className="mr-3 flex shrink-0 items-center gap-2.5 rounded-md outline-none focus-visible:ring-[3px] focus-visible:ring-ring/30"
           >
-            <BrandMark />
-            <span className="hidden text-[15px] font-semibold tracking-tight sm:inline">Год в деле</span>
+            {tabBar ? <ArrowsMark /> : <BrandMark />}
+            <span className={cn('text-[15px] font-semibold tracking-tight', tabBar ? 'text-base font-bold' : 'hidden sm:inline')}>Год в деле</span>
           </button>
 
           <nav className="hidden min-w-0 items-center gap-0.5 lg:flex" aria-label="Разделы">
@@ -324,11 +354,11 @@ export function AppShell({
 }
 
 const PARTICIPANT_TABS: { label: string; icon: LucideIcon; page?: PageType; section?: string }[] = [
-  { label: 'Сегодня', icon: Sun, page: 'my-today' },
-  { label: 'Спринт', icon: Flag, page: 'my-sprint' },
-  { label: 'Оплаты', icon: Wallet, page: 'my-payments' },
-  { label: 'Колёса', icon: PieChart, section: 'wheels' },
-  { label: 'Профиль', icon: UserRound, page: 'my-profile' },
+  { label: 'Сегодня', icon: House, page: 'my-today' },
+  { label: 'Спринт', icon: Target, page: 'my-sprint' },
+  { label: 'Оплаты', icon: WalletCards, page: 'my-payments' },
+  { label: 'Колёса', icon: Radar, section: 'wheels' },
+  { label: 'Профиль', icon: CircleUserRound, page: 'my-profile' },
 ]
 
 function ParticipantTabBar({
@@ -348,7 +378,7 @@ function ParticipantTabBar({
   return (
     <nav
       aria-label="Разделы"
-      className="grid shrink-0 grid-cols-5 border-t border-nav-border bg-nav px-1 pt-1.5 pb-[max(0.5rem,env(safe-area-inset-bottom))] lg:hidden"
+      className="relative z-30 grid shrink-0 grid-cols-5 border-t border-nav-border bg-nav px-1.5 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] backdrop-blur-xl lg:hidden"
     >
       {PARTICIPANT_TABS.map(t => {
         const section = t.section ? sections.find(s => s.id === t.section) : undefined
@@ -363,19 +393,19 @@ function ParticipantTabBar({
             aria-label={count ? `${t.label}: требует внимания ${count}` : undefined}
             onClick={() => (t.page ? onNavigate(t.page) : section && onOpenSection(section))}
             className={cn(
-              'flex min-h-14 flex-col items-center justify-center gap-0.5 rounded-xl py-1 text-xs transition-transform duration-150 outline-none active:scale-95 focus-visible:ring-[3px] focus-visible:ring-ring/30',
-              active ? 'font-semibold text-nav-foreground' : 'font-medium text-nav-muted'
+              'flex min-h-[3.75rem] flex-col items-center justify-center gap-1 rounded-2xl py-1 text-[11px] tracking-tight transition-transform duration-150 outline-none active:scale-95 focus-visible:ring-[3px] focus-visible:ring-ring/40',
+              active ? 'font-bold text-primary' : 'font-medium text-nav-muted'
             )}
           >
             <span
               className={cn(
-                'relative flex h-8 w-16 items-center justify-center rounded-full transition-colors duration-200',
-                active && 'bg-primary-soft text-primary-soft-foreground'
+                'relative flex h-8 w-14 items-center justify-center rounded-full transition-all duration-200',
+                active ? 'bg-primary text-primary-foreground shadow-[0_6px_18px_-6px_rgb(161_250_77/0.55)]' : 'text-nav-muted'
               )}
             >
-              <t.icon className="size-6" strokeWidth={active ? 2.25 : 1.75} />
+              <t.icon className="size-[22px]" strokeWidth={active ? 2.25 : 1.75} />
               {count > 0 && (
-                <span className="num absolute top-0 right-2 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] leading-none font-bold text-white ring-2 ring-nav" aria-hidden>
+                <span className="num absolute -top-1 right-0 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-destructive px-1 text-[10px] leading-none font-bold text-destructive-foreground ring-2 ring-background" aria-hidden>
                   {count > 9 ? '9+' : count}
                 </span>
               )}
@@ -385,6 +415,16 @@ function ParticipantTabBar({
         )
       })}
     </nav>
+  )
+}
+
+/** The author's mark (two stacked arrows), as on the landing. */
+function ArrowsMark({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 32 32" aria-hidden className={cn('size-8 shrink-0 fill-primary', className)}>
+      <path d="M16 3 28 14H4z" />
+      <path d="M16 16 28 27H4z" />
+    </svg>
   )
 }
 
@@ -426,6 +466,7 @@ function UserMenu({ name, role, onLogout }: { name: string; role: UserRole; onLo
             <p className="text-xs text-muted-foreground">{ROLE_LABELS[role]}</p>
           </div>
         </div>
+        {role !== 'participant' && (<>
         <DropdownMenuSeparator />
         <DropdownMenuLabel>Тема</DropdownMenuLabel>
         <DropdownMenuRadioGroup value={theme ?? 'light'} onValueChange={setTheme}>
@@ -459,6 +500,7 @@ function UserMenu({ name, role, onLogout }: { name: string; role: UserRole; onLo
             </button>
           ))}
         </div>
+        </>)}
         <DropdownMenuSeparator />
         <DropdownMenuItem variant="destructive" onSelect={onLogout}>
           <LogOut /> Выйти

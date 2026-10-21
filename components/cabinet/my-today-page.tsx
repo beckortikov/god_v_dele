@@ -2,7 +2,7 @@
 
 import * as React from 'react'
 import { toast } from 'sonner'
-import { Check, ChevronRight, Flag, PieChart, RotateCcw, Wallet } from 'lucide-react'
+import { ArrowUpRight, Check, ChevronRight, Radar, RotateCcw, Target, WalletCards } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatMoney, MONTHS_RU, plural, todayISO } from '@/lib/format'
 import {
@@ -116,10 +116,10 @@ export function MyTodayPage({ participantId, participantName }: { participantId:
           onOpen={() => navigate('my-sprint')}
         />
       ) : (
-        <section className="rounded-3xl bg-primary p-5 text-primary-foreground">
-          <p className="text-sm opacity-85">{sprint?.program?.name ?? 'Программа'}</p>
+        <section className="pt-glow-card p-5">
+          <p className="text-sm font-semibold text-primary">{sprint?.program?.name ?? 'Программа'}</p>
           <p className="mt-1 text-xl font-bold tracking-tight">Спринты скоро начнутся</p>
-          <p className="mt-2 text-sm leading-relaxed opacity-85">
+          <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
             Куратор поставит цель и задачи к старту. Подключите Telegram, и мы сразу напишем, когда они появятся.
           </p>
         </section>
@@ -164,8 +164,11 @@ export function MyTodayPage({ participantId, participantName }: { participantId:
             onClick={() => navigate('my-payments')}
             className="flex flex-col gap-3 rounded-2xl border bg-card p-4 text-left shadow-xs transition-transform outline-none focus-visible:ring-[3px] focus-visible:ring-ring/30 active:scale-[0.985]"
           >
-            <span className="flex size-9 items-center justify-center rounded-xl bg-info-soft text-info">
-              <Wallet className="size-[18px]" />
+            <span className="flex items-center justify-between">
+              <span className="flex size-10 items-center justify-center rounded-xl bg-primary-soft text-primary">
+                <WalletCards className="size-5" />
+              </span>
+              <ArrowUpRight className="size-4 text-muted-foreground" />
             </span>
             <PaymentLine loading={pay.loading} error={!!pay.error} schedule={schedule} />
           </button>
@@ -174,8 +177,11 @@ export function MyTodayPage({ participantId, participantName }: { participantId:
             onClick={() => navigate('life-wheel')}
             className="flex flex-col gap-3 rounded-2xl border bg-card p-4 text-left shadow-xs transition-transform outline-none focus-visible:ring-[3px] focus-visible:ring-ring/30 active:scale-[0.985]"
           >
-            <span className="flex size-9 items-center justify-center rounded-xl bg-success-soft text-success">
-              <PieChart className="size-[18px]" />
+            <span className="flex items-center justify-between">
+              <span className="flex size-10 items-center justify-center rounded-xl bg-primary-soft text-primary">
+                <Radar className="size-5" />
+              </span>
+              <ArrowUpRight className="size-4 text-muted-foreground" />
             </span>
             <span>
               <span className="block font-semibold">Колёса</span>
@@ -260,34 +266,41 @@ function SprintHero({
     <button
       type="button"
       onClick={onOpen}
-      className="block w-full rounded-3xl bg-primary p-5 text-left text-primary-foreground transition-transform outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 active:scale-[0.985]"
+      className="group relative block w-full overflow-hidden rounded-3xl border border-primary/30 bg-card p-5 text-left transition-transform outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 active:scale-[0.985]"
     >
-      <span className="flex items-center justify-between gap-2 text-sm">
-        <span className="opacity-85">
+      {/* the landing's green glow */}
+      <span aria-hidden className="pointer-events-none absolute -top-20 -right-16 size-64 rounded-full bg-[radial-gradient(closest-side,rgb(112_170_46/0.6),transparent)] blur-2xl" />
+      <span aria-hidden className="pointer-events-none absolute -bottom-24 -left-16 size-56 rounded-full bg-[radial-gradient(closest-side,rgb(112_170_46/0.22),transparent)] blur-2xl" />
+      <span className="relative flex items-center justify-between gap-2 text-sm">
+        <span className="inline-flex items-center gap-1.5 font-semibold text-primary">
+          <Target className="size-4" strokeWidth={2.25} />
           Спринт {number} из {total}
         </span>
-        <span className="num inline-flex h-6 items-center rounded-full bg-black/15 px-2.5 text-[12.5px] font-medium">
+        <span className="num inline-flex h-7 items-center rounded-full border border-primary/40 bg-primary/10 px-3 text-[12.5px] font-semibold text-primary">
           {!day.started ? 'скоро старт' : day.finished ? 'завершён' : `осталось ${day.left} ${plural(day.left, ['день', 'дня', 'дней'])}`}
         </span>
       </span>
-      <span className="mt-1.5 block text-[22px] leading-tight font-bold tracking-tight">{title}</span>
-      <span className="mt-4 flex items-center gap-4">
-        <span className="relative inline-flex size-16 shrink-0">
-          <svg viewBox="0 0 36 36" className="size-16 -rotate-90" aria-hidden>
-            <circle cx="18" cy="18" r="15.5" fill="none" stroke="currentColor" strokeOpacity={0.22} strokeWidth="3.5" />
-            <circle cx="18" cy="18" r="15.5" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeDasharray={`${(value * c).toFixed(1)} ${c}`} />
+      <span className="relative mt-3 block text-[24px] leading-[1.15] font-bold tracking-tight">{title}</span>
+      <span className="relative mt-5 flex items-center gap-4">
+        <span className="relative inline-flex size-[68px] shrink-0">
+          <svg viewBox="0 0 36 36" className="size-[68px] -rotate-90" aria-hidden>
+            <circle cx="18" cy="18" r="15.5" fill="none" stroke="rgb(255 255 255 / 0.1)" strokeWidth="3.5" />
+            <circle cx="18" cy="18" r="15.5" fill="none" stroke="var(--primary)" strokeWidth="3.5" strokeLinecap="round" strokeDasharray={`${(value * c).toFixed(1)} ${c}`} />
           </svg>
           <span className="num absolute inset-0 flex items-center justify-center text-[15px] font-bold">
             {done}/{count}
           </span>
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block text-[15px] font-semibold">
+          <span className="block text-base font-bold">
             {count ? `${done} из ${count} сдано` : 'Задач пока нет'}
           </span>
-          <span className="mt-0.5 block text-sm opacity-85">
+          <span className="mt-0.5 block text-sm leading-snug text-muted-foreground">
             {waiting ? `${waiting} ${plural(waiting, ['отчёт', 'отчёта', 'отчётов'])} на проверке у куратора` : done === count && count ? 'Всё сдано' : 'Откройте спринт, чтобы увидеть задачи'}
           </span>
+        </span>
+        <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground transition-transform group-active:rotate-45">
+          <ArrowUpRight className="size-5" strokeWidth={2.25} />
         </span>
       </span>
     </button>
@@ -340,7 +353,7 @@ function FocusRow({
         </button>
       ) : (
         <span aria-hidden className={cn('flex size-[34px] shrink-0 items-center justify-center rounded-[10px]', rework ? cn('bg-warning-soft', warnText) : 'bg-muted text-muted-foreground')}>
-          {rework ? <RotateCcw className="size-4" /> : <Flag className="size-4" />}
+          {rework ? <RotateCcw className="size-4" /> : <Target className="size-4" />}
         </span>
       )}
       <button type="button" onClick={onOpen} className="flex min-w-0 flex-1 items-center gap-2 self-stretch rounded-lg text-left outline-none focus-visible:ring-[3px] focus-visible:ring-ring/30">

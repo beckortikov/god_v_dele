@@ -157,17 +157,17 @@ export function MySprintPage({ participantId }: { participantId: string | null }
         {sprint.goal && <p className="mt-2 text-[15px] leading-relaxed text-pretty text-muted-foreground">Цель: {sprint.goal}</p>}
       </header>
 
-      <section className="flex flex-wrap items-center gap-x-5 gap-y-4 rounded-3xl bg-primary p-5 text-primary-foreground">
+      <section className="pt-glow-card flex flex-wrap items-center gap-x-5 gap-y-4 p-5">
         <Ring value={tasks.length ? done / tasks.length : 0} label={`${done}/${tasks.length}`} />
         <div className="min-w-0 flex-[1_1_180px]">
           <p className="num text-lg font-bold" aria-live="polite">
             {done} из {tasks.length} сдано
           </p>
-          <p className="mt-0.5 text-sm opacity-85">
+          <p className="mt-0.5 text-sm leading-snug text-muted-foreground">
             {nextDue ? `Ближайший срок ${shortDate(nextDue.due)}: ${nextDue.t.task.title.toLowerCase()}` : open.length ? 'Сроков впереди нет' : 'Все задачи сданы'}
           </p>
         </div>
-        <span className="num inline-flex h-7 items-center rounded-full bg-black/15 px-3 text-[13px] font-medium">
+        <span className="num inline-flex h-7 items-center rounded-full border border-primary/40 bg-primary/10 px-3 text-[13px] font-semibold text-primary">
           {!p.started ? `старт ${shortDate(sprint.start_date)}` : p.finished ? 'спринт завершён' : `осталось ${p.left} ${plural(p.left, ['день', 'дня', 'дней'])}`}
         </span>
       </section>
@@ -347,13 +347,13 @@ function Ring({ value, label }: { value: number; label: string }) {
   return (
     <span className="relative inline-flex size-16 shrink-0">
       <svg viewBox="0 0 36 36" className="size-16 -rotate-90" aria-hidden>
-        <circle cx="18" cy="18" r="15.5" fill="none" stroke="currentColor" strokeOpacity={0.22} strokeWidth="3.5" />
+        <circle cx="18" cy="18" r="15.5" fill="none" stroke="rgb(255 255 255 / 0.1)" strokeWidth="3.5" />
         <circle
           cx="18"
           cy="18"
           r="15.5"
           fill="none"
-          stroke="currentColor"
+          stroke="var(--primary)"
           strokeWidth="3.5"
           strokeLinecap="round"
           strokeDasharray={`${(value * c).toFixed(1)} ${c}`}

@@ -192,6 +192,107 @@
   --primary-soft-foreground: oklch(0.92 0.006 265);
 }
 
+
+/*
+ * Participant app: the landing's look (near-black, one lime accent, Montserrat).
+ * Set on <html> by the app shell, so dialogs and sheets rendered in portals pick it up too.
+ * `:not(#_)` raises the specificity above the accent themes.
+ */
+:root.participant-ui:not(#_) {
+  color-scheme: dark;
+  --background: #080808;
+  --foreground: #f3f3f3;
+  --card: #131413;
+  --card-foreground: #f3f3f3;
+  --popover: #161715;
+  --popover-foreground: #f3f3f3;
+
+  --primary: #a1fa4d;
+  --primary-foreground: #0a1004;
+  --primary-soft: rgb(161 250 77 / 0.14);
+  --primary-soft-foreground: #bdff85;
+
+  --secondary: #1b1c1a;
+  --secondary-foreground: #e9eae7;
+  --muted: #1a1b19;
+  --muted-foreground: #a8aba5;
+  --accent: #202120;
+  --accent-foreground: #f3f3f3;
+
+  --destructive: #ff8274;
+  --destructive-foreground: #1a0604;
+  --destructive-soft: rgb(255 130 116 / 0.14);
+  --success: #5fe39a;
+  --success-soft: rgb(95 227 154 / 0.14);
+  --warning: #ffc552;
+  --warning-soft: rgb(255 197 82 / 0.14);
+  --info: #72b9ff;
+  --info-soft: rgb(114 185 255 / 0.14);
+
+  --border: rgb(255 255 255 / 0.09);
+  --input: rgb(255 255 255 / 0.16);
+  --ring: #a1fa4d;
+
+  --nav: rgb(10 11 10 / 0.78);
+  --nav-foreground: #f3f3f3;
+  --nav-muted: #a1a49e;
+  --nav-border: rgb(255 255 255 / 0.08);
+
+  --chart-1: #a1fa4d;
+  --chart-2: #72b9ff;
+  --chart-3: #ffc552;
+  --chart-4: #ff8274;
+  --chart-5: #b794ff;
+  --chart-6: #5fe39a;
+  --chart-income: #5fe39a;
+  --chart-expense: #ff8274;
+
+  --radius: 0.75rem;
+  --shadow-xs: 0 0 0 1px rgb(255 255 255 / 0.03);
+  --shadow-sm: 0 0 0 1px rgb(255 255 255 / 0.04);
+  --shadow-pop: 0 24px 48px -12px rgb(0 0 0 / 0.7), 0 0 0 1px rgb(255 255 255 / 0.06);
+}
+:root.participant-ui body {
+  font-family: var(--font-display), var(--font-onest), ui-sans-serif, system-ui, sans-serif;
+  font-feature-settings: normal;
+  letter-spacing: -0.005em;
+}
+:root.participant-ui h1,
+:root.participant-ui h2,
+:root.participant-ui h3 {
+  letter-spacing: -0.02em;
+}
+/* A dark card with the landing's green glow in the corner */
+.pt-glow-card {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgb(161 250 77 / 0.3);
+  background: var(--card);
+  border-radius: 1.5rem;
+}
+.pt-glow-card::before {
+  content: '';
+  position: absolute;
+  top: -5rem;
+  right: -4rem;
+  width: 16rem;
+  height: 16rem;
+  border-radius: 9999px;
+  background: radial-gradient(closest-side, rgb(112 170 46 / 0.6), transparent);
+  filter: blur(24px);
+  pointer-events: none;
+}
+.pt-glow-card > * {
+  position: relative;
+}
+/* The glows of the landing, fixed behind the scrolling pages */
+.pt-shell {
+  background:
+    radial-gradient(60% 38% at 100% -6%, rgb(112 170 46 / 0.4), transparent 70%),
+    radial-gradient(55% 34% at -8% 52%, rgb(112 170 46 / 0.2), transparent 70%),
+    #080808;
+}
+
 @theme inline {
   --font-sans: var(--font-onest), ui-sans-serif, system-ui, sans-serif;
   --font-mono: ui-monospace, 'SF Mono', Menlo, monospace;

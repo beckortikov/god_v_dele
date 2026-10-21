@@ -1,9 +1,8 @@
 import { Montserrat } from 'next/font/google'
 
-/** The one font of the landing page and the sign-in screen (geometric sans, full Cyrillic). */
+/** The display font of the landing, the sign-in screen and the participant app (geometric sans, full Cyrillic, one variable file per script). */
 export const display = Montserrat({
   subsets: ['latin', 'cyrillic'],
-  weight: ['500', '600', '700', '800'],
   variable: '--font-display',
   display: 'swap',
 })

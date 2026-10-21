@@ -5,6 +5,7 @@ import { Analytics } from '@vercel/analytics/next'
 import { ThemeProvider, ACCENT_INIT_SCRIPT } from '@/components/theme-provider'
 import { Toaster } from '@/components/ui/sonner'
 import { PwaRegister } from '@/components/pwa-register'
+import { display } from '@/components/landing/fonts'
 import './globals.css'
 
 const onest = Onest({
@@ -12,6 +13,9 @@ const onest = Onest({
   variable: '--font-onest',
   display: 'swap',
 })
+
+/** A signed-in participant gets the dark look before the first paint, so there is no flash of the light theme. */
+const PARTICIPANT_INIT_SCRIPT = `try{if(localStorage.getItem('isAuthenticated')==='true'&&localStorage.getItem('userRole')==='participant')document.documentElement.classList.add('participant-ui','${display.variable}')}catch(e){}`
 
 export const metadata: Metadata = {
   title: 'Год в деле — учёт и управление',
@@ -47,7 +51,7 @@ export default function RootLayout({
   return (
     <html lang="ru" className={onest.variable} suppressHydrationWarning>
       <head>
-        <script dangerouslySetInnerHTML={{ __html: ACCENT_INIT_SCRIPT }} />
+        <script dangerouslySetInnerHTML={{ __html: ACCENT_INIT_SCRIPT + PARTICIPANT_INIT_SCRIPT }} />
       </head>
       <body className="font-sans antialiased">
         <ThemeProvider>
