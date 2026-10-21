@@ -75,10 +75,11 @@
 .landing .marquee-group span{font-size:calc(var(--k)*.205);font-weight:600;letter-spacing:-0.02em;line-height:1;color:var(--fg)}
 .landing .marquee-group i{display:block;width:calc(var(--k)*.05);height:calc(var(--k)*.05);border-radius:50%;background:var(--accent);margin:0 calc(var(--k)*.045);flex-shrink:0}
 @keyframes gvd-marquee{from{transform:translateX(0)}to{transform:translateX(-50%)}}
-.landing .hero-photo{position:absolute;left:50%;top:calc(var(--k)*.0833);transform:translateX(-50%);z-index:2;width:calc(var(--k)*.5);height:calc(var(--k)*.5);pointer-events:none;overflow:hidden;-webkit-mask-image:linear-gradient(180deg,#000 80%,transparent);mask-image:linear-gradient(180deg,#000 80%,transparent)}
+.landing .hero-photo{position:absolute;left:calc(50% + var(--k)*.035);top:calc(var(--k)*.0833);transform:translateX(-50%);z-index:2;width:calc(var(--k)*.5);height:calc(var(--k)*.5);pointer-events:none;overflow:hidden;-webkit-mask-image:linear-gradient(180deg,#000 80%,transparent);mask-image:linear-gradient(180deg,#000 80%,transparent)}
 .landing .hero-photo img{display:block;width:100%;height:100%;object-fit:cover;object-position:top}
-.landing .hero-copy{position:absolute;left:calc(var(--k)*.0625);top:calc(var(--k)*.3118);z-index:3}
-.landing .hero-copy .role{font-size:calc(var(--k)*.0347);font-weight:600;letter-spacing:-0.02em;line-height:1.3;color:var(--fg)}
+.landing .hero-copy{position:absolute;left:calc(var(--k)*.0778);top:calc(var(--k)*.3118);z-index:3}
+.landing .hero-copy .role{font-size:calc(var(--k)*.036);font-weight:600;letter-spacing:-0.025em;line-height:1.3;color:var(--fg)}
+.landing .hero-copy .role i{font-style:normal;color:var(--accent)}
 .landing .hero-copy .who{margin-top:6px;color:var(--dim);font-size:15px;font-weight:600}
 .landing .hero-actions{position:absolute;right:calc(var(--k)*.0778);top:calc(var(--k)*.327);z-index:3;display:flex;align-items:center;gap:14px 24px}
 .landing .hero-side{position:absolute;right:calc(var(--k)*.0778);top:calc(var(--k)*.43);z-index:3;display:grid;gap:12px;width:calc(var(--k)*.145)}

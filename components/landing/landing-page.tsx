@@ -279,7 +279,7 @@ export function LandingPage({ onLogin }: { onLogin: () => void }) {
               <Image src="/landing/anvar-cutout.png" alt="Анвар Халиков" width={868} height={1300} priority sizes="(max-width: 960px) 82vw, 720px" />
             </div>
             <div className="hero-copy">
-              <div className="role">Предприниматель</div>
+              <div className="role">Предприниматель<i>.</i></div>
             </div>
             <div className="hero-actions">
               <a href="#contact" className="btn btn-accent" onClick={go('contact', 'Бесплатный тренинг')}>Бесплатный тренинг</a>
@@ -291,8 +291,8 @@ export function LandingPage({ onLogin }: { onLogin: () => void }) {
               <div><b>100+</b><span>учеников</span></div>
             </div>
             <div className="strip">
-              <div className="strip-title">Проекты{' '}<br />автора</div>
-              <div className="logos" role="list" aria-label="Проекты автора">
+              <div className="strip-title">Мои{' '}<br />бизнесы</div>
+              <div className="logos" role="list" aria-label="Мои бизнесы">
                 <div className="logos-track">
                   {[0, 1].map(g => (
                     <div className="logos-group" key={g} aria-hidden={g === 1 ? true : undefined}>
