@@ -108,6 +108,17 @@ export async function PUT(req: Request) {
 
         if (error) throw error
 
+        // A participant moved to another group takes their schedule and receipts along, so the program reports follow them.
+        // (Accounts stay as they are: money does not move between accounts by itself.)
+        if (data?.[0] && before && updateData.program_id && before.program_id !== updateData.program_id) {
+            const moved = { program_id: updateData.program_id }
+            const m = await supabaseAdmin.from('monthly_payments').update(moved).eq('participant_id', id)
+            if (m.error) console.error('Could not move the schedule to the new program:', m.error.message)
+            const t = await supabaseAdmin.from('payment_transactions').update(moved).eq('participant_id', id)
+            // The table is missing until migration 014: nothing to move then
+            if (t.error && t.error.code !== '42P01' && t.error.code !== 'PGRST205') console.error('Could not move the receipts to the new program:', t.error.message)
+        }
+
         if (data?.[0]) {
             const { program, ...after } = data[0] as any
             await logAudit(req, {

@@ -27,6 +27,7 @@ import { EmptyState } from '@/components/erp/empty-state'
 import { useConfirm } from '@/components/erp/confirm'
 import { dangerIconCls } from '@/components/erp/table-parts'
 import { TelegramAdminPanel } from '@/components/telegram/telegram-admin-panel'
+import { kindOf } from '@/lib/participant-kind'
 import { AccessCard } from '@/components/access/access-fields'
 import { useRole } from '@/components/access/use-role'
 import { ParticipantProfileSheet } from '@/components/participants/participant-profile-sheet'
@@ -213,6 +214,7 @@ export function ParticipantDetailSheet({
           <SheetDescription className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <span>{p.program?.name || 'Программа не указана'}</span>
             <Badge variant={PARTICIPANT_STATUS[p.status]?.variant ?? 'secondary'}>{PARTICIPANT_STATUS[p.status]?.label ?? p.status}</Badge>
+            {kindOf(p) === 'guest' && <Badge variant="info">Гость</Badge>}
           </SheetDescription>
         </SheetHeader>
         <SheetBody className="space-y-5">

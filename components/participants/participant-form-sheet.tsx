@@ -9,6 +9,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Field, FieldGroup } from '@/components/erp/field'
 import { formatMoney, todayISO } from '@/lib/format'
 import type { Participant, Program } from '@/components/participants/types'
+import { Segmented } from '@/components/erp/segmented'
+import { KIND_LABELS, findGuestProgram, kindOf, memberPrograms, type ParticipantKind } from '@/lib/participant-kind'
 import { AccessFields, CredentialsDialog, accessPayload, accessProblems, newAccessDraft, type AccessDraft, type IssuedCredentials } from '@/components/access/access-fields'
 
 type FormState = {
@@ -16,17 +18,19 @@ type FormState = {
   email: string
   phone: string
   program_id: string
+  kind: ParticipantKind
   tariff: string
   start_date: string
 }
 
-const emptyForm = (): FormState => ({ name: '', email: '', phone: '', program_id: '', tariff: '', start_date: todayISO() })
+const emptyForm = (): FormState => ({ name: '', email: '', phone: '', program_id: '', kind: 'member', tariff: '', start_date: todayISO() })
 
 const fromParticipant = (p: Participant): FormState => ({
   name: p.name,
   email: p.email || '',
   phone: p.phone || '',
   program_id: p.program_id,
+  kind: kindOf(p),
   tariff: p.tariff ? String(p.tariff) : '',
   start_date: (p.start_date || '').split('T')[0],
 })
@@ -67,6 +71,14 @@ export function ParticipantFormSheet({
   }
 
   const program = programs.find(p => p.id === form.program_id)
+  const guestProgram = findGuestProgram(programs)
+  const groups = memberPrograms(programs)
+
+  // Guest: the guest program is fixed. Archive and member keep the chosen group.
+  const setKind = (kind: ParticipantKind) => {
+    setForm(f => ({ ...f, kind, program_id: kind === 'guest' ? (guestProgram?.id ?? f.program_id) : f.program_id && guestProgram?.id === f.program_id ? '' : f.program_id }))
+    if (errors.program_id) setErrors(e => ({ ...e, program_id: undefined }))
+  }
 
   const submit = async (addAnother: boolean) => {
     const errs: typeof errors = {}
@@ -81,9 +93,13 @@ export function ParticipantFormSheet({
     setSaving(true)
     try {
       if (editing) {
+        // Back from the archive means active again; a finished participant stays finished
+        const status = form.kind === 'archived' ? 'archived' : editing.status === 'archived' ? 'active' : editing.status
+        const { kind: _kind, ...fields } = form
         const payload = {
           id: editing.id,
-          ...form,
+          ...fields,
+          status,
           tariff: form.tariff ? Number(form.tariff) : undefined,
         }
         const response = await fetch('/api/participants', {
@@ -97,8 +113,10 @@ export function ParticipantFormSheet({
         toast.success('Изменения сохранены', { description: form.name })
         onOpenChange(false)
       } else {
+        const { kind: _kind, ...fields } = form
         const payload = {
-          ...form,
+          ...fields,
+          status: form.kind === 'archived' ? 'archived' : 'active',
           tariff: form.tariff ? Number(form.tariff) : null,
           account: accessPayload(access) && { username: access.username.trim(), password: access.password },
         }
@@ -167,13 +185,23 @@ export function ParticipantFormSheet({
                 />
               </Field>
 
-              <Field label="Программа" required hint={errorHint('program_id')}>
-                <Select value={form.program_id} onValueChange={v => set('program_id', v)}>
+              <Field label="Кто это">
+                <Segmented
+                  aria-label="Кто это"
+                  className="self-start"
+                  value={form.kind}
+                  onChange={setKind}
+                  options={(['member', 'guest', 'archived'] as ParticipantKind[]).filter(k => k !== 'guest' || guestProgram).map(k => ({ value: k, label: KIND_LABELS[k] }))}
+                />
+              </Field>
+
+              <Field label={form.kind === 'guest' ? 'Программа' : 'Группа'} required hint={errorHint('program_id')}>
+                <Select value={form.program_id} onValueChange={v => set('program_id', v)} disabled={form.kind === 'guest'}>
                   <SelectTrigger className="w-full" aria-invalid={!!errors.program_id || undefined}>
-                    <SelectValue placeholder="Выберите программу" />
+                    <SelectValue placeholder="Выберите группу" />
                   </SelectTrigger>
                   <SelectContent>
-                    {programs.map(p => (
+                    {(form.kind === 'guest' ? programs : groups).map(p => (
                       <SelectItem key={p.id} value={p.id}>
                         {p.name}
                         <span className="num text-muted-foreground">· {formatMoney(p.price_per_month)}/мес</span>

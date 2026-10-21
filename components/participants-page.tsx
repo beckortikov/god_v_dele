@@ -2,7 +2,7 @@
 
 import * as React from 'react'
 import { toast } from 'sonner'
-import { Archive, CalendarPlus, Inbox, MoreHorizontal, Pencil, Plus, Trash2, UserRound, Users } from 'lucide-react'
+import { Archive, ArchiveRestore, CalendarPlus, Check, Inbox, MoreHorizontal, Pencil, Plus, Trash2, UserRound, Users } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 import { formatMoney, formatNumber, plural } from '@/lib/format'
@@ -15,6 +15,9 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { PageContainer, PageHeader, Panel, PanelToolbar } from '@/components/erp/page-header'
@@ -30,6 +33,9 @@ import { useNavAction } from '@/components/app-shell/nav-context'
 import { ParticipantFormSheet } from '@/components/participants/participant-form-sheet'
 import { ParticipantDetailSheet } from '@/components/participants/participant-detail-sheet'
 import { ParticipantProfileSheet } from '@/components/participants/participant-profile-sheet'
+import { PaymentsGrid } from '@/components/participants/payments-grid'
+import { Segmented } from '@/components/erp/segmented'
+import { KIND_LABELS, countByKind, findGuestProgram, kindOf, kindPatch, memberPrograms, type KindTarget, type ParticipantKind } from '@/lib/participant-kind'
 import { useRole } from '@/components/access/use-role'
 import type { ProfileSummaryRow } from '@/app/api/participant-profile/summary/route'
 import { PaymentSheet, type PaymentPreset } from '@/components/finance/payment-sheet'
@@ -48,6 +54,8 @@ import {
 } from '@/components/participants/types'
 
 type PaymentFilter = 'all' | 'overdue' | 'partial' | 'paid'
+type KindFilter = ParticipantKind | 'all'
+type View = 'list' | 'grid'
 
 const PAGE_SIZE = 25
 const PREFS_KEY = 'participants-page-prefs'
@@ -73,6 +81,9 @@ export function ParticipantsPage() {
   const [query, setQuery] = React.useState('')
   const [filterStatus, setFilterStatus] = React.useState<PaymentFilter>('all')
   const [filterProgram, setFilterProgram] = React.useState('all')
+  // Who the list shows: members of groups by default; guests and the archive one click away
+  const [filterKind, setFilterKind] = React.useState<KindFilter>('member')
+  const [view, setView] = React.useState<View>('list')
   const [page, setPage] = React.useState(1)
 
   // Sheets
@@ -136,13 +147,15 @@ export function ParticipantsPage() {
     try {
       const saved = JSON.parse(readPref(PREFS_KEY) || '{}')
       if (saved.program) setFilterProgram(saved.program)
+      if (saved.kind) setFilterKind(saved.kind)
+      if (saved.view) setView(saved.view)
     } catch {}
   }, [])
   React.useEffect(() => {
-    writePref(PREFS_KEY, JSON.stringify({ program: filterProgram }))
-  }, [filterProgram])
+    writePref(PREFS_KEY, JSON.stringify({ program: filterProgram, kind: filterKind, view }))
+  }, [filterProgram, filterKind, view])
 
-  React.useEffect(() => setPage(1), [query, filterStatus, filterProgram])
+  React.useEffect(() => setPage(1), [query, filterStatus, filterProgram, filterKind])
 
   // A remembered program that no longer exists falls back to «all»
   React.useEffect(() => {
@@ -216,7 +229,8 @@ export function ParticipantsPage() {
     else if (filterStatus === 'paid') matchesStatus = !!s?.paidThisMonth
 
     const matchesProgram = filterProgram === 'all' || p.program_id === filterProgram
-    return matchesSearch && matchesStatus && matchesProgram
+    const matchesKind = filterKind === 'all' || kindOf(p) === filterKind
+    return matchesSearch && matchesStatus && matchesProgram && matchesKind
   })
 
   const activeCount = filteredParticipants.filter(p => p.status === 'active').length
@@ -228,11 +242,13 @@ export function ParticipantsPage() {
   const visibleCollected = filteredParticipants.reduce((sum, p) => sum + (summaries.get(p.id)?.collected ?? 0), 0)
 
   const pageRows = filteredParticipants.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
-  const filtersActive = !!query || filterStatus !== 'all' || filterProgram !== 'all'
+  const kindCounts = React.useMemo(() => countByKind(participants), [participants])
+  const filtersActive = !!query || filterStatus !== 'all' || filterProgram !== 'all' || filterKind !== 'member'
   const resetFilters = () => {
     setQuery('')
     setFilterStatus('all')
     setFilterProgram('all')
+    setFilterKind('member')
   }
 
   const detail = participants.find(p => p.id === detailId) ?? null
@@ -294,6 +310,26 @@ export function ParticipantsPage() {
   const handleSaved = (saved: Participant, mode: 'create' | 'update') => {
     if (mode === 'create') setParticipants(list => [saved, ...list])
     else setParticipants(list => list.map(p => (p.id === saved.id ? saved : p)))
+  }
+
+  /** Member of a group / guest / archive in one step: moves the program and the status together. */
+  const changeKind = async (participant: Participant, target: KindTarget) => {
+    const patch = kindPatch(target, programs)
+    if (!patch) {
+      toast.error('Нет программы для гостей', { description: 'Создайте программу «Гостевой» на странице «Программы»' })
+      return
+    }
+    try {
+      const response = await fetch('/api/participants', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: participant.id, ...patch }) })
+      const result = await response.json()
+      if (result.error) throw new Error(result.error)
+      if (result.data?.[0]) setParticipants(list => list.map(p => (p.id === participant.id ? result.data[0] : p)))
+      const where = target.kind === 'member' ? `участник · ${programs.find(p => p.id === target.programId)?.name ?? ''}` : target.kind === 'guest' ? 'гость' : 'в архиве'
+      toast.success(participant.name, { description: where })
+      fetchData()
+    } catch (err: any) {
+      toast.error('Не удалось изменить тип', { description: err.message })
+    }
   }
 
   const handleArchive = async (participant: Participant) => {
@@ -385,6 +421,16 @@ export function ParticipantsPage() {
         description="Кто учится, по какому тарифу и как платит"
         actions={
           <>
+            <Segmented
+              size="sm"
+              aria-label="Вид"
+              value={view}
+              onChange={setView}
+              options={[
+                { value: 'list', label: 'Список' },
+                { value: 'grid', label: 'Оплаты по месяцам' },
+              ]}
+            />
             <Button size="sm" variant="outline" onClick={generateSchedules} disabled={scheduling || loading}>
               <CalendarPlus /> {scheduling ? 'Считаем…' : 'Сформировать графики'}
             </Button>
@@ -432,6 +478,18 @@ export function ParticipantsPage() {
         <Panel>
           <PanelToolbar>
             <SearchInput value={query} onChange={setQuery} placeholder="Имя, телефон или email" className="sm:w-72" />
+            <Segmented
+              size="sm"
+              aria-label="Кто в списке"
+              value={filterKind}
+              onChange={setFilterKind}
+              options={[
+                { value: 'member', label: 'Участники', count: kindCounts.member },
+                { value: 'guest', label: 'Гости', count: kindCounts.guest },
+                { value: 'archived', label: 'Архив', count: kindCounts.archived },
+                { value: 'all', label: 'Все' },
+              ]}
+            />
             <Select value={filterStatus} onValueChange={v => setFilterStatus(v as PaymentFilter)}>
               <SelectTrigger size="sm" className="min-w-40 max-sm:flex-1" aria-label="Оплата">
                 <SelectValue />
@@ -512,6 +570,8 @@ export function ParticipantsPage() {
                 }
               />
             )
+          ) : view === 'grid' ? (
+            <PaymentsGrid participants={filteredParticipants} payments={payments} onChanged={fetchData} />
           ) : (
             <>
               <Table>
@@ -556,9 +616,11 @@ export function ParticipantsPage() {
                           {s && <PaymentBadges summary={s} empty={<span className="text-muted-foreground">—</span>} />}
                         </TableCell>
                         <TableCell className="max-lg:hidden">
-                          <Badge variant={PARTICIPANT_STATUS[p.status]?.variant ?? 'secondary'}>
-                            {PARTICIPANT_STATUS[p.status]?.label ?? p.status}
-                          </Badge>
+                          {kindOf(p) === 'member' ? (
+                            <Badge variant={PARTICIPANT_STATUS[p.status]?.variant ?? 'secondary'}>{PARTICIPANT_STATUS[p.status]?.label ?? p.status}</Badge>
+                          ) : (
+                            <Badge variant={kindOf(p) === 'guest' ? 'info' : 'outline'}>{KIND_LABELS[kindOf(p)]}</Badge>
+                          )}
                         </TableCell>
                         {profileSummary && (
                           <TableCell className="max-md:hidden" onClick={e => e.stopPropagation()}>
@@ -577,6 +639,35 @@ export function ParticipantsPage() {
                                 <DropdownMenuItem onSelect={() => openEdit(p)}>
                                   <Pencil /> Изменить
                                 </DropdownMenuItem>
+                                <DropdownMenuSub>
+                                  <DropdownMenuSubTrigger>
+                                    <Users /> Тип: {KIND_LABELS[kindOf(p)].toLowerCase()}
+                                  </DropdownMenuSubTrigger>
+                                  <DropdownMenuSubContent className="w-56">
+                                    {memberPrograms(programs).map(pr => (
+                                      <DropdownMenuItem key={pr.id} onSelect={() => changeKind(p, { kind: 'member', programId: pr.id })}>
+                                        <span className="flex-1">Участник · {pr.name}</span>
+                                        {kindOf(p) === 'member' && p.program_id === pr.id && <Check className="size-4" />}
+                                      </DropdownMenuItem>
+                                    ))}
+                                    {findGuestProgram(programs) && (
+                                      <DropdownMenuItem onSelect={() => changeKind(p, { kind: 'guest' })}>
+                                        <span className="flex-1">Гость</span>
+                                        {kindOf(p) === 'guest' && <Check className="size-4" />}
+                                      </DropdownMenuItem>
+                                    )}
+                                    <DropdownMenuSeparator />
+                                    {p.status === 'archived' ? (
+                                      <DropdownMenuItem onSelect={() => changeKind(p, { kind: 'member', programId: p.program_id })}>
+                                        <ArchiveRestore /> Вернуть из архива
+                                      </DropdownMenuItem>
+                                    ) : (
+                                      <DropdownMenuItem onSelect={() => changeKind(p, { kind: 'archived' })}>
+                                        <Archive /> В архив
+                                      </DropdownMenuItem>
+                                    )}
+                                  </DropdownMenuSubContent>
+                                </DropdownMenuSub>
                                 {canProfiles && (
                                   <DropdownMenuItem onSelect={() => openProfile(p)}>
                                     <UserRound /> Профиль и документы

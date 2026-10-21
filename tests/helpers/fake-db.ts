@@ -76,7 +76,8 @@ function from(table: string) {
     }
     if (q.order) hit.sort((a, b) => (String(a[q.order!.col]) < String(b[q.order!.col]) ? -1 : String(a[q.order!.col]) > String(b[q.order!.col]) ? 1 : 0) * (q.order!.asc ? 1 : -1))
     if (q.head) return { data: null, count: hit.length, error: null }
-    const out = q.limit == null ? hit : hit.slice(0, q.limit)
+    // Like a real database: a read returns copies, so a later update does not change what was read
+    const out = (q.limit == null ? hit : hit.slice(0, q.limit)).map(r => ({ ...r }))
     return { data: q.single ? (out[0] ?? null) : out, error: null }
   }
   const b: Record<string, any> = {
