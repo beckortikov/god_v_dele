@@ -26,6 +26,7 @@ import {
     type WheelParticipant,
 } from '@/components/wheels/shared'
 import { SunburstChart, buildColors, groupKey } from '@/components/wheels/sunburst-chart'
+import { pickBaseEntry } from '@/lib/wheel-base'
 
 // ─────────────────────────── Types ───────────────────────────
 type Participant = WheelParticipant
@@ -36,6 +37,13 @@ interface WheelCategory {
     name: string
     value: number
     color: string
+}
+
+interface WheelEntry {
+    period_type: 'weekly' | 'monthly'
+    period_label: string
+    categories: WheelCategory[]
+    updated_at?: string | null
 }
 
 // ─────────────────────────── Constants ───────────────────────────
@@ -191,6 +199,8 @@ export function LifeWheelPage({ participantId: fixedParticipantId, participantNa
     const [historyVersion, setHistoryVersion] = useState(0)
     const [history, setHistory] = useState<Array<{ label: string; period_type: string }>>([])
     const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
+    /** Where an unsaved period started from: the person's own earlier period, or the shared template. */
+    const [basedOn, setBasedOn] = useState<{ kind: 'own'; label: string; type: 'weekly' | 'monthly' } | { kind: 'template' } | null>(null)
     const [editStructure, setEditStructure] = useState(false)
 
     // Report states
@@ -240,6 +250,7 @@ export function LifeWheelPage({ participantId: fixedParticipantId, participantNa
         const req = ++requestRef.current
         const stale = () => req !== requestRef.current
         setIsLoading(true)
+        setBasedOn(null)
 
         const targetMax = periodType === 'weekly' ? 168 : 720
         let pType = periodType
@@ -265,6 +276,19 @@ export function LifeWheelPage({ participantId: fixedParticipantId, participantNa
                 setCategories(balanceCategories(data[0].categories))
             } else {
                 if (pid !== TEMPLATE_ID) {
+                    // The person has filled other periods: start from their own work, not from the shared template.
+                    try {
+                        const mineRes = await fetch(`/api/life-wheel?participant_id=${pid}`)
+                        const mine = await mineRes.json()
+                        if (stale()) return
+                        const base = Array.isArray(mine.data) ? pickBaseEntry<WheelEntry>(mine.data, pType, pLabel) : null
+                        if (base) {
+                            const own = balanceCategories(base.entry.categories)
+                            setCategories(base.sameType ? own : scaleCategoriesToMax(own, targetMax))
+                            setBasedOn({ kind: 'own', label: base.entry.period_label, type: base.entry.period_type })
+                            return
+                        }
+                    } catch (err) { console.error('Failed to fetch own earlier periods', err) }
                     try {
                         const tempLabel = periodType === 'weekly' ? 'template_weekly' : 'template'
                         const tempRes = await fetch(`/api/life-wheel?participant_id=${TEMPLATE_ID}&period_type=${pType}&period_label=${tempLabel}`)
@@ -272,6 +296,7 @@ export function LifeWheelPage({ participantId: fixedParticipantId, participantNa
                         if (stale()) return
                         if (tempJson.data && tempJson.data.length > 0 && tempJson.data[0].categories?.length > 0) {
                             setCategories(scaleCategoriesToMax(balanceCategories(tempJson.data[0].categories), targetMax))
+                            setBasedOn({ kind: 'template' })
                             setIsLoading(false)
                             setHasUnsavedChanges(false)
                             return
@@ -359,6 +384,7 @@ export function LifeWheelPage({ participantId: fixedParticipantId, participantNa
 
             toast.success('Колесо сохранено', { description: periodTitle })
             setHasUnsavedChanges(false)
+            setBasedOn(null)
             setHistoryVersion(v => v + 1)
         } catch (e: any) {
             toast.error('Не удалось сохранить', { description: saveErrorMessage(e) })
@@ -570,6 +596,14 @@ export function LifeWheelPage({ participantId: fixedParticipantId, participantNa
                             </Badge>
                         )}
                     </div>
+
+                    {pid && !isTemplate && !isLoading && basedOn && !hasUnsavedChanges && (
+                        <p className="mb-4 rounded-lg border border-info/30 bg-info-soft px-3 py-2 text-sm">
+                            {basedOn.kind === 'own'
+                                ? `Этот период ещё не заполнен: основа взята из записи «${formatPeriodLabel(basedOn.label, basedOn.type)}». Поправьте часы и нажмите «Сохранить».`
+                                : 'Этот период ещё не заполнен: основа — общий шаблон. Поправьте часы и нажмите «Сохранить».'}
+                        </p>
+                    )}
 
                     {!pid ? (
                         <Panel>
