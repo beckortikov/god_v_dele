@@ -67,7 +67,7 @@
 .landing .hero .glow{filter:blur(40px);background:radial-gradient(closest-side,rgb(112 170 46 / .62),transparent)}
 .landing .hero .glow.g1{left:calc(50% + var(--k)*.04);top:calc(var(--k)*.26);width:calc(var(--k)*.62);height:calc(var(--k)*.3);transform:rotate(-8deg)}
 .landing .hero .glow.g2{left:calc(var(--k)*-.08);top:calc(var(--k)*.3);width:calc(var(--k)*.4);height:calc(var(--k)*.26);transform:rotate(10deg);opacity:.85}
-.landing .hero .stage{position:relative;height:max(calc(var(--k)*.6826),calc(var(--k)*.43 + 330px));min-height:640px}
+.landing .hero .stage{position:relative;height:max(calc(var(--k)*.6826),calc(var(--k)*.375 + 440px));min-height:640px}
 .landing .hero .hero-layer{position:absolute;top:0;bottom:0;left:0;right:0;max-width:var(--k);margin:0 auto}
 .landing .marquee{position:absolute;left:0;right:0;top:calc(var(--k)*.1);overflow:hidden;white-space:nowrap;user-select:none;z-index:1}
 .landing .marquee-track{display:inline-flex;width:max-content;animation:gvd-marquee 38s linear infinite;will-change:transform}
@@ -82,9 +82,10 @@
 .landing .hero-copy .role i{font-style:normal;color:var(--accent)}
 .landing .hero-copy .who{margin-top:6px;color:var(--dim);font-size:15px;font-weight:600}
 .landing .hero-actions{position:absolute;right:calc(var(--k)*.0778);top:calc(var(--k)*.327);z-index:3;display:flex;align-items:center;gap:14px 24px}
-.landing .hero-side{position:absolute;right:calc(var(--k)*.0778);top:calc(var(--k)*.43);z-index:3;display:grid;gap:12px;width:calc(var(--k)*.145)}
+.landing .hero-side{position:absolute;right:calc(var(--k)*.0778);top:calc(var(--k)*.375);z-index:3;display:grid;gap:12px;width:calc(var(--k)*.145)}
 .landing .hero-side div{padding:14px 20px;border-radius:16px;background:rgb(19 20 19 / .85);backdrop-filter:blur(8px);border:1px solid var(--line)}
 .landing .hero-side b{display:block;font-size:32px;font-weight:600;letter-spacing:-0.03em;line-height:1.1;font-variant-numeric:tabular-nums}
+.landing .hero-side b small{font-size:.5em;font-weight:600;letter-spacing:0;color:var(--mute);margin-left:2px}
 .landing .hero-side span{color:var(--mute);font-size:15px}
 /* the author's projects: a card under the photo, like the clients block of the template */
 .landing .strip{position:absolute;left:50%;top:calc(var(--k)*.5667);transform:translateX(-50%);z-index:3;width:calc(var(--k)*.5);display:flex;align-items:center;gap:24px;padding:32px;background:#131413;border-radius:16px}
@@ -269,7 +270,7 @@
 .landing .hero-copy{position:relative;left:auto;top:auto;padding:0 24px;margin-top:-28px;text-align:center}
 .landing .hero-copy .role{font-size:clamp(26px,8vw,42px)}
 .landing .hero-actions{position:relative;right:auto;top:auto;flex-direction:row;flex-wrap:wrap;justify-content:center;padding:22px 24px 28px}
-.landing .hero-side{position:relative;right:auto;top:auto;width:auto;grid-template-columns:repeat(3,1fr);gap:10px;padding:0 18px 28px}
+.landing .hero-side{position:relative;right:auto;top:auto;width:auto;grid-template-columns:repeat(2,1fr);gap:10px;padding:0 18px 28px}
 .landing .hero-side div{padding:12px 14px}
 .landing .hero-side b{font-size:26px}
 .landing .hero-side span{font-size:12px;line-height:1.3}

@@ -286,7 +286,8 @@ export function LandingPage({ onLogin }: { onLogin: () => void }) {
               <a href="#program" className="link-arrow" onClick={go('program')}>Программа «Год в деле» <ArrowUpRight size={18} /></a>
             </div>
             <div className="hero-side">
-              <div><b>10+</b><span>лет в бизнесе</span></div>
+              <div><b>20+ <small>лет</small></b><span>в найме</span></div>
+              <div><b>10+ <small>лет</small></b><span>в бизнесе</span></div>
               <div><b>20+</b><span>проектов</span></div>
               <div><b>100+</b><span>учеников</span></div>
             </div>
