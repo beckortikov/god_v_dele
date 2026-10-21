@@ -171,6 +171,7 @@ export function TelegramLinkCardView({
             <ol className="space-y-1 text-sm text-muted-foreground">
               <li>1. Нажмите «Привязать Telegram», откроется наш бот.</li>
               <li>2. В боте нажмите «Старт», затем «Поделиться номером».</li>
+              <li>3. После этого на странице входа можно нажимать «Войти через Telegram».</li>
             </ol>
             <div className="flex flex-wrap items-center gap-2">
               <Button type="button" onClick={() => handleLink('open')} disabled={busy !== null}>

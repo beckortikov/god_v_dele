@@ -1,7 +1,8 @@
 import { NextResponse, after } from 'next/server'
 import { createHash, timingSafeEqual } from 'node:crypto'
-import { getWebhookSecret, handleUpdate, isTelegramConfigured, sendMessage, type TgUpdate } from '@/lib/telegram'
+import { answerCallbackQuery, getWebhookSecret, handleUpdate, isTelegramConfigured, sendMessage, type TgUpdate } from '@/lib/telegram'
 import { supabaseTelegramStore } from '../_lib/store'
+import { supabaseLoginStore } from '../_lib/login-store'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -55,6 +56,8 @@ export async function POST(req: Request) {
     try {
       await handleUpdate(current, {
         store: supabaseTelegramStore,
+        login: supabaseLoginStore,
+        answer: answerCallbackQuery,
         send: sendMessage,
         log: (message, meta) => console.info(`[telegram] ${message}`, meta ?? ''),
       })

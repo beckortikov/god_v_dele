@@ -344,6 +344,14 @@
 .landing .login-card input{width:100%}
 .landing .login-card .btn{width:100%}
 .landing .login-card .btn[disabled]{opacity:.5;cursor:not-allowed;box-shadow:none}
+.landing .login-tg{display:grid;gap:.9rem;margin-top:1.2rem;justify-items:stretch}
+.landing .login-tg .btn{width:100%;text-decoration:none}
+.landing .login-or{display:flex;align-items:center;gap:.9rem;color:var(--mute);font-size:.95rem}
+.landing .login-or::before,.landing .login-or::after{content:"";flex:1;height:1px;background:var(--line-2)}
+.landing .login-tg-note{color:var(--mute);font-size:.95rem;line-height:1.45;text-align:center}
+.landing .login-tg-wait{display:grid;gap:.9rem}
+.landing .login-tg-wait p:first-child{display:flex;align-items:center;justify-content:center;gap:.6rem;color:var(--fg);font-weight:600}
+.landing .login-tg .login-back{margin:0 auto}
 .landing .login-back{display:inline-flex;align-items:center;gap:.5rem;margin:1.6rem auto 0;color:var(--mute);background:none;border:none;font:inherit;font-size:1rem;cursor:pointer}
 .landing .login-back:hover{color:var(--fg)}
 .landing .login-main .glow{right:-200px;top:-200px;width:560px;height:560px;opacity:.5}

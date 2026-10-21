@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
-import { createSessionToken, SESSION_COOKIE, sessionCookieOptions } from '@/lib/session';
 import { clientIp, recordFailure, recordSuccess, retryAfterMs } from '@/lib/login-limiter';
 import { supabaseAdmin } from '@/lib/supabase-client';
+import { signedInResponse } from '../_lib/session-response';
 import { fakeVerify, hashPassword, isHashed, verifyPassword } from '@/lib/password';
 
 export async function POST(request: Request) {
@@ -55,43 +55,7 @@ export async function POST(request: Request) {
             await supabaseAdmin.from('app_users').update({ password: await hashPassword(password) }).eq('id', user.id);
         }
 
-        let position = null;
-        let employeeName = null;
-        if (user.employee_id) {
-            const { data: employeeData } = await supabaseAdmin
-                .from('employees')
-                .select('position, first_name, last_name')
-                .eq('id', user.employee_id)
-                .single();
-            if (employeeData) {
-                position = employeeData.position;
-                employeeName = `${employeeData.first_name} ${employeeData.last_name}`;
-            }
-        }
-
-        // Update last login timestamp
-        // We don't await this so it doesn't block the login response, 
-        // or we await it to ensure it executes. Let's await to be safe against edge functions terminating.
-        await supabaseAdmin
-            .from('app_users')
-            .update({ last_login_at: new Date().toISOString() })
-            .eq('id', user.id);
-
-        const response = NextResponse.json({
-            success: true,
-            user: {
-                id: user.id,
-                username: user.username,
-                role: user.role,
-                full_name: user.full_name,
-                employee_id: user.employee_id,
-                employee_name: employeeName,
-                position: position,
-                participant_id: user.participant_id,
-            }
-        });
-        response.cookies.set(SESSION_COOKIE, createSessionToken({ ...user, full_name: user.full_name || user.username }), sessionCookieOptions);
-        return response;
+        return await signedInResponse(user);
     } catch (error: any) {
         console.error('Unexpected error:', error);
         return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });

@@ -17,8 +17,8 @@ export type Decision = { ok: true } | { ok: false; status: 401 | 403; error: str
 
 type Principal = Pick<Session, 'uid' | 'role' | 'eid' | 'pid'>
 
-/** Reachable without a session. The Telegram webhook checks its own secret header. */
-export const PUBLIC_PATHS = ['/api/auth/login', '/api/auth/logout', '/api/telegram/webhook']
+/** Reachable without a session. The Telegram webhook checks its own secret header; the Telegram sign-in checks its one-time secret. */
+export const PUBLIC_PATHS = ['/api/auth/login', '/api/auth/logout', '/api/auth/telegram', '/api/telegram/webhook']
 
 /** Shared «базовый шаблон» of the wheels (same id as TEMPLATE_ID in components/wheels/shared.ts): everyone reads it to start from, only admin and wheels_manager change it. */
 export const WHEEL_TEMPLATE_ID = '00000000-0000-0000-0000-000000000000'

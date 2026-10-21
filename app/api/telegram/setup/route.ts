@@ -109,7 +109,7 @@ export async function POST(req: Request) {
   }
 
   try {
-    await tg('setWebhook', { url, secret_token: secret, allowed_updates: ['message'], max_connections: 20 })
+    await tg('setWebhook', { url, secret_token: secret, allowed_updates: ['message', 'callback_query'], max_connections: 20 })
     await tg('setMyCommands', {
       commands: [
         { command: 'start', description: 'Привязать аккаунт' },

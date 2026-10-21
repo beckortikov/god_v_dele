@@ -86,6 +86,10 @@ export function sendMessage(chatId: number, text: string, extra: SendExtra = {})
   return tg('sendMessage', { chat_id: chatId, text, ...extra })
 }
 
+export function answerCallbackQuery(callbackQueryId: string, text?: string) {
+  return tg('answerCallbackQuery', { callback_query_id: callbackQueryId, ...(text ? { text } : {}) })
+}
+
 /** https://t.me/<bot>?start=<code>, or null when the bot username is not set. */
 export function buildDeepLink(code: string, username = getBotUsername()) {
   if (!username) return null
@@ -280,9 +284,17 @@ export interface TgMessage {
   forward_date?: number
 }
 
+export interface TgCallbackQuery {
+  id: string
+  from: TgUser
+  data?: string
+  message?: { message_id: number; chat: TgChat }
+}
+
 export interface TgUpdate {
   update_id: number
   message?: TgMessage
+  callback_query?: TgCallbackQuery
 }
 
 // ---------------------------------------------------------------------------
@@ -336,8 +348,30 @@ export interface TelegramStore {
   updateLink(id: string, patch: LinkPatch): Promise<void>
 }
 
+/** A row of telegram_logins: one attempt to sign in to the site through the bot. */
+export interface TelegramLogin {
+  token: string
+  status: 'pending' | 'approved' | 'denied' | 'used'
+  expires_at: string
+  device: string | null
+}
+
+/** Storage of sign-in attempts (only needed when the site offers «Войти через Telegram»). */
+export interface LoginStore {
+  getLogin(token: string): Promise<TelegramLogin | null>
+  /** pending -> approved, only if it is still pending. True when this call did it. */
+  approveLogin(token: string, telegramUserId: number, participantId: string): Promise<boolean>
+  /** pending -> denied, only if it is still pending. True when this call did it. */
+  denyLogin(token: string): Promise<boolean>
+  /** The participant has a login on the platform to sign in to. */
+  hasAccount(participantId: string): Promise<boolean>
+}
+
 export interface HandlerDeps {
   store: TelegramStore
+  login?: LoginStore
+  /** Stops the spinner on a pressed inline button. */
+  answer?: (callbackQueryId: string, text?: string) => Promise<unknown>
   send: (chatId: number, text: string, extra?: SendExtra) => Promise<unknown>
   now?: () => Date
   log?: (message: string, meta?: unknown) => void
@@ -360,6 +394,12 @@ export type HandleResult =
   | 'phone_not_own'
   | 'phone_not_linked'
   | 'help'
+  | 'login_asked'
+  | 'login_expired'
+  | 'login_not_linked'
+  | 'login_no_account'
+  | 'login_approved'
+  | 'login_denied'
 
 export const PHONE_KEYBOARD: ReplyMarkup = {
   keyboard: [[{ text: 'Поделиться номером', request_contact: true }]],
@@ -393,6 +433,24 @@ export const BOT_TEXT = {
   helpLinked: 'Это бот уведомлений «Год в деле». Сюда придут напоминания об оплате.\n\n/stop — отписаться от уведомлений.\nПо остальным вопросам пишите вашему менеджеру.',
 }
 
+export const LOGIN_TEXT = {
+  expired: 'Этот запрос входа устарел. Откройте сайт «Год в деле» и нажмите «Войти через Telegram» ещё раз.',
+  notLinked:
+    'Этот Telegram не привязан к аккаунту «Год в деле».\n\nСначала войдите на сайт по логину и паролю, в личном кабинете нажмите «Привязать Telegram». После этого вход через Telegram заработает.',
+  noAccount: 'Для вашего аккаунта не создан логин на платформе. Обратитесь к менеджеру.',
+  approved: 'Готово, вы вошли. Вернитесь на сайт «Год в деле».',
+  denied: 'Хорошо, вход отменён. Если это были не вы, никому не передавайте ссылки из бота.',
+  stale: 'Этот запрос уже обработан или устарел.',
+}
+
+export function loginAskText(subject: LinkSubject, device: string | null) {
+  return (
+    `Вход на сайт «Год в деле» как ${subject.name}.\n` +
+    `Устройство: ${device || 'неизвестно'}.\n\n` +
+    'Это вы? Если вы ничего не открывали, нажмите «Нет, это не я».'
+  )
+}
+
 export function linkedText(subject: LinkSubject) {
   const program = subject.programName ? `, программа «${subject.programName}»` : ''
   return `Готово! Вы привязаны как ${subject.name}${program}.\n\nСюда будут приходить напоминания об оплате и важные новости. Отписаться: /stop`
@@ -417,6 +475,7 @@ export function parseCommand(text: string | undefined) {
  * storage or send failures; the webhook catches and logs them.
  */
 export async function handleUpdate(update: TgUpdate, deps: HandlerDeps): Promise<HandleResult> {
+  if (update.callback_query) return handleLoginDecision(update.callback_query, deps)
   const msg = update.message
   // Only private chats with people. Groups, channels and bots are ignored.
   if (!msg || !msg.from || msg.from.is_bot || msg.chat.type !== 'private') return 'ignored'
@@ -425,10 +484,80 @@ export async function handleUpdate(update: TgUpdate, deps: HandlerDeps): Promise
 
   const cmd = parseCommand(msg.text)
   if (cmd?.command === 'start') {
+    if (cmd.arg.startsWith(LOGIN_PREFIX)) return handleLoginStart(msg, cmd.arg.slice(LOGIN_PREFIX.length).split(/\s+/)[0], deps)
     return cmd.arg ? handleStartWithCode(msg, cmd.arg, deps) : handleStartWithoutCode(msg, deps)
   }
   if (cmd?.command === 'stop') return handleStop(msg, deps)
   return handleOther(msg, deps)
+}
+
+/** `/start login_<token>` in the bot link of «Войти через Telegram». */
+const LOGIN_PREFIX = 'login_'
+const LOGIN_OK = 'lok:'
+const LOGIN_NO = 'lno:'
+
+async function openLogin(token: string, deps: HandlerDeps) {
+  const row = deps.login && isValidCode(token) ? await deps.login.getLogin(token) : null
+  const now = deps.now?.() ?? new Date()
+  return row && row.status === 'pending' && new Date(row.expires_at).getTime() > now.getTime() ? row : null
+}
+
+async function handleLoginStart(msg: TgMessage, token: string, deps: HandlerDeps): Promise<HandleResult> {
+  const { store, send } = deps
+  const chatId = msg.chat.id
+  const row = await openLogin(token, deps)
+  if (!row) {
+    await send(chatId, LOGIN_TEXT.expired)
+    return 'login_expired'
+  }
+  const link = await store.getActiveLinkByTelegramUser(msg.from!.id)
+  if (!link || link.subject_type !== 'participant') {
+    await send(chatId, LOGIN_TEXT.notLinked)
+    return 'login_not_linked'
+  }
+  const subject = await store.getSubject(link.subject_type, link.subject_id)
+  if (!subject || !(await deps.login!.hasAccount(link.subject_id))) {
+    await send(chatId, LOGIN_TEXT.noAccount)
+    return 'login_no_account'
+  }
+  await send(chatId, loginAskText(subject, row.device), {
+    reply_markup: {
+      inline_keyboard: [[
+        { text: 'Да, это я', callback_data: `${LOGIN_OK}${token}` },
+        { text: 'Нет, это не я', callback_data: `${LOGIN_NO}${token}` },
+      ]],
+    },
+  })
+  return 'login_asked'
+}
+
+/** The «Да, это я» / «Нет, это не я» buttons. Only the Telegram that is linked to the account may press them. */
+async function handleLoginDecision(q: TgCallbackQuery, deps: HandlerDeps): Promise<HandleResult> {
+  const { store, send } = deps
+  const data = q.data ?? ''
+  const yes = data.startsWith(LOGIN_OK)
+  if (!deps.login || q.from.is_bot || (!yes && !data.startsWith(LOGIN_NO))) return 'ignored'
+  const chatId = q.message?.chat.id ?? q.from.id
+  const token = data.slice(yes ? LOGIN_OK.length : LOGIN_NO.length)
+
+  const row = await openLogin(token, deps)
+  const link = row ? await store.getActiveLinkByTelegramUser(q.from.id) : null
+  if (!row || !link || link.subject_type !== 'participant') {
+    await deps.answer?.(q.id)
+    await send(chatId, LOGIN_TEXT.stale)
+    return 'login_expired'
+  }
+
+  if (!yes) {
+    const done = await deps.login.denyLogin(token)
+    await deps.answer?.(q.id)
+    if (done) await send(chatId, LOGIN_TEXT.denied)
+    return 'login_denied'
+  }
+  const done = await deps.login.approveLogin(token, q.from.id, link.subject_id)
+  await deps.answer?.(q.id)
+  await send(chatId, done ? LOGIN_TEXT.approved : LOGIN_TEXT.stale)
+  return done ? 'login_approved' : 'login_expired'
 }
 
 async function handleStartWithCode(msg: TgMessage, rawCode: string, deps: HandlerDeps): Promise<HandleResult> {
