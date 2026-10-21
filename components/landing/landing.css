@@ -75,7 +75,7 @@
 .landing .marquee-group span{font-size:calc(var(--k)*.205);font-weight:600;letter-spacing:-0.02em;line-height:1;color:var(--fg)}
 .landing .marquee-group i{display:block;width:calc(var(--k)*.05);height:calc(var(--k)*.05);border-radius:50%;background:var(--accent);margin:0 calc(var(--k)*.045);flex-shrink:0}
 @keyframes gvd-marquee{from{transform:translateX(0)}to{transform:translateX(-50%)}}
-.landing .hero-photo{position:absolute;left:calc(50% + var(--k)*.035);top:calc(var(--k)*.0833);transform:translateX(-50%);z-index:2;width:calc(var(--k)*.5);height:calc(var(--k)*.5);pointer-events:none;overflow:hidden;-webkit-mask-image:linear-gradient(180deg,#000 80%,transparent);mask-image:linear-gradient(180deg,#000 80%,transparent)}
+.landing .hero-photo{position:absolute;left:calc(50% - var(--k)*.008);top:calc(var(--k)*.156);transform:translateX(-50%);z-index:2;width:calc(var(--k)*.44);height:calc(var(--k)*.44);pointer-events:none;overflow:hidden;-webkit-mask-image:linear-gradient(180deg,#000 80%,transparent);mask-image:linear-gradient(180deg,#000 80%,transparent)}
 .landing .hero-photo img{display:block;width:100%;height:100%;object-fit:cover;object-position:top}
 .landing .hero-copy{position:absolute;left:calc(var(--k)*.0778);top:calc(var(--k)*.3118);z-index:3}
 .landing .hero-copy .role{font-size:calc(var(--k)*.036);font-weight:600;letter-spacing:-0.025em;line-height:1.3;color:var(--fg)}
@@ -246,6 +246,9 @@
 .landing .logos-group + .logos-group{display:none}
 .landing .logos-group{flex-wrap:wrap}
 .landing .go,.landing .btn,.landing .link-arrow{transition:none}
+}
+@media (max-width:1320px){
+.landing .hero-actions{flex-direction:column;align-items:flex-end;gap:14px}
 }
 @media (max-width:1280px){
 .landing .nav nav{display:none}
