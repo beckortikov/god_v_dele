@@ -166,24 +166,30 @@ export function LandingPage({ onLogin }: { onLogin: () => void }) {
           </div>
           <div className="hero-layer">
             <div className="hero-copy">
-              <div className="role">Анвар Халиков,<br />автор программы<br />«Год в деле»</div>
-              <p>Годовая программа для предпринимателей: за 12 месяцев вы наведёте порядок в финансах, команде и продажах и выйдете на масштаб.</p>
-              <div className="cta">
-                <a href="#contact" className="btn btn-accent" onClick={go('contact')}>Записаться на поток</a>
-                <a href="#program" className="link-arrow" onClick={go('program')}>Смотреть программу <ArrowUpRight size={18} /></a>
-              </div>
+              <div className="role">&amp; наставник.</div>
+              <div className="who">Анвар Халиков · автор программы «Год в деле»</div>
             </div>
-            <div className="hero-side">
-              <div><b>10+</b><span>лет в бизнесе</span></div>
-              <div><b>20+</b><span>проектов</span></div>
-              <div><b>100+</b><span>учеников</span></div>
+            <div className="hero-actions">
+              <a href="#contact" className="btn btn-accent" onClick={go('contact')}>Записаться на поток</a>
+              <a href="#program" className="link-arrow" onClick={go('program')}>Смотреть программу <ArrowUpRight size={18} /></a>
             </div>
           </div>
-        </div>
-        <div className="strip">
-          <div className="wrap">
-            <small>Проекты автора</small>
-            <div className="names">{PROJECTS.slice(0, 6).map(p => <span key={p.name}>{p.name}</span>)}</div>
+          <div className="strip">
+            <div className="strip-title">Проекты{' '}<br />автора</div>
+            <div className="logos" role="list" aria-label="Проекты автора">
+              <div className="logos-track">
+                {[0, 1].map(g => (
+                  <div className="logos-group" key={g} aria-hidden={g === 1 ? true : undefined}>
+                    {PROJECTS.map(p => (
+                      <div className="logo-chip" role={g === 0 ? 'listitem' : undefined} key={p.name}>
+                        <i>{p.name[0]}</i>
+                        <span><b>{p.name}</b><em>{p.tag}</em></span>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
       </section>
