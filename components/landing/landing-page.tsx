@@ -147,7 +147,7 @@ export function LandingPage({ onLogin }: { onLogin: () => void }) {
       </header>
 
       <section className="hero" ref={heroRef} id="top">
-        <div className="glow g1" />
+        <div className="glow g1" /><div className="glow g2" />
         <div className="stage">
           <h1 className="sr-only">Бизнес практик. Анвар Халиков, автор программы «Год в деле»</h1>
           {/* A running line: it leaves to the left and comes back from the right, behind the photo. */}
@@ -161,10 +161,10 @@ export function LandingPage({ onLogin }: { onLogin: () => void }) {
               ))}
             </div>
           </div>
-          <div className="hero-photo">
-            <Image src="/landing/anvar-cutout.png" alt="Анвар Халиков" width={868} height={1300} priority sizes="(max-width: 960px) 82vw, 470px" />
-          </div>
           <div className="hero-layer">
+            <div className="hero-photo">
+              <Image src="/landing/anvar-cutout.png" alt="Анвар Халиков" width={868} height={1300} priority sizes="(max-width: 960px) 82vw, 720px" />
+            </div>
             <div className="hero-copy">
               <div className="role">&amp; наставник.</div>
               <div className="who">Анвар Халиков · автор программы «Год в деле»</div>
@@ -173,21 +173,26 @@ export function LandingPage({ onLogin }: { onLogin: () => void }) {
               <a href="#contact" className="btn btn-accent" onClick={go('contact')}>Записаться на поток</a>
               <a href="#program" className="link-arrow" onClick={go('program')}>Смотреть программу <ArrowUpRight size={18} /></a>
             </div>
-          </div>
-          <div className="strip">
-            <div className="strip-title">Проекты{' '}<br />автора</div>
-            <div className="logos" role="list" aria-label="Проекты автора">
-              <div className="logos-track">
-                {[0, 1].map(g => (
-                  <div className="logos-group" key={g} aria-hidden={g === 1 ? true : undefined}>
-                    {PROJECTS.map(p => (
-                      <div className="logo-chip" role={g === 0 ? 'listitem' : undefined} key={p.name}>
-                        <i>{p.name[0]}</i>
-                        <span><b>{p.name}</b><em>{p.tag}</em></span>
-                      </div>
-                    ))}
-                  </div>
-                ))}
+            <div className="hero-side">
+              <div><b>10+</b><span>лет в бизнесе</span></div>
+              <div><b>20+</b><span>проектов</span></div>
+              <div><b>100+</b><span>учеников</span></div>
+            </div>
+            <div className="strip">
+              <div className="strip-title">Проекты{' '}<br />автора</div>
+              <div className="logos" role="list" aria-label="Проекты автора">
+                <div className="logos-track">
+                  {[0, 1].map(g => (
+                    <div className="logos-group" key={g} aria-hidden={g === 1 ? true : undefined}>
+                      {PROJECTS.map(p => (
+                        <div className="logo-chip" role={g === 0 ? 'listitem' : undefined} key={p.name}>
+                          <i>{p.name[0]}</i>
+                          <span><b>{p.name}</b><em>{p.tag}</em></span>
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           </div>
