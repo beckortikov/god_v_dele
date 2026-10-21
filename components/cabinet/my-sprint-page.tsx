@@ -347,7 +347,7 @@ function Ring({ value, label }: { value: number; label: string }) {
   return (
     <span className="relative inline-flex size-16 shrink-0">
       <svg viewBox="0 0 36 36" className="size-16 -rotate-90" aria-hidden>
-        <circle cx="18" cy="18" r="15.5" fill="none" stroke="rgb(255 255 255 / 0.1)" strokeWidth="3.5" />
+        <circle cx="18" cy="18" r="15.5" fill="none" stroke="var(--track)" strokeWidth="3.5" />
         <circle
           cx="18"
           cy="18"

@@ -71,6 +71,16 @@ export const CREATE_ACTIONS: CreateAction[] = [
   { id: 'new-employee', label: 'Сотрудник', hint: 'Карточка сотрудника', page: 'employees', icon: UserSquare2, roles: ['admin'] },
 ]
 
+export type ParticipantTheme = 'dark' | 'light' | 'system'
+const PARTICIPANT_THEME_KEY = 'pt-theme'
+function readParticipantTheme(): ParticipantTheme {
+  try {
+    const v = localStorage.getItem(PARTICIPANT_THEME_KEY)
+    if (v === 'light' || v === 'system' || v === 'dark') return v
+  } catch {}
+  return 'dark'
+}
+
 const LAST_PAGES_KEY = 'nav-last-pages'
 
 function useLastPages() {
@@ -129,33 +139,51 @@ export function AppShell({
     if (current) remember(current.id, page)
   }, [current, page, remember])
 
-  // Participants get the landing's look. It sits on <html> so dialogs and sheets (portals) follow it.
+  // Participants get the landing's look (dark by default, light on request). It sits on <html> so dialogs and sheets (portals) follow it.
+  const [ptTheme, setPtTheme] = React.useState<ParticipantTheme>('dark')
+  React.useEffect(() => {
+    setPtTheme(readParticipantTheme())
+  }, [])
+  const changePtTheme = React.useCallback((t: ParticipantTheme) => {
+    setPtTheme(t)
+    try {
+      localStorage.setItem(PARTICIPANT_THEME_KEY, t)
+    } catch {}
+  }, [])
   React.useEffect(() => {
     if (role !== 'participant') return
     const html = document.documentElement
-    let addedDark = false
+    const hadDark = html.classList.contains('dark')
+    const media = window.matchMedia('(prefers-color-scheme: light)')
+    const isLight = () => ptTheme === 'light' || (ptTheme === 'system' && media.matches)
     const apply = () => {
+      const light = isLight()
       html.classList.add('participant-ui', display.variable)
-      if (!html.classList.contains('dark')) {
-        html.classList.add('dark')
-        addedDark = true
-      }
+      html.classList.toggle('pt-light', light)
+      html.classList.toggle('dark', !light)
     }
     apply()
-    // The browser bar follows the dark look.
+    // The browser bar follows the look.
     const metas = [...document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]')]
     const before = metas.map(m => m.content)
-    metas.forEach(m => (m.content = '#080808'))
+    const paintBar = () => metas.forEach(m => (m.content = isLight() ? '#f4f5f1' : '#080808'))
+    paintBar()
     // next-themes rewrites the class list on a theme change; put ours back.
     const observer = new MutationObserver(apply)
     observer.observe(html, { attributes: true, attributeFilter: ['class'] })
+    const onSystem = () => {
+      apply()
+      paintBar()
+    }
+    media.addEventListener('change', onSystem)
     return () => {
+      media.removeEventListener('change', onSystem)
       metas.forEach((m, i) => (m.content = before[i]))
       observer.disconnect()
-      html.classList.remove('participant-ui', display.variable)
-      if (addedDark) html.classList.remove('dark')
+      html.classList.remove('participant-ui', 'pt-light', display.variable)
+      html.classList.toggle('dark', hadDark)
     }
-  }, [role])
+  }, [role, ptTheme])
 
   // A new page starts at the top instead of keeping the previous page's scroll.
   const mainRef = React.useRef<HTMLElement>(null)
@@ -274,7 +302,7 @@ export function AppShell({
             )}
 
             <NotificationsBell role={role} />
-            <UserMenu name={displayName} role={role} onLogout={onLogout} />
+            <UserMenu name={displayName} role={role} onLogout={onLogout} ptTheme={ptTheme} onPtTheme={changePtTheme} />
           </div>
         </div>
 
@@ -442,7 +470,7 @@ function BrandMark({ className }: { className?: string }) {
   )
 }
 
-function UserMenu({ name, role, onLogout }: { name: string; role: UserRole; onLogout: () => void }) {
+function UserMenu({ name, role, onLogout, ptTheme, onPtTheme }: { name: string; role: UserRole; onLogout: () => void; ptTheme: ParticipantTheme; onPtTheme: (t: ParticipantTheme) => void }) {
   const { theme, setTheme } = useTheme()
   const { accent, setAccent } = useAccent()
 
@@ -466,6 +494,21 @@ function UserMenu({ name, role, onLogout }: { name: string; role: UserRole; onLo
             <p className="text-xs text-muted-foreground">{ROLE_LABELS[role]}</p>
           </div>
         </div>
+        {role === 'participant' && (<>
+        <DropdownMenuSeparator />
+        <DropdownMenuLabel>Тема</DropdownMenuLabel>
+        <DropdownMenuRadioGroup value={ptTheme} onValueChange={v => onPtTheme(v as ParticipantTheme)}>
+          <DropdownMenuRadioItem value="dark" onSelect={e => e.preventDefault()}>
+            <Moon /> Тёмная
+          </DropdownMenuRadioItem>
+          <DropdownMenuRadioItem value="light" onSelect={e => e.preventDefault()}>
+            <Sun /> Светлая
+          </DropdownMenuRadioItem>
+          <DropdownMenuRadioItem value="system" onSelect={e => e.preventDefault()}>
+            <Monitor /> Как в системе
+          </DropdownMenuRadioItem>
+        </DropdownMenuRadioGroup>
+        </>)}
         {role !== 'participant' && (<>
         <DropdownMenuSeparator />
         <DropdownMenuLabel>Тема</DropdownMenuLabel>

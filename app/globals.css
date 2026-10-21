@@ -247,6 +247,7 @@
   --chart-income: #5fe39a;
   --chart-expense: #ff8274;
 
+  --track: rgb(255 255 255 / 0.1);
   --radius: 0.75rem;
   --shadow-xs: 0 0 0 1px rgb(255 255 255 / 0.03);
   --shadow-sm: 0 0 0 1px rgb(255 255 255 / 0.04);
@@ -262,6 +263,79 @@
 :root.participant-ui h3 {
   letter-spacing: -0.02em;
 }
+
+/* Participant app, light variant: same lime buttons on a warm white; lime as text is replaced by a deep green */
+:root.participant-ui.pt-light:not(#_) {
+  color-scheme: light;
+  --background: #f4f5f1;
+  --foreground: #10130d;
+  --card: #ffffff;
+  --card-foreground: #10130d;
+  --popover: #ffffff;
+  --popover-foreground: #10130d;
+
+  --primary: #a1fa4d;
+  --primary-foreground: #0a1004;
+  --primary-soft: rgb(161 250 77 / 0.3);
+  --primary-soft-foreground: #2f5d00;
+
+  --secondary: #eceee7;
+  --secondary-foreground: #1f241a;
+  --muted: #edefe8;
+  --muted-foreground: #596052;
+  --accent: #e8ebe1;
+  --accent-foreground: #10130d;
+
+  --destructive: #d23b2a;
+  --destructive-foreground: #ffffff;
+  --destructive-soft: rgb(210 59 42 / 0.1);
+  --success: #17803f;
+  --success-soft: rgb(23 128 63 / 0.12);
+  --warning: #a86400;
+  --warning-soft: rgb(245 158 11 / 0.16);
+  --info: #1a62bd;
+  --info-soft: rgb(26 98 189 / 0.1);
+
+  --border: rgb(16 19 13 / 0.1);
+  --input: rgb(16 19 13 / 0.2);
+  --ring: #4f9500;
+
+  --nav: rgb(255 255 255 / 0.85);
+  --nav-foreground: #10130d;
+  --nav-muted: #5d6456;
+  --nav-border: rgb(16 19 13 / 0.08);
+
+  --chart-1: #4f9500;
+  --chart-2: #1a62bd;
+  --chart-3: #c27c00;
+  --chart-4: #d23b2a;
+  --chart-5: #7c4dcc;
+  --chart-6: #17803f;
+  --chart-income: #17803f;
+  --chart-expense: #d23b2a;
+
+  --track: rgb(16 19 13 / 0.1);
+  --shadow-xs: 0 1px 2px rgb(16 19 13 / 0.06);
+  --shadow-sm: 0 1px 3px rgb(16 19 13 / 0.08);
+  --shadow-pop: 0 18px 40px -12px rgb(16 19 13 / 0.22), 0 0 0 1px rgb(16 19 13 / 0.05);
+}
+/* Lime reads as a fill, not as text, on white */
+:root.participant-ui.pt-light .text-primary {
+  color: #2f6b00;
+}
+:root.participant-ui.pt-light .pt-shell {
+  background:
+    radial-gradient(60% 38% at 100% -6%, rgb(161 250 77 / 0.35), transparent 70%),
+    radial-gradient(55% 34% at -8% 52%, rgb(161 250 77 / 0.18), transparent 70%),
+    #f4f5f1;
+}
+:root.participant-ui.pt-light .pt-glow-card {
+  border-color: rgb(79 149 0 / 0.35);
+}
+:root.participant-ui.pt-light .pt-glow-card::before {
+  background: radial-gradient(closest-side, rgb(161 250 77 / 0.55), transparent);
+}
+
 /* A dark card with the landing's green glow in the corner */
 .pt-glow-card {
   position: relative;

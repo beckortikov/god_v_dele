@@ -284,7 +284,7 @@ function SprintHero({
       <span className="relative mt-5 flex items-center gap-4">
         <span className="relative inline-flex size-[68px] shrink-0">
           <svg viewBox="0 0 36 36" className="size-[68px] -rotate-90" aria-hidden>
-            <circle cx="18" cy="18" r="15.5" fill="none" stroke="rgb(255 255 255 / 0.1)" strokeWidth="3.5" />
+            <circle cx="18" cy="18" r="15.5" fill="none" stroke="var(--track)" strokeWidth="3.5" />
             <circle cx="18" cy="18" r="15.5" fill="none" stroke="var(--primary)" strokeWidth="3.5" strokeLinecap="round" strokeDasharray={`${(value * c).toFixed(1)} ${c}`} />
           </svg>
           <span className="num absolute inset-0 flex items-center justify-center text-[15px] font-bold">

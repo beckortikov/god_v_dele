@@ -14,8 +14,8 @@ const onest = Onest({
   display: 'swap',
 })
 
-/** A signed-in participant gets the dark look before the first paint, so there is no flash of the light theme. */
-const PARTICIPANT_INIT_SCRIPT = `try{if(localStorage.getItem('isAuthenticated')==='true'&&localStorage.getItem('userRole')==='participant')document.documentElement.classList.add('participant-ui','${display.variable}')}catch(e){}`
+/** A signed-in participant gets their look (dark unless they chose light) before the first paint, so nothing flashes. */
+const PARTICIPANT_INIT_SCRIPT = `try{var l=localStorage;if(l.getItem('isAuthenticated')==='true'&&l.getItem('userRole')==='participant'){var h=document.documentElement,t=l.getItem('pt-theme'),light=t==='light'||(t==='system'&&matchMedia('(prefers-color-scheme: light)').matches);h.classList.add('participant-ui','${display.variable}');if(light)h.classList.add('pt-light')}}catch(e){}`
 
 export const metadata: Metadata = {
   title: 'Год в деле — учёт и управление',
