@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import Image from 'next/image'
-import { ArrowUpRight, Megaphone, Search, Target, Wallet } from 'lucide-react'
+import { ArrowUpRight, ChevronDown, Megaphone, Menu, Search, Target, Wallet, X } from 'lucide-react'
 import { manrope } from './fonts'
 import './landing.css'
 
@@ -41,13 +41,13 @@ const STAGES = [
 ]
 
 const PROJECTS = [
-  { name: 'OBBO', text: 'Социально ориентированный маркетплейс в Таджикистане: шоурумы и рассрочка.', tag: 'Маркетплейс' },
-  { name: 'KreditMarket', text: 'Сеть магазинов бытовой техники и электроники с продажей в рассрочку.', tag: 'Ритейл' },
-  { name: 'MobiCenter', text: 'Мобильная электроника, аксессуары и ремонт.', tag: 'Ритейл' },
-  { name: 'AslZar', text: 'Ювелирный дом: изделия из золота и серебра.', tag: 'Ювелирка' },
-  { name: 'BaBolo', text: 'Региональный сервис такси и логистики.', tag: 'Транспорт' },
-  { name: 'Sanduk', text: 'Сберегательные и микрокредитные услуги.', tag: 'Финансы' },
-  { name: 'Manzilsoz', text: 'Поставщик строительных материалов.', tag: 'Стройматериалы' },
+  { name: 'OBBO', text: 'Первый социально ориентированный маркетплейс Таджикистана: шоурумы в Худжанде и Душанбе, доставка по всей стране и оплата в рассрочку.', tag: 'Маркетплейс' },
+  { name: 'KreditMarket', text: 'Сеть магазинов бытовой техники и электроники по продаже в рассрочку.', tag: 'Ритейл' },
+  { name: 'MobiCenter', text: 'Сеть розничных магазинов мобильной электроники, аксессуаров и сервисного обслуживания смартфонов.', tag: 'Ритейл' },
+  { name: 'AslZar', text: 'Ювелирный дом с авторскими украшениями: изделия из золота и серебра для особых случаев.', tag: 'Ювелирный дом' },
+  { name: 'BaBolo', text: 'Региональный сервис заказа такси: быстрый заказ, онлайн-отслеживание груза и поддержка 24/7.', tag: 'Такси и логистика' },
+  { name: 'Sanduk', text: 'Сберегательное и микрокредитное обслуживание: доступные займы и финансовые услуги для населения.', tag: 'Микрофинансирование' },
+  { name: 'Manzilsoz', text: 'Поставщик строительных материалов: широкий ассортимент для частного и коммерческого строительства.', tag: 'Стройматериалы' },
 ]
 
 const COUNTRIES = ['Таджикистан', 'Узбекистан', 'Казахстан', 'Кыргызстан', 'Россия', 'Турция', 'Германия', 'США', 'Китай', 'ОАЭ']
@@ -70,17 +70,91 @@ const SEGMENTS = CATS.map((_, i) => {
   }
 })
 
+
+type MenuItem = { label: string; id: string; sub?: { label: string; id: string }[] }
+
+/** The site structure from the design: the menu and what opens under each item. */
+const MENU: MenuItem[] = [
+  { label: 'Обо мне', id: 'about', sub: [{ label: 'Про путь', id: 'about' }, { label: 'Мои бизнесы', id: 'projects' }, { label: 'Проекты', id: 'projects' }, { label: 'Награды', id: 'awards' }] },
+  { label: 'Мои бизнесы', id: 'projects' },
+  {
+    label: 'Предпринимателям',
+    id: 'entrepreneurs',
+    sub: [
+      { label: 'Программа «Год в деле»', id: 'program' },
+      { label: 'Личная консультация (час 500$)', id: 'offer-consult' },
+      { label: 'Бизнес-разбор', id: 'offer-review' },
+      { label: 'Тур по бизнесам AXB', id: 'offer-tour' },
+    ],
+  },
+  {
+    label: 'Компаниям',
+    id: 'companies',
+    sub: [
+      { label: 'Сопровождение', id: 'co-support' },
+      { label: 'Стратегическая сессия', id: 'co-strategy' },
+      { label: 'Разбор компании', id: 'co-review' },
+      { label: 'Обучение персонала', id: 'co-training' },
+      { label: 'Бизнес-консультация (час 800$)', id: 'co-consult' },
+    ],
+  },
+  { label: 'Книга', id: 'book', sub: [{ label: 'О книге', id: 'book' }, { label: 'Купить', id: 'book-buy' }] },
+  { label: 'Мероприятия', id: 'events' },
+  { label: 'Контакты', id: 'contact' },
+]
+
+/** Offers for entrepreneurs. Descriptions are short drafts: confirm the wording with the author. */
+const OFFERS = [
+  { id: 'offer-program', tag: 'Программа', title: 'Год в деле', text: 'Годовая программа наставничества и сопровождения: диагностика, системы, финансы, масштаб.', cta: 'Записаться на поток', topic: 'Программа «Год в деле»', to: 'program', main: true },
+  { id: 'offer-consult', tag: 'Один на один', title: 'Личная консультация', price: 'час · 500$', text: 'Индивидуальный разговор по вашему бизнесу: разбираем задачу и выходим с понятным планом действий.', cta: 'Записаться', topic: 'Личная консультация (500$ / час)' },
+  { id: 'offer-review', tag: 'Диагностика', title: 'Бизнес-разбор', text: 'Смотрим бизнес в цифрах: финансы, продажи, команду, и находим, где теряются деньги и время.', cta: 'Заказать разбор', topic: 'Бизнес-разбор' },
+  { id: 'offer-tour', tag: 'Живой формат', title: 'Тур по бизнесам AXB', text: 'Поездка по действующим бизнесам автора: можно увидеть изнутри, как устроены процессы и команда.', cta: 'Узнать про тур', topic: 'Тур по бизнесам AXB' },
+]
+
+/** Offers for companies. Same: drafts to confirm. */
+const COMPANY_OFFERS = [
+  { id: 'co-support', title: 'Сопровождение', text: 'Постоянная работа рядом с командой: система управления, цели и контроль результата.', topic: 'Сопровождение компании' },
+  { id: 'co-strategy', title: 'Стратегическая сессия', text: 'Совместная работа руководителей над стратегией роста и приоритетами на год.', topic: 'Стратегическая сессия' },
+  { id: 'co-review', title: 'Разбор компании', text: 'Диагностика компании: цифры, процессы, команда и план изменений.', topic: 'Разбор компании' },
+  { id: 'co-training', title: 'Обучение персонала', text: 'Обучение сотрудников управлению, продажам и работе с цифрами.', topic: 'Обучение персонала' },
+  { id: 'co-consult', title: 'Бизнес-консультация', price: 'час · 800$', text: 'Консультация для руководителей по запросу компании.', topic: 'Бизнес-консультация (800$ / час)' },
+]
+
+const BOOK_POINTS = [
+  { title: 'Печатная книга', text: 'Физическая книга: можно листать, делать пометки и возвращаться к главам в любое время. Опыт и практика для вашего бизнеса в удобном формате.' },
+  { title: 'ИИ-ассистент', text: 'Помогает глубже погрузиться в материал: отвечает на вопросы по содержанию, разбирает кейсы и подсказывает, как применить идеи на практике.' },
+  { title: 'Доступ в Telegram', text: 'Каждый, кто приобретает книгу, получает доступ к ИИ-ассистенту через мини-приложение в Telegram: удобно с телефона в любое время.' },
+]
+
+const EVENT_FORMATS = [
+  { title: 'Бесплатный тренинг', text: 'Знакомство с подходом автора: как увидеть бизнес в цифрах и с чего начать порядок.', topic: 'Бесплатный тренинг' },
+  { title: 'Стратегическая сессия', text: 'Групповая работа над стратегией роста: цели, приоритеты, план на год.', topic: 'Стратегическая сессия' },
+  { title: 'Тур по бизнесам AXB', text: 'Выездной формат: действующие бизнесы автора изнутри.', topic: 'Тур по бизнесам AXB' },
+]
+
 function scrollToId(id: string) {
-  document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: id.startsWith('offer-') || id.startsWith('co-') ? 'center' : 'start' })
+}
+
+/** The author's mark: two stacked arrows pointing up. */
+function Mark() {
+  return (
+    <svg className="mark" viewBox="0 0 32 32" aria-hidden="true">
+      <path d="M16 3 28 14H4z" />
+      <path d="M16 16 28 27H4z" />
+    </svg>
+  )
 }
 
 export function LandingPage({ onLogin }: { onLogin: () => void }) {
   const [scrolled, setScrolled] = useState(false)
   const [showSticky, setShowSticky] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
   const [sphere, setSphere] = useState(6)
   const heroRef = useRef<HTMLElement>(null)
   const contactRef = useRef<HTMLElement>(null)
 
+  const [topic, setTopic] = useState('')
   const [name, setName] = useState('')
   const [contact, setContact] = useState('')
   const [about, setAbout] = useState('')
@@ -101,9 +175,17 @@ export function LandingPage({ onLogin }: { onLogin: () => void }) {
     return () => window.removeEventListener('scroll', onScroll)
   }, [])
 
+  useEffect(() => {
+    if (!menuOpen) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setMenuOpen(false) }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [menuOpen])
+
+  const subject = topic || 'Консультация'
   const telegramText = useMemo(
-    () => `Заявка на «Год в деле»\nИмя: ${name.trim()}\nТелефон / Telegram: ${contact.trim()}${about.trim() ? `\nО бизнесе: ${about.trim()}` : ''}`,
-    [name, contact, about],
+    () => `Заявка: ${subject}\nИмя: ${name.trim()}\nТелефон / Telegram: ${contact.trim()}${about.trim() ? `\nО бизнесе: ${about.trim()}` : ''}`,
+    [subject, name, contact, about],
   )
   const telegramUrl = `https://t.me/${TELEGRAM_HANDLE}?text=${encodeURIComponent(telegramText)}`
 
@@ -118,8 +200,13 @@ export function LandingPage({ onLogin }: { onLogin: () => void }) {
     window.open(telegramUrl, '_blank', 'noopener,noreferrer')
   }
 
-  const go = (id: string) => (e: React.MouseEvent) => {
+  /** Scroll to a block; with a topic, the application form remembers what the visitor asked about. */
+  const go = (id: string, withTopic?: string) => (e: React.MouseEvent) => {
     e.preventDefault()
+    // Keyboard focus would keep a dropdown open after the click.
+    ;(e.currentTarget as HTMLElement).blur()
+    setMenuOpen(false)
+    if (withTopic !== undefined) setTopic(withTopic)
     scrollToId(id)
   }
 
@@ -127,29 +214,55 @@ export function LandingPage({ onLogin }: { onLogin: () => void }) {
 
   return (
     <div className={`landing ${manrope.variable}`}>
-      <header className={`nav${scrolled ? ' scrolled' : ''}`}>
+      <header className={`nav${scrolled || menuOpen ? ' scrolled' : ''}`}>
         <div className="wrap">
-          <a href="#top" className="logo" onClick={e => { e.preventDefault(); window.scrollTo({ top: 0, behavior: 'smooth' }) }}>
-            <i>ГВД</i>Год в деле
+          <a href="#top" className="logo" onClick={e => { e.preventDefault(); setMenuOpen(false); window.scrollTo({ top: 0, behavior: 'smooth' }) }}>
+            <Mark />Анвар Халиков
           </a>
-          <ul>
-            <li><a href="#program" onClick={go('program')}>Программа</a></li>
-            <li><a href="#wheel" onClick={go('wheel')}>Колесо бизнеса</a></li>
-            <li><a href="#about" onClick={go('about')}>Об авторе</a></li>
-            <li><a href="#projects" onClick={go('projects')}>Проекты</a></li>
-            <li><a href="#contact" onClick={go('contact')}>Контакты</a></li>
-          </ul>
+          <nav aria-label="Основное меню">
+            <ul className="menu">
+              {MENU.map(m => (
+                <li key={m.label} className={m.sub ? 'has-sub' : undefined}>
+                  <a href={`#${m.id}`} onClick={go(m.id)}>{m.label}{m.sub && <ChevronDown size={14} aria-hidden="true" />}</a>
+                  {m.sub && (
+                    <ul className="sub">
+                      {m.sub.map(s => <li key={s.label}><a href={`#${s.id}`} onClick={go(s.id, s.id === 'book-buy' ? 'Книга «Бизнес в диалоге»' : undefined)}>{s.label}</a></li>)}
+                    </ul>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </nav>
           <div className="acts">
-            <button type="button" className="btn btn-ghost btn-sm" onClick={onLogin}>Войти</button>
-            <a href="#contact" className="btn btn-accent btn-sm" onClick={go('contact')}>Оставить заявку</a>
+            <button type="button" className="btn btn-ghost btn-sm login-btn" onClick={onLogin}>Войти</button>
+            <a href="#contact" className="btn btn-accent btn-sm" onClick={go('contact', '')}>Консультация</a>
+            <button type="button" className="burger" aria-label={menuOpen ? 'Закрыть меню' : 'Открыть меню'} aria-expanded={menuOpen} onClick={() => setMenuOpen(v => !v)}>
+              {menuOpen ? <X size={22} /> : <Menu size={22} />}
+            </button>
           </div>
         </div>
+        {menuOpen && (
+          <div className="mobile-menu">
+            {MENU.map(m => (
+              <div key={m.label} className="mm-group">
+                <a href={`#${m.id}`} className="mm-top" onClick={go(m.id)}>{m.label}</a>
+                {m.sub && (
+                  <div className="mm-sub">
+                    {m.sub.map(s => <a key={s.label} href={`#${s.id}`} onClick={go(s.id, s.id === 'book-buy' ? 'Книга «Бизнес в диалоге»' : undefined)}>{s.label}</a>)}
+                  </div>
+                )}
+              </div>
+            ))}
+            <a href="#contact" className="btn btn-accent" onClick={go('contact', '')}>Консультация</a>
+            <button type="button" className="btn btn-ghost mm-login" onClick={() => { setMenuOpen(false); onLogin() }}>Войти в кабинет</button>
+          </div>
+        )}
       </header>
 
       <section className="hero" ref={heroRef} id="top">
         <div className="glow g1" /><div className="glow g2" />
         <div className="stage">
-          <h1 className="sr-only">Бизнес практик. Анвар Халиков, автор программы «Год в деле»</h1>
+          <h1 className="sr-only">Бизнес практик. Анвар Халиков, предприниматель, автор программы «Год в деле»</h1>
           {/* A running line: it leaves to the left and comes back from the right, behind the photo. */}
           <div className="marquee" aria-hidden="true">
             <div className="marquee-track">
@@ -166,12 +279,11 @@ export function LandingPage({ onLogin }: { onLogin: () => void }) {
               <Image src="/landing/anvar-cutout.png" alt="Анвар Халиков" width={868} height={1300} priority sizes="(max-width: 960px) 82vw, 720px" />
             </div>
             <div className="hero-copy">
-              <div className="role">&amp; наставник.</div>
-              <div className="who">Анвар Халиков · автор программы «Год в деле»</div>
+              <div className="role">Предприниматель</div>
             </div>
             <div className="hero-actions">
-              <a href="#contact" className="btn btn-accent" onClick={go('contact')}>Записаться на поток</a>
-              <a href="#program" className="link-arrow" onClick={go('program')}>Смотреть программу <ArrowUpRight size={18} /></a>
+              <a href="#contact" className="btn btn-accent" onClick={go('contact', 'Бесплатный тренинг')}>Бесплатный тренинг</a>
+              <a href="#program" className="link-arrow" onClick={go('program')}>Программа «Год в деле» <ArrowUpRight size={18} /></a>
             </div>
             <div className="hero-side">
               <div><b>10+</b><span>лет в бизнесе</span></div>
@@ -199,32 +311,95 @@ export function LandingPage({ onLogin }: { onLogin: () => void }) {
         </div>
       </section>
 
-      <section id="for">
+      <section className="about" id="about">
+        <div className="wrap about-grid">
+          <div className="about-photo">
+            <Image src="/landing/anvar-portrait.jpg" alt="Анвар Халиков" width={1084} height={1100} sizes="(max-width: 960px) 100vw, 520px" />
+            <div className="chip"><b>с 2014</b>системная работа с бизнесом</div>
+          </div>
+          <div>
+            <span className="kick">Обо мне</span>
+            <h2>Эксперт по систематизации бизнес-проектов</h2>
+            <p>Предприниматель, стартап-менеджер и бизнес-практик. С 2014 года запускает и развивает проекты, участвует в международных конференциях и семинарах в этих странах:</p>
+            <div className="geo">{COUNTRIES.map(c => <span key={c}>{c}</span>)}</div>
+          </div>
+        </div>
+        <div className="wrap">
+          <div className="counters four" id="awards">
+            <div className="card"><b>10+</b><span>лет опыта</span></div>
+            <div className="card"><b>20+</b><span>проектов</span></div>
+            <div className="card"><b>52+</b><span>награды</span></div>
+            <div className="card"><b>100+</b><span>учеников</span></div>
+          </div>
+        </div>
+      </section>
+
+      <section className="alt" id="projects">
         <div className="wrap">
           <div className="sec-head">
             <div>
-              <div className="kick">Для кого</div>
-              <h2>Узнаёте свой бизнес в одной из трёх ситуаций?</h2>
+              <div className="kick">Мои бизнесы</div>
+              <h2>Проекты и опыт</h2>
+              <p>Бизнесы, которые я строил: от маркетплейса до микрофинансирования.</p>
             </div>
-            <a href="#contact" className="btn btn-accent" onClick={go('contact')}>Оставить заявку</a>
           </div>
-          <div className="for-list">
-            {SITUATIONS.map(s => (
-              <div key={s.title} className="for-row card">
-                <div><div className="lab">Ситуация</div><h3>{s.title}</h3></div>
-                <ul>{s.points.map(p => <li key={p}>{p}</li>)}</ul>
-                <a href="#contact" className="go" aria-label={`Обсудить: ${s.title}`} onClick={go('contact')}><ArrowUpRight size={22} /></a>
+          <div className="projects-list card">
+            {PROJECTS.map(p => (
+              <div key={p.name} className="prj"><h3>{p.name}</h3><p>{p.text}</p><div className="tg">{p.tag}</div></div>
+            ))}
+            <a href="#program" className="prj main" onClick={go('program')}><h3>Год в деле</h3><p>Годовая программа наставничества и сопровождения для предпринимателей, которые хотят выстроить системный бизнес.</p><div className="tg">Бизнес-коучинг →</div></a>
+          </div>
+        </div>
+      </section>
+
+      <section id="entrepreneurs">
+        <div className="wrap">
+          <div className="sec-head">
+            <div>
+              <div className="kick">Предпринимателям</div>
+              <h2>Как со мной работать, если у вас свой бизнес</h2>
+              <p>Выберите формат: от годовой программы до разговора один на один.</p>
+            </div>
+          </div>
+          <div className="offers">
+            {OFFERS.map(o => (
+              <div key={o.id} id={o.id} className={`offer card${o.main ? ' main' : ''}`}>
+                <div className="offer-top"><span className="chipk">{o.tag}</span>{o.price && <span className="price">{o.price}</span>}</div>
+                <h3>{o.title}</h3>
+                <p>{o.text}</p>
+                <a href="#contact" className={o.main ? 'btn btn-accent' : 'btn btn-ghost'} onClick={go('contact', o.topic)}>{o.cta}</a>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      <section id="program" className="alt">
+      <section id="for" className="alt">
         <div className="wrap">
           <div className="sec-head">
             <div>
-              <div className="kick">Программа</div>
+              <div className="kick">Программа «Год в деле»</div>
+              <h2>Узнаёте свой бизнес в одной из трёх ситуаций?</h2>
+            </div>
+            <a href="#contact" className="btn btn-accent" onClick={go('contact', 'Программа «Год в деле»')}>Оставить заявку</a>
+          </div>
+          <div className="for-list">
+            {SITUATIONS.map(s => (
+              <div key={s.title} className="for-row card">
+                <div><div className="lab">Ситуация</div><h3>{s.title}</h3></div>
+                <ul>{s.points.map(p => <li key={p}>{p}</li>)}</ul>
+                <a href="#contact" className="go" aria-label={`Обсудить: ${s.title}`} onClick={go('contact', 'Программа «Год в деле»')}><ArrowUpRight size={22} /></a>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section id="program">
+        <div className="wrap">
+          <div className="sec-head">
+            <div>
+              <div className="kick">Что вы получите</div>
               <h2>Четыре этапа. Двенадцать месяцев.</h2>
               <p>Каждый квартал — отдельный результат: от диагностики до выхода на новые рынки.</p>
             </div>
@@ -244,13 +419,15 @@ export function LandingPage({ onLogin }: { onLogin: () => void }) {
         </div>
       </section>
 
-      <section id="wheel" style={{ overflow: 'hidden' }}>
+      <section className="alt" id="wheel" style={{ overflow: 'hidden' }}>
         <div className="glow" style={{ left: -260, top: '20%', width: 700, height: 700, opacity: 0.5 }} />
         <div className="wrap">
           <div className="sec-head">
-            <div className="kick">Колесо бизнеса</div>
-            <h2>10 сфер, 70 элементов. Ни одного белого пятна.</h2>
-            <p>Каждый месяц вы отмечаете, что внедрено в бизнесе, и видите, какая сфера проседает. Нажмите на сегмент, чтобы увидеть темы.</p>
+            <div>
+              <div className="kick">Колесо бизнеса</div>
+              <h2>10 сфер, 70 элементов. Ни одного белого пятна.</h2>
+              <p>Каждый месяц вы отмечаете, что внедрено в бизнесе, и видите, какая сфера проседает. Нажмите на сегмент, чтобы увидеть темы.</p>
+            </div>
           </div>
           <div className="wheel-grid">
             <div className="wheel-box">
@@ -288,65 +465,74 @@ export function LandingPage({ onLogin }: { onLogin: () => void }) {
         </div>
       </section>
 
-      <section className="manifest alt">
-        <div className="wrap">
-          <span className="kick">О программе</span>
-          <p>«Год в деле» — это не лекции, а работа с вашим бизнесом. Каждый месяц вы отмечаете, что внедрено, и видите, какая сфера проседает, а команда помогает её подтянуть.</p>
-          <a href="#contact" className="btn btn-accent" onClick={go('contact')}>Узнать про поток</a>
-          <div className="counters">
-            <div className="card"><b>10+</b><span>лет опыта</span></div>
-            <div className="card"><b>20+</b><span>проектов</span></div>
-            <div className="card"><b>100+</b><span>учеников</span></div>
-          </div>
-        </div>
-      </section>
-
-      <section className="about" id="about">
-        <div className="wrap about-grid">
-          <div className="about-photo">
-            <Image src="/landing/anvar-portrait.jpg" alt="Анвар Халиков" width={1084} height={1100} sizes="(max-width: 960px) 100vw, 520px" />
-            <div className="chip"><b>с 2014</b>системная работа с бизнесом</div>
-          </div>
-          <div>
-            <span className="kick">Об авторе</span>
-            <h2>Анвар Халиков</h2>
-            <p>Предприниматель, стартап-менеджер и бизнес-практик. Более 10 лет запускает и развивает проекты и помогает выстраивать стратегии, которые работают в цифрах, а не на словах.</p>
-            <p>Награды: 52+. Участвует в международных конференциях и семинарах в этих странах:</p>
-            <div className="geo">{COUNTRIES.map(c => <span key={c}>{c}</span>)}</div>
-          </div>
-        </div>
-      </section>
-
-      <section className="alt">
-        <div className="wrap">
-          <div className="sec-head center">
-            <div>
-              <span className="kick">Чем помогаю</span>
-              <h2>Четыре направления работы</h2>
-            </div>
-          </div>
-          <div className="focus">
-            <div className="focus-card card"><Target /><h3>Бизнес-планирование</h3><p>Постановка целей, планы действий, KPI и финансовый анализ. С этого начинается любая работа.</p></div>
-            <div className="focus-card card"><Megaphone /><h3>Маркетинг и продажи</h3><p>Привлечение клиентов, уникальные предложения, кампании, управление брендом.</p></div>
-            <div className="focus-card card"><Wallet /><h3>Управление финансами</h3><p>Бюджетирование, оборотный капитал, стратегии финансирования.</p></div>
-            <div className="focus-card card"><Search /><h3>Анализ рынка</h3><p>Конкуренты, тренды, спрос, ценообразование и отличия продукта.</p></div>
-          </div>
-        </div>
-      </section>
-
-      <section id="projects">
+      <section id="companies">
         <div className="wrap">
           <div className="sec-head">
             <div>
-              <div className="kick">Проекты</div>
-              <h2>Бизнесы, которые я строил</h2>
+              <div className="kick">Компаниям</div>
+              <h2>Работа с командой и руководителями компании</h2>
+              <p>Системный подход к управлению, продажам и финансам: помогаю выстроить цифры, процессы и людей.</p>
+            </div>
+            <a href="#contact" className="btn btn-accent" onClick={go('contact', 'Для компании')}>Обсудить задачу</a>
+          </div>
+          <div className="offers five">
+            {COMPANY_OFFERS.map(o => (
+              <div key={o.id} id={o.id} className="offer card">
+                <div className="offer-top"><span className="chipk">Для компаний</span>{o.price && <span className="price">{o.price}</span>}</div>
+                <h3>{o.title}</h3>
+                <p>{o.text}</p>
+                <a href="#contact" className="link-arrow" onClick={go('contact', o.topic)}>Оставить заявку <ArrowUpRight size={18} /></a>
+              </div>
+            ))}
+          </div>
+          <div className="focus-title">Чем я могу помочь</div>
+          <div className="focus">
+            <div className="focus-card card"><Target /><h3>Бизнес-планирование</h3><p>Цели, подробный план действий, ключевые показатели (KPI) и финансовый анализ.</p></div>
+            <div className="focus-card card"><Megaphone /><h3>Маркетинг и продажи</h3><p>Привлечение клиентов, уникальное предложение, эффективные кампании и управление брендом.</p></div>
+            <div className="focus-card card"><Wallet /><h3>Управление финансами</h3><p>Учёт, планирование и контроль: бюджетирование, оборотный капитал, стратегии финансирования.</p></div>
+            <div className="focus-card card"><Search /><h3>Маркетинговый анализ</h3><p>Конкуренты, тренды, спрос, ценовая стратегия, инновации и отличия продукта.</p></div>
+          </div>
+        </div>
+      </section>
+
+      <section className="alt" id="book">
+        <div className="wrap">
+          <div className="sec-head">
+            <div>
+              <div className="kick">Книга</div>
+              <h2>«Бизнес в диалоге»</h2>
+              <p>Печатная книга с доступом к ИИ-ассистенту в Telegram: глубже погружайтесь в материал и применяйте идеи на практике.</p>
+            </div>
+            <a href="#contact" id="book-buy" className="btn btn-accent" onClick={go('contact', 'Книга «Бизнес в диалоге»')}>Заказать книгу</a>
+          </div>
+          <div className="book-grid">
+            {BOOK_POINTS.map((b, i) => (
+              <div key={b.title} className="book-card card">
+                <div className="num">0{i + 1}</div>
+                <h3>{b.title}</h3>
+                <p>{b.text}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section id="events">
+        <div className="wrap">
+          <div className="sec-head">
+            <div>
+              <div className="kick">Мероприятия</div>
+              <h2>Тренинги, сессии и туры</h2>
+              <p>Даты ближайших мероприятий сообщим в Telegram: оставьте заявку, и вы узнаете первыми.</p>
             </div>
           </div>
-          <div className="projects-list card">
-            {PROJECTS.map(p => (
-              <div key={p.name} className="prj"><h3>{p.name}</h3><p>{p.text}</p><div className="tg">{p.tag}</div></div>
+          <div className="events">
+            {EVENT_FORMATS.map(ev => (
+              <a key={ev.title} href="#contact" className="event card" onClick={go('contact', ev.topic)}>
+                <div><h3>{ev.title}</h3><p>{ev.text}</p></div>
+                <span className="go" aria-hidden="true"><ArrowUpRight size={22} /></span>
+              </a>
             ))}
-            <a href="#contact" className="prj main" onClick={go('contact')}><h3>Год в деле</h3><p>Годовая программа для предпринимателей: сюда вы и попадаете.</p><div className="tg">Записаться →</div></a>
           </div>
         </div>
       </section>
@@ -355,8 +541,9 @@ export function LandingPage({ onLogin }: { onLogin: () => void }) {
         <div className="glow" />
         <div className="wrap contact-grid">
           <div>
-            <h2>Начните свой<br />«Год в деле»</h2>
-            <p className="sub">Оставьте заявку, и команда свяжется с вами, расскажет про ближайший поток и условия участия.</p>
+            <span className="kick">Контакты</span>
+            <h2>Свяжитесь со мной</h2>
+            <p className="sub">Есть вопросы или хотите обсудить сотрудничество? Оставьте заявку, и команда свяжется с вами.</p>
             <div className="socials">
               <a className="btn btn-accent btn-sm" href={`https://t.me/${TELEGRAM_HANDLE}`} target="_blank" rel="noopener noreferrer">Написать в Telegram</a>
               <a className="btn btn-ghost btn-sm" href="https://instagram.com/anvarjon_khalikov" target="_blank" rel="noopener noreferrer">Instagram</a>
@@ -364,6 +551,12 @@ export function LandingPage({ onLogin }: { onLogin: () => void }) {
             </div>
           </div>
           <form className="card" onSubmit={submit} noValidate>
+            {topic && (
+              <div className="topic" role="status">
+                <span>Заявка: <b>{topic}</b></span>
+                <button type="button" aria-label="Убрать тему заявки" onClick={() => setTopic('')}><X size={16} /></button>
+              </div>
+            )}
             <label>Имя<input value={name} onChange={e => setName(e.target.value)} placeholder="Как к вам обращаться" autoComplete="name" /></label>
             <label>Телефон или Telegram<input value={contact} onChange={e => setContact(e.target.value)} placeholder="+992 … или @username" autoComplete="tel" /></label>
             <label>Чем занимаетесь<textarea value={about} onChange={e => setAbout(e.target.value)} placeholder="Сфера и размер бизнеса, главная задача" /></label>
@@ -382,12 +575,12 @@ export function LandingPage({ onLogin }: { onLogin: () => void }) {
 
       <footer>
         <div className="wrap">
-          <span>© {new Date().getFullYear()} Анвар Халиков · Год в деле</span>
+          <span>© {new Date().getFullYear()} Анвар Халиков. Все права защищены.</span>
           <button type="button" onClick={onLogin} className="foot-link">Вход для участников</button>
         </div>
       </footer>
 
-      <a href="#contact" className={`sticky-cta btn btn-accent${showSticky ? ' show' : ''}`} onClick={go('contact')}>Записаться на поток</a>
+      <a href="#contact" className={`sticky-cta btn btn-accent${showSticky ? ' show' : ''}`} onClick={go('contact', '')}>Консультация</a>
     </div>
   )
 }
