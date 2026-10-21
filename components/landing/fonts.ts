@@ -1,9 +1,9 @@
-import { Unbounded } from 'next/font/google'
+import { Manrope } from 'next/font/google'
 
-/** Display font shared by the landing page and the sign-in screen. */
-export const unbounded = Unbounded({
+/** The one font of the landing page and the sign-in screen (geometric sans, full Cyrillic). */
+export const manrope = Manrope({
   subsets: ['latin', 'cyrillic'],
-  weight: ['500', '600'],
-  variable: '--font-unbounded',
+  weight: ['500', '600', '700', '800'],
+  variable: '--font-display',
   display: 'swap',
 })

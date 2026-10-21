@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import Image from 'next/image'
-import { unbounded } from './fonts'
+import { ArrowUpRight, Megaphone, Search, Target, Wallet } from 'lucide-react'
+import { manrope } from './fonts'
 import './landing.css'
 
 /** Applications are sent to this Telegram account (opens a chat with the text pre-filled). */
@@ -125,7 +126,7 @@ export function LandingPage({ onLogin }: { onLogin: () => void }) {
   const active = CATS[sphere]
 
   return (
-    <div className={`landing ${unbounded.variable}`}>
+    <div className={`landing ${manrope.variable}`}>
       <header className={`nav${scrolled ? ' scrolled' : ''}`}>
         <div className="wrap">
           <a href="#top" className="logo" onClick={e => { e.preventDefault(); window.scrollTo({ top: 0, behavior: 'smooth' }) }}>
@@ -140,31 +141,43 @@ export function LandingPage({ onLogin }: { onLogin: () => void }) {
           </ul>
           <div className="acts">
             <button type="button" className="btn btn-ghost btn-sm" onClick={onLogin}>Войти</button>
-            <a href="#contact" className="btn btn-gold btn-sm" onClick={go('contact')}>Оставить заявку</a>
+            <a href="#contact" className="btn btn-accent btn-sm" onClick={go('contact')}>Оставить заявку</a>
           </div>
         </div>
       </header>
 
       <section className="hero" ref={heroRef} id="top">
-        <div className="glow g1" /><div className="glow g2" />
-        <div className="wrap hero-grid">
-          <div className="hero-copy">
-            <div className="tag">Скоро новый поток · места ограничены</div>
-            <h1>Бизнес в цифрах. Рост — <em>кратно.</em></h1>
-            <p className="lead">«Год в деле» — годовая программа для предпринимателей: за 12 месяцев вы наведёте порядок в финансах, команде и продажах и выйдете на масштаб.</p>
-            <div className="cta">
-              <a href="#contact" className="btn btn-gold" onClick={go('contact')}>Записаться на поток</a>
-              <a href="#program" className="btn btn-ghost" onClick={go('program')}>Смотреть программу</a>
+        <div className="glow g1" />
+        <div className="stage">
+          <h1 className="sr-only">Бизнес практик. Анвар Халиков, автор программы «Год в деле»</h1>
+          {/* A running line: it leaves to the left and comes back from the right, behind the photo. */}
+          <div className="marquee" aria-hidden="true">
+            <div className="marquee-track">
+              {[0, 1].map(g => (
+                <div className="marquee-group" key={g}>
+                  <span>Бизнес практик</span><i />
+                  <span>Бизнес практик</span><i />
+                </div>
+              ))}
             </div>
-            <div className="stats">
+          </div>
+          <div className="hero-photo">
+            <Image src="/landing/anvar-cutout.png" alt="Анвар Халиков" width={868} height={1300} priority sizes="(max-width: 960px) 82vw, 470px" />
+          </div>
+          <div className="hero-layer">
+            <div className="hero-copy">
+              <div className="role">Анвар Халиков,<br />автор программы<br />«Год в деле»</div>
+              <p>Годовая программа для предпринимателей: за 12 месяцев вы наведёте порядок в финансах, команде и продажах и выйдете на масштаб.</p>
+              <div className="cta">
+                <a href="#contact" className="btn btn-accent" onClick={go('contact')}>Записаться на поток</a>
+                <a href="#program" className="link-arrow" onClick={go('program')}>Смотреть программу <ArrowUpRight size={18} /></a>
+              </div>
+            </div>
+            <div className="hero-side">
               <div><b>10+</b><span>лет в бизнесе</span></div>
               <div><b>20+</b><span>проектов</span></div>
               <div><b>100+</b><span>учеников</span></div>
             </div>
-          </div>
-          <div className="hero-photo">
-            <Image src="/landing/anvar-cutout.png" alt="Анвар Халиков" width={868} height={1300} priority sizes="(max-width: 960px) 380px, 520px" />
-            <div className="badge"><b>Анвар Халиков</b>предприниматель, стартап-менеджер,<br />автор программы</div>
           </div>
         </div>
         <div className="strip">
@@ -175,34 +188,40 @@ export function LandingPage({ onLogin }: { onLogin: () => void }) {
         </div>
       </section>
 
-      <section id="for" className="alt">
+      <section id="for">
         <div className="wrap">
           <div className="sec-head">
-            <div className="kick">Для кого</div>
-            <h2>Узнаёте свой бизнес в одной из трёх ситуаций?</h2>
+            <div>
+              <div className="kick">Для кого</div>
+              <h2>Узнаёте свой бизнес в одной из трёх ситуаций?</h2>
+            </div>
+            <a href="#contact" className="btn btn-accent" onClick={go('contact')}>Оставить заявку</a>
           </div>
           <div className="for-list">
             {SITUATIONS.map(s => (
               <div key={s.title} className="for-row card">
                 <div><div className="lab">Ситуация</div><h3>{s.title}</h3></div>
                 <ul>{s.points.map(p => <li key={p}>{p}</li>)}</ul>
+                <a href="#contact" className="go" aria-label={`Обсудить: ${s.title}`} onClick={go('contact')}><ArrowUpRight size={22} /></a>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      <section id="program">
+      <section id="program" className="alt">
         <div className="wrap">
           <div className="sec-head">
-            <div className="kick">Программа</div>
-            <h2>Четыре этапа. Двенадцать месяцев.</h2>
-            <p>Каждый квартал — отдельный результат: от диагностики до выхода на новые рынки.</p>
+            <div>
+              <div className="kick">Программа</div>
+              <h2>Четыре этапа. Двенадцать месяцев.</h2>
+              <p>Каждый квартал — отдельный результат: от диагностики до выхода на новые рынки.</p>
+            </div>
           </div>
           <div className="stages">
             {STAGES.map((s, i) => (
-              <div key={s.title} className="stage card">
-                <div className="top"><div className="num">{i + 1}</div><div className="months">{s.months}</div></div>
+              <div key={s.title} className="stage-card card">
+                <div className="top"><div className="num">0{i + 1}</div><div className="months">{s.months}</div></div>
                 <h3>{s.title}</h3>
                 <p>{s.text}</p>
                 <div className="year" aria-hidden="true">
@@ -214,8 +233,8 @@ export function LandingPage({ onLogin }: { onLogin: () => void }) {
         </div>
       </section>
 
-      <section className="alt" id="wheel" style={{ overflow: 'hidden' }}>
-        <div className="glow" style={{ left: -220, top: '20%', width: 640, height: 640 }} />
+      <section id="wheel" style={{ overflow: 'hidden' }}>
+        <div className="glow" style={{ left: -260, top: '20%', width: 700, height: 700, opacity: 0.5 }} />
         <div className="wrap">
           <div className="sec-head">
             <div className="kick">Колесо бизнеса</div>
@@ -258,6 +277,19 @@ export function LandingPage({ onLogin }: { onLogin: () => void }) {
         </div>
       </section>
 
+      <section className="manifest alt">
+        <div className="wrap">
+          <span className="kick">О программе</span>
+          <p>«Год в деле» — это не лекции, а работа с вашим бизнесом. Каждый месяц вы отмечаете, что внедрено, и видите, какая сфера проседает, а команда помогает её подтянуть.</p>
+          <a href="#contact" className="btn btn-accent" onClick={go('contact')}>Узнать про поток</a>
+          <div className="counters">
+            <div className="card"><b>10+</b><span>лет опыта</span></div>
+            <div className="card"><b>20+</b><span>проектов</span></div>
+            <div className="card"><b>100+</b><span>учеников</span></div>
+          </div>
+        </div>
+      </section>
+
       <section className="about" id="about">
         <div className="wrap about-grid">
           <div className="about-photo">
@@ -265,32 +297,28 @@ export function LandingPage({ onLogin }: { onLogin: () => void }) {
             <div className="chip"><b>с 2014</b>системная работа с бизнесом</div>
           </div>
           <div>
-            <div className="kick">Об авторе</div>
+            <span className="kick">Об авторе</span>
             <h2>Анвар Халиков</h2>
             <p>Предприниматель, стартап-менеджер и бизнес-практик. Более 10 лет запускает и развивает проекты и помогает выстраивать стратегии, которые работают в цифрах, а не на словах.</p>
-            <div className="about-stats card">
-              <div><b>10+</b><span>лет опыта</span></div>
-              <div><b>20+</b><span>проектов</span></div>
-              <div><b>52+</b><span>награды</span></div>
-              <div><b>100+</b><span>учеников</span></div>
-            </div>
+            <p>Награды: 52+. Участвует в международных конференциях и семинарах в этих странах:</p>
             <div className="geo">{COUNTRIES.map(c => <span key={c}>{c}</span>)}</div>
-            <p style={{ marginTop: '1.2rem', fontSize: '1rem' }}>Участвует в международных конференциях и семинарах в этих странах.</p>
           </div>
         </div>
       </section>
 
       <section className="alt">
         <div className="wrap">
-          <div className="sec-head">
-            <div className="kick">Чем помогаю</div>
-            <h2>Четыре направления работы</h2>
+          <div className="sec-head center">
+            <div>
+              <span className="kick">Чем помогаю</span>
+              <h2>Четыре направления работы</h2>
+            </div>
           </div>
-          <div className="bento">
-            <div className="b-card card big"><span className="chipk">Основа</span><div><h3>Бизнес-планирование</h3><p>Постановка целей, планы действий, KPI и финансовый анализ. С этого начинается любая работа.</p></div></div>
-            <div className="b-card card"><span className="chipk">Рост</span><div><h3>Маркетинг и продажи</h3><p>Привлечение клиентов, уникальные предложения, кампании, управление брендом.</p></div></div>
-            <div className="b-card card"><span className="chipk">Деньги</span><div><h3>Управление финансами</h3><p>Бюджетирование, оборотный капитал, стратегии финансирования.</p></div></div>
-            <div className="b-card card wide"><span className="chipk">Рынок</span><div><h3>Анализ рынка</h3><p>Конкуренты, тренды, спрос, ценообразование и отличия продукта.</p></div></div>
+          <div className="focus">
+            <div className="focus-card card"><Target /><h3>Бизнес-планирование</h3><p>Постановка целей, планы действий, KPI и финансовый анализ. С этого начинается любая работа.</p></div>
+            <div className="focus-card card"><Megaphone /><h3>Маркетинг и продажи</h3><p>Привлечение клиентов, уникальные предложения, кампании, управление брендом.</p></div>
+            <div className="focus-card card"><Wallet /><h3>Управление финансами</h3><p>Бюджетирование, оборотный капитал, стратегии финансирования.</p></div>
+            <div className="focus-card card"><Search /><h3>Анализ рынка</h3><p>Конкуренты, тренды, спрос, ценообразование и отличия продукта.</p></div>
           </div>
         </div>
       </section>
@@ -298,8 +326,10 @@ export function LandingPage({ onLogin }: { onLogin: () => void }) {
       <section id="projects">
         <div className="wrap">
           <div className="sec-head">
-            <div className="kick">Проекты</div>
-            <h2>Бизнесы, которые я строил</h2>
+            <div>
+              <div className="kick">Проекты</div>
+              <h2>Бизнесы, которые я строил</h2>
+            </div>
           </div>
           <div className="projects-list card">
             {PROJECTS.map(p => (
@@ -317,7 +347,7 @@ export function LandingPage({ onLogin }: { onLogin: () => void }) {
             <h2>Начните свой<br />«Год в деле»</h2>
             <p className="sub">Оставьте заявку, и команда свяжется с вами, расскажет про ближайший поток и условия участия.</p>
             <div className="socials">
-              <a className="btn btn-gold btn-sm" href={`https://t.me/${TELEGRAM_HANDLE}`} target="_blank" rel="noopener noreferrer">Написать в Telegram</a>
+              <a className="btn btn-accent btn-sm" href={`https://t.me/${TELEGRAM_HANDLE}`} target="_blank" rel="noopener noreferrer">Написать в Telegram</a>
               <a className="btn btn-ghost btn-sm" href="https://instagram.com/anvarjon_khalikov" target="_blank" rel="noopener noreferrer">Instagram</a>
               <a className="btn btn-ghost btn-sm" href="https://facebook.com/anvar.halikov.718441" target="_blank" rel="noopener noreferrer">Facebook</a>
             </div>
@@ -333,7 +363,7 @@ export function LandingPage({ onLogin }: { onLogin: () => void }) {
                 <a href={telegramUrl} target="_blank" rel="noopener noreferrer">Открыть вручную</a>
               </p>
             )}
-            <button className="btn btn-gold" type="submit">Отправить в Telegram</button>
+            <button className="btn btn-accent" type="submit">Отправить в Telegram</button>
             <small>Заявка откроется в Telegram с уже заполненным текстом</small>
           </form>
         </div>
@@ -346,7 +376,7 @@ export function LandingPage({ onLogin }: { onLogin: () => void }) {
         </div>
       </footer>
 
-      <a href="#contact" className={`sticky-cta btn btn-gold${showSticky ? ' show' : ''}`} onClick={go('contact')}>Записаться на поток</a>
+      <a href="#contact" className={`sticky-cta btn btn-accent${showSticky ? ' show' : ''}`} onClick={go('contact')}>Записаться на поток</a>
     </div>
   )
 }
