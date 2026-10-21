@@ -1,4 +1,4 @@
-/* Scoped styles for the public landing page (components/landing/landing-page.tsx) and the sign-in screen. Dark, one lime accent, one geometric sans (Manrope, full Cyrillic). */
+/* Scoped styles for the public landing page (components/landing/landing-page.tsx) and the sign-in screen. Dark, one lime accent, one geometric sans (Montserrat, full Cyrillic). */
 .landing{--bg:#080808;
   --bg-2:#0d0e0d;
   --card:#131413;
@@ -48,7 +48,7 @@
 .landing .nav nav{flex:1;display:flex;justify-content:center;min-width:0}
 .landing .menu{display:flex;gap:2px;list-style:none;padding:0;white-space:nowrap}
 .landing .menu > li{position:relative}
-.landing .menu > li > a{display:flex;align-items:center;gap:5px;padding:10px 13px;color:var(--fg);font-size:16px;font-weight:600;border-radius:8px;transition:color .2s}
+.landing .menu > li > a{display:flex;align-items:center;gap:5px;padding:10px 9px;color:var(--fg);font-size:14px;font-weight:600;border-radius:8px;transition:color .2s}
 .landing .menu > li > a:hover,.landing .menu > li:focus-within > a{color:var(--accent)}
 .landing .sub{position:absolute;left:0;top:100%;min-width:270px;padding:10px;background:#131413;border:1px solid var(--line);border-radius:16px;list-style:none;opacity:0;visibility:hidden;transform:translateY(6px);transition:opacity .18s,transform .18s,visibility .18s;box-shadow:0 24px 48px rgb(0 0 0 / .55)}
 .landing .has-sub:hover .sub,.landing .has-sub:focus-within .sub{opacity:1;visibility:visible;transform:none}
@@ -72,13 +72,13 @@
 .landing .marquee{position:absolute;left:0;right:0;top:calc(var(--k)*.1);overflow:hidden;white-space:nowrap;user-select:none;z-index:1}
 .landing .marquee-track{display:inline-flex;width:max-content;animation:gvd-marquee 38s linear infinite;will-change:transform}
 .landing .marquee-group{display:inline-flex;align-items:center;flex-shrink:0}
-.landing .marquee-group span{font-size:calc(var(--k)*.205);font-weight:600;letter-spacing:-0.02em;line-height:1;color:var(--fg)}
+.landing .marquee-group span{font-size:calc(var(--k)*.205);font-weight:700;letter-spacing:-0.02em;line-height:1;color:var(--fg)}
 .landing .marquee-group i{display:block;width:calc(var(--k)*.05);height:calc(var(--k)*.05);border-radius:50%;background:var(--accent);margin:0 calc(var(--k)*.045);flex-shrink:0}
 @keyframes gvd-marquee{from{transform:translateX(0)}to{transform:translateX(-50%)}}
 .landing .hero-photo{position:absolute;left:calc(50% - var(--k)*.008);top:calc(var(--k)*.156);transform:translateX(-50%);z-index:2;width:calc(var(--k)*.44);height:calc(var(--k)*.44);pointer-events:none;overflow:hidden;-webkit-mask-image:linear-gradient(180deg,#000 80%,transparent);mask-image:linear-gradient(180deg,#000 80%,transparent)}
 .landing .hero-photo img{display:block;width:100%;height:100%;object-fit:cover;object-position:top}
 .landing .hero-copy{position:absolute;left:calc(var(--k)*.0778);top:calc(var(--k)*.3118);z-index:3}
-.landing .hero-copy .role{font-size:calc(var(--k)*.036);font-weight:600;letter-spacing:-0.025em;line-height:1.3;color:var(--fg)}
+.landing .hero-copy .role{font-size:calc(var(--k)*.033);font-weight:600;letter-spacing:-0.025em;line-height:1.3;color:var(--fg)}
 .landing .hero-copy .role i{font-style:normal;color:var(--accent)}
 .landing .hero-copy .who{margin-top:6px;color:var(--dim);font-size:15px;font-weight:600}
 .landing .hero-actions{position:absolute;right:calc(var(--k)*.0778);top:calc(var(--k)*.327);z-index:3;display:flex;align-items:center;gap:14px 24px}
@@ -250,7 +250,7 @@
 @media (max-width:1320px){
 .landing .hero-actions{flex-direction:column;align-items:flex-end;gap:14px}
 }
-@media (max-width:1280px){
+@media (max-width:1360px){
 .landing .nav nav{display:none}
 .landing .burger{display:inline-flex}
 }

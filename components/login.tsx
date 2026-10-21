@@ -3,7 +3,7 @@
 import React, { useState } from 'react'
 import Image from 'next/image'
 import { AlertCircle, ArrowLeft, Eye, EyeOff, Loader2 } from 'lucide-react'
-import { manrope } from '@/components/landing/fonts'
+import { display } from '@/components/landing/fonts'
 import '@/components/landing/landing.css'
 
 export function LoginPage({ onLoginSuccess, onBack }: { onLoginSuccess: () => void; onBack?: () => void }) {
@@ -45,7 +45,7 @@ export function LoginPage({ onLoginSuccess, onBack }: { onLoginSuccess: () => vo
   }
 
   return (
-    <div className={`landing login-screen ${manrope.variable}`}>
+    <div className={`landing login-screen ${display.variable}`}>
       <aside className="login-side">
         <div className="glow" />
         <div className="logo"><i>ГВД</i>Год в деле</div>

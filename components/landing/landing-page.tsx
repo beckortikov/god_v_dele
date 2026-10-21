@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import Image from 'next/image'
 import { ArrowUpRight, ChevronDown, Megaphone, Menu, Search, Target, Wallet, X } from 'lucide-react'
-import { manrope } from './fonts'
+import { display } from './fonts'
 import './landing.css'
 
 /** Applications are sent to this Telegram account (opens a chat with the text pre-filled). */
@@ -213,7 +213,7 @@ export function LandingPage({ onLogin }: { onLogin: () => void }) {
   const active = CATS[sphere]
 
   return (
-    <div className={`landing ${manrope.variable}`}>
+    <div className={`landing ${display.variable}`}>
       <header className={`nav${scrolled || menuOpen ? ' scrolled' : ''}`}>
         <div className="wrap">
           <a href="#top" className="logo" onClick={e => { e.preventDefault(); setMenuOpen(false); window.scrollTo({ top: 0, behavior: 'smooth' }) }}>
