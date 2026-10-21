@@ -214,7 +214,6 @@
 .landing .offer.main{background:linear-gradient(180deg,rgb(161 250 77 / .13),#131413 72%);border-color:rgb(161 250 77 / .4)}
 .landing .offer-top{display:flex;justify-content:space-between;align-items:center;gap:12px;min-height:30px}
 .landing .chipk{font-size:14px;font-weight:600;padding:5px 12px;border-radius:99px;background:rgb(161 250 77 / .14);color:var(--accent);white-space:nowrap}
-.landing .price{font-size:15px;font-weight:600;color:var(--fg);white-space:nowrap}
 .landing .offer h3{font-size:28px}
 .landing .offer p{color:var(--mute);font-size:17px;flex:1}
 .landing .offer .btn,.landing .offer .link-arrow{align-self:flex-start}

@@ -82,7 +82,7 @@ const MENU: MenuItem[] = [
     id: 'entrepreneurs',
     sub: [
       { label: 'Программа «Год в деле»', id: 'program' },
-      { label: 'Личная консультация (час 500$)', id: 'offer-consult' },
+      { label: 'Личная консультация', id: 'offer-consult' },
       { label: 'Бизнес-разбор', id: 'offer-review' },
       { label: 'Тур по бизнесам', id: 'offer-tour' },
     ],
@@ -95,7 +95,7 @@ const MENU: MenuItem[] = [
       { label: 'Стратегическая сессия', id: 'co-strategy' },
       { label: 'Разбор компании', id: 'co-review' },
       { label: 'Обучение персонала', id: 'co-training' },
-      { label: 'Бизнес-консультация (час 800$)', id: 'co-consult' },
+      { label: 'Бизнес-консультация', id: 'co-consult' },
     ],
   },
   { label: 'Книга', id: 'book', sub: [{ label: 'О книге', id: 'book' }, { label: 'Купить', id: 'book-buy' }] },
@@ -106,7 +106,7 @@ const MENU: MenuItem[] = [
 /** Offers for entrepreneurs. Descriptions are short drafts: confirm the wording with the author. */
 const OFFERS = [
   { id: 'offer-program', tag: 'Программа', title: 'Год в деле', text: 'Годовая программа наставничества и сопровождения: диагностика, системы, финансы, масштаб.', cta: 'Записаться на поток', topic: 'Программа «Год в деле»', to: 'program', main: true },
-  { id: 'offer-consult', tag: 'Один на один', title: 'Личная консультация', price: 'час · 500$', text: 'Индивидуальный разговор по вашему бизнесу: разбираем задачу и выходим с понятным планом действий.', cta: 'Записаться', topic: 'Личная консультация (500$ / час)' },
+  { id: 'offer-consult', tag: 'Один на один', title: 'Личная консультация', text: 'Индивидуальный разговор по вашему бизнесу: разбираем задачу и выходим с понятным планом действий.', cta: 'Записаться', topic: 'Личная консультация' },
   { id: 'offer-review', tag: 'Диагностика', title: 'Бизнес-разбор', text: 'Смотрим бизнес в цифрах: финансы, продажи, команду, и находим, где теряются деньги и время.', cta: 'Заказать разбор', topic: 'Бизнес-разбор' },
   { id: 'offer-tour', tag: 'Живой формат', title: 'Тур по бизнесам', text: 'Поездка по действующим бизнесам автора: можно увидеть изнутри, как устроены процессы и команда.', cta: 'Узнать про тур', topic: 'Тур по бизнесам' },
 ]
@@ -117,7 +117,7 @@ const COMPANY_OFFERS = [
   { id: 'co-strategy', title: 'Стратегическая сессия', text: 'Совместная работа руководителей над стратегией роста и приоритетами на год.', topic: 'Стратегическая сессия' },
   { id: 'co-review', title: 'Разбор компании', text: 'Диагностика компании: цифры, процессы, команда и план изменений.', topic: 'Разбор компании' },
   { id: 'co-training', title: 'Обучение персонала', text: 'Обучение сотрудников управлению, продажам и работе с цифрами.', topic: 'Обучение персонала' },
-  { id: 'co-consult', title: 'Бизнес-консультация', price: 'час · 800$', text: 'Консультация для руководителей по запросу компании.', topic: 'Бизнес-консультация (800$ / час)' },
+  { id: 'co-consult', title: 'Бизнес-консультация', text: 'Консультация для руководителей по запросу компании.', topic: 'Бизнес-консультация' },
 ]
 
 const BOOK_POINTS = [
@@ -364,7 +364,7 @@ export function LandingPage({ onLogin }: { onLogin: () => void }) {
           <div className="offers">
             {OFFERS.map(o => (
               <div key={o.id} id={o.id} className={`offer card${o.main ? ' main' : ''}`}>
-                <div className="offer-top"><span className="chipk">{o.tag}</span>{o.price && <span className="price">{o.price}</span>}</div>
+                <div className="offer-top"><span className="chipk">{o.tag}</span></div>
                 <h3>{o.title}</h3>
                 <p>{o.text}</p>
                 <a href="#contact" className={o.main ? 'btn btn-accent' : 'btn btn-ghost'} onClick={go('contact', o.topic)}>{o.cta}</a>
@@ -478,7 +478,7 @@ export function LandingPage({ onLogin }: { onLogin: () => void }) {
           <div className="offers five">
             {COMPANY_OFFERS.map(o => (
               <div key={o.id} id={o.id} className="offer card">
-                <div className="offer-top"><span className="chipk">Для компаний</span>{o.price && <span className="price">{o.price}</span>}</div>
+                <div className="offer-top"><span className="chipk">Для компаний</span></div>
                 <h3>{o.title}</h3>
                 <p>{o.text}</p>
                 <a href="#contact" className="link-arrow" onClick={go('contact', o.topic)}>Оставить заявку <ArrowUpRight size={18} /></a>
