@@ -262,14 +262,14 @@ export function LandingPage({ onLogin }: { onLogin: () => void }) {
       <section className="hero" ref={heroRef} id="top">
         <div className="glow g1" /><div className="glow g2" />
         <div className="stage">
-          <h1 className="sr-only">Бизнес практик. Анвар Халиков, предприниматель, автор программы «Год в деле»</h1>
+          <h1 className="sr-only">Бизнес стратег. Анвар Халиков, предприниматель, автор программы «Год в деле»</h1>
           {/* A running line: it leaves to the left and comes back from the right, behind the photo. */}
           <div className="marquee" aria-hidden="true">
             <div className="marquee-track">
               {[0, 1].map(g => (
                 <div className="marquee-group" key={g}>
-                  <span>Бизнес практик</span><i />
-                  <span>Бизнес практик</span><i />
+                  <span>Бизнес стратег</span><i />
+                  <span>Бизнес стратег</span><i />
                 </div>
               ))}
             </div>
@@ -286,8 +286,8 @@ export function LandingPage({ onLogin }: { onLogin: () => void }) {
               <a href="#program" className="link-arrow" onClick={go('program')}>Программа «Год в деле» <ArrowUpRight size={18} /></a>
             </div>
             <div className="hero-side">
-              <div><b>20+ <small>лет</small></b><span>в найме</span></div>
-              <div><b>10+ <small>лет</small></b><span>в бизнесе</span></div>
+              <div><b>23 <small>года</small></b><span>в найме</span></div>
+              <div><b>12 <small>лет</small></b><span>в бизнесе</span></div>
               <div><b>20+</b><span>проектов</span></div>
               <div><b>100+</b><span>учеников</span></div>
             </div>
@@ -321,13 +321,13 @@ export function LandingPage({ onLogin }: { onLogin: () => void }) {
           <div>
             <span className="kick">Обо мне</span>
             <h2>Эксперт по систематизации бизнес-проектов</h2>
-            <p>Предприниматель, стартап-менеджер и бизнес-практик. С 2014 года запускает и развивает проекты, участвует в международных конференциях и семинарах в этих странах:</p>
+            <p>Предприниматель, стартап-менеджер и бизнес-стратег. С 2014 года запускает и развивает проекты, участвует в международных конференциях и семинарах в этих странах:</p>
             <div className="geo">{COUNTRIES.map(c => <span key={c}>{c}</span>)}</div>
           </div>
         </div>
         <div className="wrap">
           <div className="counters four" id="awards">
-            <div className="card"><b>10+</b><span>лет опыта</span></div>
+            <div className="card"><b>12</b><span>лет опыта</span></div>
             <div className="card"><b>20+</b><span>проектов</span></div>
             <div className="card"><b>52+</b><span>награды</span></div>
             <div className="card"><b>100+</b><span>учеников</span></div>
