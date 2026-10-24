@@ -317,6 +317,7 @@
 .landing .form-note a{color:var(--accent);text-decoration:underline;text-underline-offset:3px}
 .landing .foot-link{background:none;border:none;color:var(--mute);font:inherit;cursor:pointer;padding:0}
 .landing .foot-link:hover{color:var(--fg)}
+.landing .foot-links{display:flex;flex-wrap:wrap;gap:12px 28px}
 .landing button{font-family:inherit}
 .landing a:focus-visible,.landing button:focus-visible,.landing input:focus-visible,.landing textarea:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
 .landing .seg:focus,.landing .seg:focus-visible{outline:none}
@@ -361,3 +362,17 @@
   .landing .login-side{display:none}
   .landing .login-box .logo{display:flex}
 }
+
+/* privacy policy (app/privacy/page.tsx) */
+.landing .legal{max-width:760px;padding-top:48px;padding-bottom:96px}
+.landing .legal h1{font-size:clamp(30px,5vw,44px);margin:28px 0 8px}
+.landing .legal h2{font-size:22px;margin:40px 0 12px;scroll-margin-top:24px}
+.landing .legal p, .landing .legal li{color:var(--mute);font-size:17px}
+.landing .legal p + p{margin-top:12px}
+.landing .legal ul{padding-left:22px;display:grid;gap:8px}
+.landing .legal b{color:var(--fg);font-weight:600}
+.landing .legal-meta{color:var(--dim)!important;font-size:15px!important;margin-bottom:28px}
+.landing .legal-back{color:var(--dim);font-size:15px}
+.landing .legal-back:hover{color:var(--fg)}
+.landing .legal .legal-link{color:var(--accent);border-bottom:1px solid currentColor}
+@media (max-width:720px){.landing .legal{padding-top:28px}}

@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.godvdele.app",
+      "sha256_cert_fingerprints": [
+        "55:28:6A:D3:1F:C8:0D:8B:55:BA:DE:9D:1C:06:A4:2C:DD:3D:B3:B3:34:C9:B2:CA:0A:59:65:9A:3C:6F:2B:C0"
+      ]
+    }
+  }
+]

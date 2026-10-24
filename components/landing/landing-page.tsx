@@ -577,7 +577,10 @@ export function LandingPage({ onLogin }: { onLogin: () => void }) {
       <footer>
         <div className="wrap">
           <span>© {new Date().getFullYear()} Анвар Халиков. Все права защищены.</span>
-          <button type="button" onClick={onLogin} className="foot-link">Вход для участников</button>
+          <span className="foot-links">
+            <a href="/privacy" className="foot-link">Политика конфиденциальности</a>
+            <button type="button" onClick={onLogin} className="foot-link">Вход для участников</button>
+          </span>
         </div>
       </footer>
 
