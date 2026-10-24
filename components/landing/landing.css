@@ -82,6 +82,7 @@
 .landing .hero-copy .role i{font-style:normal;color:var(--fg)}
 .landing .hero-copy .who{margin-top:6px;color:var(--dim);font-size:15px;font-weight:600}
 .landing .hero-actions{position:absolute;right:calc(var(--k)*.0778);top:calc(var(--k)*.327);z-index:3;display:flex;align-items:center;gap:14px 24px}
+.landing .hero-login{display:none}
 .landing .hero-side{position:absolute;right:calc(var(--k)*.0778);top:calc(var(--k)*.375);z-index:3;display:grid;gap:12px;width:calc(var(--k)*.145)}
 .landing .hero-side div{padding:14px 20px;border-radius:16px;background:rgb(19 20 19 / .85);backdrop-filter:blur(8px);border:1px solid var(--line)}
 .landing .hero-side b{display:block;font-size:32px;font-weight:600;letter-spacing:-0.03em;line-height:1.1;font-variant-numeric:tabular-nums}
@@ -294,6 +295,8 @@
 .landing .wrap{padding:0 18px}
 .landing .nav .wrap{height:68px}
 .landing .nav .acts .btn-accent,.landing .nav .acts .login-btn{display:none}
+/* the nav login button is hidden here, so the hero carries one above the main CTA */
+.landing .hero-login{display:inline-flex}
 .landing .marquee{margin-top:88px}
 .landing .marquee-group span{font-size:84px}
 .landing .hero-actions .btn{width:100%}

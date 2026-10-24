@@ -18,8 +18,8 @@ const onest = Onest({
 const PARTICIPANT_INIT_SCRIPT = `try{var l=localStorage;if(l.getItem('isAuthenticated')==='true'&&l.getItem('userRole')==='participant'){var h=document.documentElement,t=l.getItem('pt-theme'),light=t==='light'||(t==='system'&&matchMedia('(prefers-color-scheme: light)').matches);h.classList.add('participant-ui','${display.variable}');if(light)h.classList.add('pt-light')}}catch(e){}`
 
 export const metadata: Metadata = {
-  title: 'Год в деле — учёт и управление',
-  description: 'Прозрачный финансовый и кадровый учёт для образовательных проектов',
+  title: 'Год в деле — программа роста бизнеса',
+  description: 'Годовая программа роста бизнеса для предпринимателей: наставничество, спринты, уроки и кабинет участника',
   applicationName: 'Год в деле',
   manifest: '/manifest.webmanifest',
   appleWebApp: {

@@ -282,6 +282,7 @@ export function LandingPage({ onLogin }: { onLogin: () => void }) {
               <div className="role">Предприниматель<i>.</i></div>
             </div>
             <div className="hero-actions">
+              <button type="button" className="btn btn-ghost hero-login" onClick={onLogin}>Войти</button>
               <a href="#contact" className="btn btn-accent" onClick={go('contact', 'Бесплатный тренинг')}>Бесплатный тренинг</a>
               <a href="#program" className="link-arrow" onClick={go('program')}>Программа «Год в деле» <ArrowUpRight size={18} /></a>
             </div>

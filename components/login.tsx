@@ -177,7 +177,7 @@ export function LoginPage({ onLoginSuccess, onBack }: { onLoginSuccess: () => vo
         <div className="login-box">
           <div className="logo"><i>ГВД</i>Год в деле</div>
           <h1>Вход</h1>
-          <p className="lead">Финансы, участники и команда в одном месте</p>
+          <p className="lead">Годовая программа роста бизнеса для предпринимателей</p>
 
           <form onSubmit={handleLogin} className="login-card card">
             {error && (

@@ -7,7 +7,7 @@ export default function manifest(): MetadataRoute.Manifest {
     id: '/',
     name: 'Год в деле',
     short_name: 'Год в деле',
-    description: 'Прозрачный финансовый и кадровый учёт для образовательных проектов',
+    description: 'Годовая программа роста бизнеса для предпринимателей: наставничество, спринты, уроки и кабинет участника',
     lang: 'ru',
     dir: 'ltr',
     // Installed app opens straight to the sign-in form, not the public landing page.
