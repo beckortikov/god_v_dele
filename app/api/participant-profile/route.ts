@@ -42,7 +42,7 @@ export async function GET(req: Request) {
     const data: ProfileData = {
       participant: owner,
       profile: (profile as ParticipantProfile | null) ?? null,
-      years: (years ?? []).map(y => ({ participant_id: y.participant_id, year: y.year, turnover: num(y.turnover), net_profit: num(y.net_profit), notes: y.notes })),
+      years: (years ?? []).map(y => ({ participant_id: y.participant_id, year: y.year, turnover: num(y.turnover), net_profit: num(y.net_profit), goal_turnover: num(y.goal_turnover), notes: y.notes })),
       scans,
       scansUnavailable,
     }
@@ -52,7 +52,7 @@ export async function GET(req: Request) {
   }
 }
 
-/** PUT ?participant_id=<uuid> { birth_date?, city?, activity?, business_name?, currency? } */
+/** PUT ?participant_id=<uuid> { birth_date?, city?, activity?, business_name?, website?, employees_count?, currency? } */
 export async function PUT(req: Request) {
   try {
     const owner = await profileOwner(req)

@@ -33,8 +33,13 @@ describe('parseYear', () => {
       year: 2024,
       turnover: 1250000.56,
       net_profit: -4000,
+      goal_turnover: null,
       notes: null,
     })
+  })
+  it('takes a goal, alone or with the numbers, and refuses a negative one', () => {
+    expect(parseYear({ year: 2026, goal_turnover: '2 000 000' }, 2026)).toMatchObject({ turnover: null, goal_turnover: 2000000 })
+    expect(() => parseYear({ year: 2026, goal_turnover: -1 }, 2026)).toThrow(/Цель/)
   })
   it('needs a sensible year and at least one number', () => {
     expect(() => parseYear({ year: 1985, turnover: 1 }, 2026)).toThrow(/Год/)
@@ -105,5 +110,24 @@ describe('scanProblem', () => {
     expect(scanProblem({ ...ok, size: 11 * 1024 * 1024 }, 0)).toMatch(/больше/)
     expect(scanProblem(ok, 6)).toMatch(/до 6/)
     expect(scanProblem({ ...ok, name: ' ' }, 0)).toMatch(/нет имени/)
+  })
+})
+
+describe('goal progress and the extra profile fields', () => {
+  const row = (over: object) => ({ participant_id: 'p', year: 2026, turnover: null, net_profit: null, notes: null, ...over })
+  it('shows how much of the goal the turnover is', () => {
+    const [a, b, c] = yearlyDynamics([row({ year: 2024, turnover: 820, goal_turnover: 1000 }), row({ year: 2025, turnover: 500 }), row({ year: 2026, goal_turnover: 0, turnover: 5 })])
+    expect(a.goal_progress).toBe(82)
+    expect(b.goal_progress).toBeNull()
+    expect(c.goal_progress).toBeNull()
+  })
+  it('employees: whole numbers from zero, empty clears', () => {
+    expect(parseProfile({ employees_count: '12' }, TODAY).employees_count).toBe(12)
+    expect(parseProfile({ employees_count: '' }, TODAY).employees_count).toBeNull()
+    expect(() => parseProfile({ employees_count: '2.5' }, TODAY)).toThrow(/сотрудник/i)
+    expect(() => parseProfile({ employees_count: -1 }, TODAY)).toThrow(/сотрудник/i)
+  })
+  it('keeps the website as trimmed text', () => {
+    expect(parseProfile({ website: '  instagram.com/shop ' }, TODAY).website).toBe('instagram.com/shop')
   })
 })

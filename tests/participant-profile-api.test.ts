@@ -198,3 +198,25 @@ describe('profile summary for the participants list', () => {
     expect((await summary('admin')).status).toBe(503)
   })
 })
+
+describe('migration 022 fields', () => {
+  it('stores employees, website and a yearly goal', async () => {
+    expect((await PUT(req(`${base}${q(P1)}`, 'participant', P1, { employees_count: '7', website: 'instagram.com/shop' }, 'PUT'))).status).toBe(200)
+    expect(fake.rows('participant_profiles')[0]).toMatchObject({ employees_count: 7, website: 'instagram.com/shop' })
+    await putYear(req(`${base}/years${q(P1)}`, 'participant', P1, { year: 2026, turnover: 800, goal_turnover: '1000' }, 'PUT'))
+    const back = (await (await GET(req(`${base}${q(P1)}`, 'admin'))).json()).data
+    expect(back.years[0]).toMatchObject({ year: 2026, turnover: 800, goal_turnover: 1000 })
+  })
+
+  it('a year saved without a goal does not send the goal column (it may not exist yet)', async () => {
+    await putYear(req(`${base}/years${q(P1)}`, 'participant', P1, { year: 2025, turnover: 5 }, 'PUT'))
+    expect('goal_turnover' in fake.rows('participant_business_years')[0]).toBe(false)
+  })
+
+  it('asks for migration 022 when its columns are missing', async () => {
+    fake.missing.set('participant_profiles', { code: '42703', message: 'column participant_profiles.employees_count does not exist' })
+    const res = await PUT(req(`${base}${q(P1)}`, 'participant', P1, { employees_count: 3 }, 'PUT'))
+    expect(res.status).toBe(503)
+    expect((await res.json()).error).toBe('profile_extra_migration_required')
+  })
+})

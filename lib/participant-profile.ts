@@ -15,6 +15,9 @@ export interface ParticipantProfile {
   city: string | null
   activity: string | null
   business_name: string | null
+  employees_count: number | null
+  /** Site or social networks of the business. */
+  website: string | null
   currency: Currency
   updated_at?: string
 }
@@ -24,6 +27,8 @@ export interface BusinessYear {
   year: number
   turnover: number | null
   net_profit: number | null
+  /** What the person aims for this year; compared with `turnover` of the same year. */
+  goal_turnover?: number | null
   notes: string | null
 }
 
@@ -32,9 +37,10 @@ const TEXT_LIMITS = {
   city: 100,
   activity: 200,
   business_name: 150,
+  website: 200,
 } as const
 
-export type ProfileInput = Partial<Pick<ParticipantProfile, 'birth_date' | 'currency'>> & Partial<Record<keyof typeof TEXT_LIMITS, string | null>>
+export type ProfileInput = Partial<Pick<ParticipantProfile, 'birth_date' | 'currency' | 'employees_count'>> & Partial<Record<keyof typeof TEXT_LIMITS, string | null>>
 
 export class ProfileInputError extends Error {}
 
@@ -46,11 +52,13 @@ const clean = (v: unknown, max: number, label: string): string | null => {
   return t || null
 }
 
-export const FIELD_LABELS: Record<keyof typeof TEXT_LIMITS | 'birth_date' | 'currency', string> = {
+export const FIELD_LABELS: Record<keyof typeof TEXT_LIMITS | 'birth_date' | 'currency' | 'employees_count', string> = {
   birth_date: 'Дата рождения',
   city: 'Город',
   activity: 'Род деятельности',
   business_name: 'Название бизнеса',
+  website: 'Сайт или соцсети',
+  employees_count: 'Число сотрудников',
   currency: 'Валюта',
 }
 
@@ -69,6 +77,15 @@ export function parseProfile(body: unknown, today = new Date().toISOString().sli
     else if (v > today || v < '1900-01-01') throw new ProfileInputError('Дата рождения указана неверно')
     else out.birth_date = v
   }
+  if ('employees_count' in src) {
+    const v = src.employees_count
+    if (v == null || v === '') out.employees_count = null
+    else {
+      const n = typeof v === 'number' ? v : Number(String(v).trim())
+      if (!Number.isInteger(n) || n < 0 || n > 100000) throw new ProfileInputError('Число сотрудников: целое число от 0')
+      out.employees_count = n
+    }
+  }
   if ('currency' in src) {
     if (!isCurrency(src.currency)) throw new ProfileInputError('Выберите валюту из списка')
     out.currency = src.currency
@@ -80,6 +97,7 @@ export interface YearInput {
   year: number
   turnover: number | null
   net_profit: number | null
+  goal_turnover: number | null
   notes: string | null
 }
 
@@ -98,9 +116,11 @@ export function parseYear(body: unknown, currentYear = new Date().getFullYear())
   if (!Number.isInteger(year) || year < 1990 || year > currentYear + 1) throw new ProfileInputError(`Год: от 1990 до ${currentYear + 1}`)
   const turnover = money(src.turnover, 'Оборот')
   const net_profit = money(src.net_profit, 'Чистая прибыль')
-  if (turnover === null && net_profit === null) throw new ProfileInputError('Укажите оборот или чистую прибыль')
+  const goal_turnover = money(src.goal_turnover, 'Цель по обороту')
+  if (turnover === null && net_profit === null && goal_turnover === null) throw new ProfileInputError('Укажите оборот, чистую прибыль или цель')
   if (turnover !== null && turnover < 0) throw new ProfileInputError('Оборот не может быть отрицательным')
-  return { year, turnover, net_profit, notes: clean(src.notes, 300, 'Комментарий') }
+  if (goal_turnover !== null && goal_turnover < 0) throw new ProfileInputError('Цель не может быть отрицательной')
+  return { year, turnover, net_profit, goal_turnover, notes: clean(src.notes, 300, 'Комментарий') }
 }
 
 /** Change from `prev` to `cur` in percent; null when there is nothing to compare with. */
@@ -114,6 +134,8 @@ export interface YearDynamics extends BusinessYear {
   margin: number | null
   turnover_change: number | null
   profit_change: number | null
+  /** Turnover as a share of the goal, percent; null without both numbers or with a zero goal. */
+  goal_progress: number | null
 }
 
 /** Years in order with the margin and the change against the previous recorded year. */
@@ -123,6 +145,7 @@ export function yearlyDynamics(rows: BusinessYear[]): YearDynamics[] {
     const prev = sorted[i - 1]
     return {
       ...r,
+      goal_progress: r.goal_turnover && r.turnover != null ? Math.round((r.turnover / r.goal_turnover) * 100) : null,
       margin: r.turnover && r.net_profit != null ? Math.round((r.net_profit / r.turnover) * 1000) / 10 : null,
       turnover_change: prev ? percentChange(prev.turnover, r.turnover) : null,
       profit_change: prev ? percentChange(prev.net_profit, r.net_profit) : null,

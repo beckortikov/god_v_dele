@@ -14,6 +14,7 @@ import {
   parseYear,
   scanProblem,
   yearlyDynamics,
+  type YearDynamics,
   type BusinessYear,
   type Currency,
   type ParticipantProfile,
@@ -166,6 +167,8 @@ interface FormState {
   city: string
   activity: string
   business_name: string
+  website: string
+  employees_count: string
   currency: Currency
 }
 
@@ -174,6 +177,8 @@ const toForm = (p: ParticipantProfile | null): FormState => ({
   city: p?.city ?? '',
   activity: p?.activity ?? '',
   business_name: p?.business_name ?? '',
+  website: p?.website ?? '',
+  employees_count: p?.employees_count == null ? '' : String(p.employees_count),
   currency: p?.currency ?? 'TJS',
 })
 
@@ -189,7 +194,9 @@ function PersonalForm({ participantId, data, onSaved }: { participantId: string;
     e.preventDefault()
     setSaving(true)
     try {
-      await call(`/api/participant-profile?participant_id=${participantId}`, { method: 'PUT', json: form })
+      // Fields that were empty and stay empty are not sent: nothing to save, and the new ones need migration 022
+      const json = Object.fromEntries(Object.entries(form).filter(([k, v]) => v !== '' || initial[k as keyof FormState] !== ''))
+      await call(`/api/participant-profile?participant_id=${participantId}`, { method: 'PUT', json })
       toast.success('Профиль сохранён')
       onSaved()
     } catch (err) {
@@ -229,6 +236,12 @@ function PersonalForm({ participantId, data, onSaved }: { participantId: string;
           </Field>
           <Field label="Название бизнеса" htmlFor="pf-business">
             <Input id="pf-business" value={form.business_name} onChange={text('business_name')} placeholder="Необязательно" maxLength={150} />
+          </Field>
+          <Field label="Сколько сотрудников в бизнесе" htmlFor="pf-employees" hint="Считая вас, если работаете сами">
+            <Input id="pf-employees" type="number" inputMode="numeric" min={0} max={100000} value={form.employees_count} onChange={text('employees_count')} placeholder="Например: 5" className="num sm:w-40" />
+          </Field>
+          <Field label="Сайт или соцсети бизнеса" htmlFor="pf-website">
+            <Input id="pf-website" value={form.website} onChange={text('website')} placeholder="Например: instagram.com/мой_бизнес" maxLength={200} />
           </Field>
         </div>
       </Card>
@@ -362,10 +375,21 @@ function Delta({ value }: { value: number | null }) {
 
 const yearsWord = (n: number) => plural(n, ['год', 'года', 'лет'])
 
+/** «Цель 1 000 000 · выполнено 82%», when the year has a goal. */
+function GoalLine({ d, money }: { d: YearDynamics; money: (v: number | null) => string }) {
+  if (d.goal_turnover == null) return null
+  return (
+    <span className="mt-0.5 block text-xs font-normal text-muted-foreground">
+      Цель {money(d.goal_turnover)}
+      {d.goal_progress !== null && <> · <span className={cn(d.goal_progress >= 100 ? 'text-success' : undefined)}>{d.goal_progress}%</span></>}
+    </span>
+  )
+}
+
 function YearsCard({ participantId, years, currency, onChanged }: { participantId: string; years: BusinessYear[]; currency: Currency; onChanged: () => void }) {
   const confirm = useConfirm()
   const dynamics = React.useMemo(() => yearlyDynamics(years), [years])
-  const [editing, setEditing] = React.useState<{ year: string; turnover: string; net_profit: string; notes: string; isNew: boolean } | null>(null)
+  const [editing, setEditing] = React.useState<{ year: string; turnover: string; net_profit: string; goal: string; hadGoal: boolean; notes: string; isNew: boolean } | null>(null)
   const [saving, setSaving] = React.useState(false)
   const nextYear = React.useMemo(() => {
     const taken = new Set(years.map(y => y.year))
@@ -377,16 +401,16 @@ function YearsCard({ participantId, years, currency, onChanged }: { participantI
   const chartData = dynamics.map(d => ({ year: String(d.year), turnover: d.turnover ?? 0, profit: d.net_profit ?? 0 }))
   const money = (v: number | null) => (v === null ? '—' : formatMoney(v, currency))
 
-  const startNew = () => setEditing({ year: String(nextYear), turnover: '', net_profit: '', notes: '', isNew: true })
+  const startNew = () => setEditing({ year: String(nextYear), turnover: '', net_profit: '', goal: '', hadGoal: false, notes: '', isNew: true })
   const startEdit = (y: BusinessYear) =>
-    setEditing({ year: String(y.year), turnover: y.turnover === null ? '' : String(y.turnover), net_profit: y.net_profit === null ? '' : String(y.net_profit), notes: y.notes ?? '', isNew: false })
+    setEditing({ year: String(y.year), turnover: y.turnover === null ? '' : String(y.turnover), net_profit: y.net_profit === null ? '' : String(y.net_profit), goal: y.goal_turnover == null ? '' : String(y.goal_turnover), hadGoal: y.goal_turnover != null, notes: y.notes ?? '', isNew: false })
 
   const save = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!editing) return
     let parsed
     try {
-      parsed = parseYear({ year: editing.year, turnover: editing.turnover, net_profit: editing.net_profit, notes: editing.notes })
+      parsed = parseYear({ year: editing.year, turnover: editing.turnover, net_profit: editing.net_profit, goal_turnover: editing.goal, notes: editing.notes })
     } catch (err) {
       toast.error((err as Error).message)
       return
@@ -397,7 +421,7 @@ function YearsCard({ participantId, years, currency, onChanged }: { participantI
     }
     setSaving(true)
     try {
-      await call(`/api/participant-profile/years?participant_id=${participantId}`, { method: 'PUT', json: parsed })
+      await call(`/api/participant-profile/years?participant_id=${participantId}`, { method: 'PUT', json: editing.goal || editing.hadGoal ? parsed : { ...parsed, goal_turnover: undefined } })
       toast.success(`${parsed.year} год сохранён`)
       setEditing(null)
       onChanged()
@@ -422,7 +446,7 @@ function YearsCard({ participantId, years, currency, onChanged }: { participantI
   return (
     <Card
       title="Динамика по годам"
-      hint={`Оборот и чистая прибыль за календарный год, ${currency}. По ним видно, растёт ли бизнес.`}
+      hint={`Оборот, чистая прибыль и цель за календарный год, ${currency}. По ним видно, растёт ли бизнес.`}
       aside={
         !editing && (
           <Button type="button" size="sm" variant="outline" onClick={startNew}>
@@ -444,6 +468,9 @@ function YearsCard({ participantId, years, currency, onChanged }: { participantI
               <Input id="yr-profit" inputMode="decimal" value={editing.net_profit} onChange={e => setEditing({ ...editing, net_profit: e.target.value })} placeholder="0" className="num" />
             </Field>
           </div>
+          <Field label="Цель по обороту на этот год" htmlFor="yr-goal" hint="Необязательно: сравним с тем, что получилось">
+            <Input id="yr-goal" inputMode="decimal" value={editing.goal} onChange={e => setEditing({ ...editing, goal: e.target.value })} placeholder="0" className="num sm:w-60" />
+          </Field>
           <Field label="Комментарий" htmlFor="yr-notes">
             <Input id="yr-notes" value={editing.notes} onChange={e => setEditing({ ...editing, notes: e.target.value })} placeholder="Например: открыл вторую точку" maxLength={300} />
           </Field>
@@ -521,6 +548,7 @@ function YearsCard({ participantId, years, currency, onChanged }: { participantI
                       <dd className="mt-0.5">
                         <Delta value={d.turnover_change} />
                       </dd>
+                      <GoalLine d={d} money={money} />
                     </div>
                     <div>
                       <dt className="text-xs text-muted-foreground">Чистая прибыль</dt>
@@ -559,7 +587,10 @@ function YearsCard({ participantId, years, currency, onChanged }: { participantI
                       {d.year}
                       {d.notes && <span className="mt-0.5 block max-w-40 truncate text-xs font-normal text-muted-foreground">{d.notes}</span>}
                     </TableCell>
-                    <TableCell className="num text-right">{money(d.turnover)}</TableCell>
+                    <TableCell className="num text-right">
+                      {money(d.turnover)}
+                      <GoalLine d={d} money={money} />
+                    </TableCell>
                     <TableCell className={cn('num text-right font-medium', d.net_profit !== null && d.net_profit < 0 && 'text-destructive')}>{money(d.net_profit)}</TableCell>
                     <TableCell className="num text-right text-muted-foreground max-sm:hidden">{d.margin === null ? '—' : `${d.margin.toString().replace('.', ',')}%`}</TableCell>
                     <TableCell className="text-right max-md:hidden">

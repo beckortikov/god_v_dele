@@ -20,8 +20,20 @@ export function isMissingProfileTable(error: PgError) {
   return error.code === '42P01' || error.code === 'PGRST205' || msg.includes('does not exist') || msg.includes('could not find the table')
 }
 
+/** Migration 022 is not applied: a column it adds is missing. */
+export class ProfileExtraMigrationError extends Error {}
+
+const EXTRA_COLUMNS = ['employees_count', 'website', 'goal_turnover']
+
+export function isMissingExtraColumn(error: PgError) {
+  if (!error) return false
+  const msg = error.message || ''
+  return (error.code === '42703' || error.code === 'PGRST204' || /could not find the|does not exist/i.test(msg)) && EXTRA_COLUMNS.some(c => msg.includes(c))
+}
+
 export function checkProfile(error: PgError) {
   if (!error) return
+  if (isMissingExtraColumn(error)) throw new ProfileExtraMigrationError()
   if (isMissingProfileTable(error)) throw new ProfileMigrationError()
   throw new Error(error.message || 'Database error')
 }
@@ -30,6 +42,12 @@ export function profileError(e: unknown, context: string) {
   if (e instanceof ProfileMigrationError) {
     return NextResponse.json(
       { error: 'profile_migration_required', message: 'Профили ещё не подключены. Примените миграцию migrations/019_participant_profiles.sql в Supabase (SQL Editor).' },
+      { status: 503 }
+    )
+  }
+  if (e instanceof ProfileExtraMigrationError) {
+    return NextResponse.json(
+      { error: 'profile_extra_migration_required', message: 'Эти поля ещё не подключены. Примените миграцию migrations/022_profile_business_extra.sql в Supabase (SQL Editor).' },
       { status: 503 }
     )
   }
