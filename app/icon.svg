@@ -1,4 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512"><title>Год в деле</title>
-  <rect width="512" height="512" rx="112" fill="#3959da"/>
-  <path fill="#ffffff" fill-rule="evenodd" transform="translate(79.00 144.00) scale(1.0000)" d="M0 0H130V42H42V200H0ZM202 0H354V158H354V244H312V200H200V244H158V158H180L202 0ZM244 42H312V158H226L244 42Z"/>
+  <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#d2ff8f"/><stop offset=".45" stop-color="#a1fa4d"/><stop offset="1" stop-color="#3fae2a"/></linearGradient></defs>
+  <rect width="512" height="512" rx="112" fill="url(#g)"/>
+  <path fill="#0a1004" fill-rule="evenodd" transform="translate(79.00 144.00) scale(1.0000)" d="M0 0H130V42H42V200H0ZM202 0H354V158H354V244H312V200H200V244H158V158H180L202 0ZM244 42H312V158H226L244 42Z"/>
 </svg>
