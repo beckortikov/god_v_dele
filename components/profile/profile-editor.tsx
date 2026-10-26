@@ -8,7 +8,6 @@ import { cn } from '@/lib/utils'
 import { formatMoney, formatNumber, plural } from '@/lib/format'
 import { formatSize } from '@/lib/report-files'
 import {
-  CURRENCIES,
   MAX_SCANS,
   SCAN_ACCEPT_ATTR,
   completeness,
@@ -26,7 +25,6 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Field } from '@/components/erp/field'
 import { EmptyState } from '@/components/erp/empty-state'
@@ -144,7 +142,7 @@ function Overview({ data, variant }: { data: ProfileData; variant: 'self' | 'sta
           <p className="truncate text-base font-semibold">{data.participant.name}</p>
           <p className="mt-0.5 flex items-start gap-1.5 text-xs text-muted-foreground">
             <Lock className="mt-0.5 size-3 shrink-0" />
-            {variant === 'self' ? 'Эти данные видите только вы и администрация школы.' : 'Конфиденциально: паспорт и цифры бизнеса. Каждое открытие скана записывается в журнал.'}
+            {variant === 'self' ? 'Эти данные видите только вы и администрация школы.' : 'Конфиденциально: фото паспорта и цифры бизнеса. Каждое открытие скана записывается в журнал.'}
           </p>
         </div>
         <Badge variant={c.done === c.total ? 'success' : 'secondary'}>
@@ -166,9 +164,6 @@ function Overview({ data, variant }: { data: ProfileData; variant: 'self' | 'sta
 interface FormState {
   birth_date: string
   city: string
-  address: string
-  passport_number: string
-  passport_issued: string
   activity: string
   business_name: string
   currency: Currency
@@ -177,9 +172,6 @@ interface FormState {
 const toForm = (p: ParticipantProfile | null): FormState => ({
   birth_date: p?.birth_date ?? '',
   city: p?.city ?? '',
-  address: p?.address ?? '',
-  passport_number: p?.passport_number ?? '',
-  passport_issued: p?.passport_issued ?? '',
   activity: p?.activity ?? '',
   business_name: p?.business_name ?? '',
   currency: p?.currency ?? 'TJS',
@@ -217,9 +209,6 @@ function PersonalForm({ participantId, data, onSaved }: { participantId: string;
           <Field label="Город" htmlFor="pf-city">
             <Input id="pf-city" value={form.city} onChange={text('city')} placeholder="Например: Душанбе" maxLength={100} />
           </Field>
-          <Field label="Адрес проживания" htmlFor="pf-address" className="sm:col-span-2">
-            <Input id="pf-address" value={form.address} onChange={text('address')} placeholder="Улица, дом, квартира" maxLength={300} />
-          </Field>
           <dl className="grid grid-cols-2 gap-4 text-sm sm:col-span-2">
             <div>
               <dt className="text-xs text-muted-foreground">Телефон</dt>
@@ -233,38 +222,13 @@ function PersonalForm({ participantId, data, onSaved }: { participantId: string;
         </div>
       </Card>
 
-      <Card title="Паспорт" hint="Сканы паспорта загружаются ниже, в блоке «Сканы паспорта».">
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Серия и номер" htmlFor="pf-passport">
-            <Input id="pf-passport" value={form.passport_number} onChange={text('passport_number')} placeholder="A 1234567" maxLength={40} autoComplete="off" />
-          </Field>
-          <Field label="Кем и когда выдан" htmlFor="pf-issued">
-            <Input id="pf-issued" value={form.passport_issued} onChange={text('passport_issued')} placeholder="Например: РРУ г. Душанбе, 12.03.2019" maxLength={300} autoComplete="off" />
-          </Field>
-        </div>
-      </Card>
-
-      <Card title="Чем занимаетесь" hint="Оборот и прибыль по годам заполняются в блоке «Динамика по годам». Они считаются в выбранной валюте.">
+      <Card title="Чем занимаетесь" hint="Оборот и прибыль по годам заполняются в блоке «Динамика по годам». Цифры указываются в сомони (TJS).">
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Род деятельности" htmlFor="pf-activity">
             <Input id="pf-activity" value={form.activity} onChange={text('activity')} placeholder="Например: розничная торговля одеждой" maxLength={200} />
           </Field>
           <Field label="Название бизнеса" htmlFor="pf-business">
             <Input id="pf-business" value={form.business_name} onChange={text('business_name')} placeholder="Необязательно" maxLength={150} />
-          </Field>
-          <Field label="Валюта цифр" hint="Одна на все годы, чтобы динамика была сопоставима">
-            <Select value={form.currency} onValueChange={v => set('currency', v as Currency)}>
-              <SelectTrigger className="w-full sm:w-40">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {CURRENCIES.map(c => (
-                  <SelectItem key={c} value={c}>
-                    {c}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
           </Field>
         </div>
       </Card>
@@ -331,7 +295,7 @@ function ScansCard({ participantId, scans, unavailable, onChanged }: { participa
   }
 
   return (
-    <Card title="Сканы паспорта" hint={`Фото или PDF, до ${MAX_SCANS} файлов по 10 МБ: главный разворот и страница с пропиской.`}>
+    <Card title="Фото загранпаспорта" hint={`Фото или PDF главной страницы, до ${MAX_SCANS} файлов по 10 МБ.`}>
       {unavailable && <p className="mb-3 rounded-lg bg-warning-soft px-3 py-2 text-sm">Хранилище файлов сейчас недоступно, список сканов не загрузился.</p>}
       {scans.length > 0 && (
         <ul className="mb-3 space-y-2">

@@ -13,9 +13,6 @@ export interface ParticipantProfile {
   participant_id: string
   birth_date: string | null
   city: string | null
-  address: string | null
-  passport_number: string | null
-  passport_issued: string | null
   activity: string | null
   business_name: string | null
   currency: Currency
@@ -33,9 +30,6 @@ export interface BusinessYear {
 /** Editable fields of the profile and their limits. */
 const TEXT_LIMITS = {
   city: 100,
-  address: 300,
-  passport_number: 40,
-  passport_issued: 300,
   activity: 200,
   business_name: 150,
 } as const
@@ -55,9 +49,6 @@ const clean = (v: unknown, max: number, label: string): string | null => {
 export const FIELD_LABELS: Record<keyof typeof TEXT_LIMITS | 'birth_date' | 'currency', string> = {
   birth_date: 'Дата рождения',
   city: 'Город',
-  address: 'Адрес',
-  passport_number: 'Серия и номер паспорта',
-  passport_issued: 'Кем и когда выдан',
   activity: 'Род деятельности',
   business_name: 'Название бизнеса',
   currency: 'Валюта',
@@ -139,20 +130,19 @@ export function yearlyDynamics(rows: BusinessYear[]): YearDynamics[] {
   })
 }
 
-/** How much of the profile is filled in (the passport counts only with a scan), for «заполнено 5 из 7». */
+/** How much of the profile is filled in (the passport is its photo only), for «заполнено 4 из 5». */
 export function completeness(profile: Partial<ParticipantProfile> | null, years: number, scans: number): { done: number; total: number; missing: string[] } {
   const checks: [string, boolean][] = [
     ['Дата рождения', !!profile?.birth_date],
-    ['Город или адрес', !!(profile?.city || profile?.address)],
-    ['Паспортные данные', !!profile?.passport_number],
-    ['Скан паспорта', scans > 0],
+    ['Город', !!profile?.city],
+    ['Фото загранпаспорта', scans > 0],
     ['Род деятельности', !!profile?.activity],
     ['Оборот и прибыль за год', years > 0],
   ]
   return { done: checks.filter(([, ok]) => ok).length, total: checks.length, missing: checks.filter(([, ok]) => !ok).map(([n]) => n) }
 }
 
-// ----- Passport scans -----
+// ----- Passport photo -----
 
 export const PASSPORT_BUCKET = 'participant-docs'
 export const MAX_SCAN_BYTES = 10 * 1024 * 1024

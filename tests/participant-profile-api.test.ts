@@ -51,11 +51,14 @@ describe('saving the profile', () => {
     const empty = (await (await GET(req(`${base}${q(P1)}`, 'participant', P1))).json()).data
     expect(empty).toMatchObject({ profile: null, years: [], scans: [], scansUnavailable: false, participant: { name: 'Алиев Ахмад', phone: '+992900000001' } })
 
-    const res = await PUT(req(`${base}${q(P1)}`, 'participant', P1, { city: '  Душанбе ', passport_number: PASSPORT, activity: 'Торговля', currency: 'USD', participant_id: P2 }, 'PUT'))
+    const res = await PUT(req(`${base}${q(P1)}`, 'participant', P1, { city: '  Душанбе ', passport_number: PASSPORT, address: 'ул. Рудаки 1', activity: 'Торговля', currency: 'USD', participant_id: P2 }, 'PUT'))
     expect(res.status).toBe(200)
     // the participant_id in the body is ignored: the profile goes to the person in the query
     expect(fake.rows('participant_profiles')).toHaveLength(1)
-    expect(fake.rows('participant_profiles')[0]).toMatchObject({ participant_id: P1, city: 'Душанбе', passport_number: PASSPORT, activity: 'Торговля', currency: 'USD' })
+    expect(fake.rows('participant_profiles')[0]).toMatchObject({ participant_id: P1, city: 'Душанбе', activity: 'Торговля', currency: 'USD' })
+    // the passport number and the address are no longer collected: they are dropped, not stored
+    expect(JSON.stringify(fake.rows('participant_profiles'))).not.toContain(PASSPORT)
+    expect(JSON.stringify(fake.rows('participant_profiles'))).not.toContain('Рудаки')
 
     const back = (await (await GET(req(`${base}${q(P1)}`, 'admin'))).json()).data
     expect(back.profile).toMatchObject({ city: 'Душанбе', activity: 'Торговля' })
@@ -75,12 +78,12 @@ describe('saving the profile', () => {
     expect(fake.rows('participant_profiles')).toHaveLength(0)
   })
 
-  it('writes the names of the changed fields to the журнал, never the passport', async () => {
-    await PUT(req(`${base}${q(P1)}`, 'participant', P1, { passport_number: PASSPORT, passport_issued: 'РРУ Душанбе', city: 'Душанбе' }, 'PUT'))
+  it('writes the names of the changed fields to the журнал, never the values', async () => {
+    await PUT(req(`${base}${q(P1)}`, 'participant', P1, { passport_number: PASSPORT, city: 'Худжанд', activity: 'Торговля тканями' }, 'PUT'))
     const log = JSON.stringify(fake.rows('audit_log'))
-    expect(log).toContain('серия и номер паспорта')
+    expect(log).toContain('город')
     expect(log).not.toContain(PASSPORT)
-    expect(log).not.toContain('РРУ Душанбе')
+    expect(log).not.toContain('Худжанд')
   })
 
   it('says the migration is missing instead of failing', async () => {
@@ -177,14 +180,14 @@ describe('profile summary for the participants list', () => {
   })
 
   it('counts what each participant has filled in, and leaves out those with nothing', async () => {
-    fake.rows('participant_profiles').push({ participant_id: P1, birth_date: '1990-01-01', city: 'Душанбе', passport_number: PASSPORT, activity: 'Торговля' })
+    fake.rows('participant_profiles').push({ participant_id: P1, birth_date: '1990-01-01', city: 'Душанбе', activity: 'Торговля' })
     fake.rows('participant_business_years').push({ participant_id: P1, year: 2024 })
     fake.buckets.get('participant-docs')!.set(`${P1}/${encodeKey('p.jpg', 'image/jpeg', 1700000000000)}`, 100)
     fake.rows('participant_profiles').push({ participant_id: P2, city: 'Худжанд' })
 
     const { data } = await (await summary('wheels_manager')).json()
-    expect(data[P1]).toEqual({ done: 6, total: 6 })
-    expect(data[P2]).toEqual({ done: 1, total: 6 })
+    expect(data[P1]).toEqual({ done: 5, total: 5 })
+    expect(data[P2]).toEqual({ done: 1, total: 5 })
     expect(Object.keys(data)).toHaveLength(2)
     // no values, only counts
     expect(JSON.stringify(data)).not.toContain(PASSPORT)

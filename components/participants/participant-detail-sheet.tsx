@@ -272,7 +272,7 @@ export function ParticipantDetailSheet({
               <UserRound className="size-5 shrink-0 text-muted-foreground" />
               <span className="min-w-0 flex-1">
                 <span className="block text-sm font-semibold">Профиль и документы</span>
-                <span className="block text-xs text-muted-foreground">Паспорт и сканы, род деятельности, оборот и прибыль по годам</span>
+                <span className="block text-xs text-muted-foreground">Фото паспорта, род деятельности, оборот и прибыль по годам</span>
               </span>
               <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
             </button>

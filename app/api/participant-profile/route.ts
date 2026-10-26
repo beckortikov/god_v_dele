@@ -52,7 +52,7 @@ export async function GET(req: Request) {
   }
 }
 
-/** PUT ?participant_id=<uuid> { birth_date?, city?, address?, passport_number?, passport_issued?, activity?, business_name?, currency? } */
+/** PUT ?participant_id=<uuid> { birth_date?, city?, activity?, business_name?, currency? } */
 export async function PUT(req: Request) {
   try {
     const owner = await profileOwner(req)

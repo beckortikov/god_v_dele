@@ -81,7 +81,7 @@ export const PAGES: Record<PageType, NavPage> = {
   sprints: { id: 'sprints', label: 'Спринты', title: 'Спринты', description: 'Задачи участников потока по спринтам', icon: Flag },
   'my-today': { id: 'my-today', label: 'Сегодня', title: 'Сегодня', description: 'Главное на сегодня: уроки, задачи, оплата, колёса', icon: Sun },
   lessons: { id: 'lessons', label: 'Календарь', title: 'Календарь уроков', description: 'Расписание занятий потока и материалы к урокам', icon: CalendarRange },
-  'my-profile': { id: 'my-profile', label: 'Мой профиль', title: 'Мой профиль', description: 'Личные данные, паспорт, бизнес и динамика по годам', icon: UserRound },
+  'my-profile': { id: 'my-profile', label: 'Мой профиль', title: 'Мой профиль', description: 'Личные данные, фото паспорта, бизнес и динамика по годам', icon: UserRound },
   'my-sprint': { id: 'my-sprint', label: 'Мой спринт', title: 'Мой спринт', description: 'Задачи спринта и отчёты куратору', icon: Flag },
 }
 

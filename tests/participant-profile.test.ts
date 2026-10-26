@@ -5,8 +5,8 @@ const TODAY = '2026-10-16'
 
 describe('parseProfile', () => {
   it('trims text, turns blanks into null and keeps only known fields', () => {
-    const out = parseProfile({ city: '  Душанбе ', address: '   ', activity: 'Розничная торговля', hacker: 'x', participant_id: 'other' }, TODAY)
-    expect(out).toEqual({ city: 'Душанбе', address: null, activity: 'Розничная торговля' })
+    const out = parseProfile({ city: '  Душанбе ', business_name: '   ', activity: 'Розничная торговля', address: 'ул. Рудаки 1', passport_number: 'A1', hacker: 'x', participant_id: 'other' }, TODAY)
+    expect(out).toEqual({ city: 'Душанбе', business_name: null, activity: 'Розничная торговля' })
   })
   it('leaves absent fields absent, so a partial save does not wipe the rest', () => {
     expect(parseProfile({ city: 'Худжанд' }, TODAY)).toEqual({ city: 'Худжанд' })
@@ -82,12 +82,12 @@ describe('completeness', () => {
   it('counts what is filled and names what is missing', () => {
     const r = completeness({ birth_date: '1990-01-01', city: 'Душанбе', activity: 'Торговля' }, 0, 0)
     expect(r.done).toBe(3)
-    expect(r.total).toBe(6)
-    expect(r.missing).toEqual(['Паспортные данные', 'Скан паспорта', 'Оборот и прибыль за год'])
+    expect(r.total).toBe(5)
+    expect(r.missing).toEqual(['Фото загранпаспорта', 'Оборот и прибыль за год'])
   })
   it('is complete only with every part', () => {
-    const full = completeness({ birth_date: '1990-01-01', address: 'ул. Рудаки 1', passport_number: 'A1234567', activity: 'Торговля' }, 2, 1)
-    expect(full).toMatchObject({ done: 6, total: 6, missing: [] })
+    const full = completeness({ birth_date: '1990-01-01', city: 'Душанбе', activity: 'Торговля' }, 2, 1)
+    expect(full).toMatchObject({ done: 5, total: 5, missing: [] })
     expect(completeness(null, 0, 0).done).toBe(0)
   })
 })

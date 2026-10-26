@@ -9,7 +9,7 @@ import { ProfileEditor } from '@/components/profile/profile-editor'
 export function MyProfilePage({ participantId }: { participantId: string | null }) {
   return (
     <PageContainer className="max-w-3xl">
-      <PageHeader title="Мой профиль" description="Личные данные, паспорт и цифры вашего бизнеса по годам" />
+      <PageHeader title="Мой профиль" description="Личные данные, фото паспорта и цифры вашего бизнеса по годам" />
       {participantId ? (
         <ProfileEditor participantId={participantId} variant="self" />
       ) : (

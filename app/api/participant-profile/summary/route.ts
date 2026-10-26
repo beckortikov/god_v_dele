@@ -22,7 +22,7 @@ export async function GET(req: Request) {
     if (role !== 'admin' && role !== 'wheels_manager') return forbidden()
 
     const [{ data: profiles, error: pErr }, { data: years, error: yErr }] = await Promise.all([
-      supabaseAdmin.from('participant_profiles').select('participant_id, birth_date, city, address, passport_number, activity'),
+      supabaseAdmin.from('participant_profiles').select('participant_id, birth_date, city, activity'),
       supabaseAdmin.from('participant_business_years').select('participant_id'),
     ])
     checkProfile(pErr)
