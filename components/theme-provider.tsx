@@ -2,6 +2,7 @@
 
 import * as React from 'react'
 import { ThemeProvider as NextThemesProvider } from 'next-themes'
+import { ACCENT_KEY } from '@/lib/accent-init'
 
 export const ACCENTS = [
   { id: 'indigo', label: 'Индиго', swatch: 'oklch(0.52 0.2 268)' },
@@ -14,10 +15,6 @@ export const ACCENTS = [
 
 export type AccentId = (typeof ACCENTS)[number]['id']
 
-const ACCENT_KEY = 'ui-accent'
-
-/** Runs before paint so the saved accent never flashes. */
-export const ACCENT_INIT_SCRIPT = `try{var a=localStorage.getItem('${ACCENT_KEY}');if(a&&a!=='indigo')document.documentElement.dataset.accent=a}catch(e){}`
 
 const AccentContext = React.createContext<{
   accent: AccentId

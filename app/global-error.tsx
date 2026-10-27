@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react'
 import { ErrorFallback } from '@/components/erp/error-boundary'
-import { ACCENT_INIT_SCRIPT } from '@/components/theme-provider'
+import { ACCENT_INIT_SCRIPT } from '@/lib/accent-init'
 import './globals.css'
 
 // The root layout (and its ThemeProvider) is replaced here, so restore the
