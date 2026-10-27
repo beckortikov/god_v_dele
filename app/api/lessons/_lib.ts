@@ -111,3 +111,18 @@ export async function assertGroupInProgram(groupId: string, programId: string) {
   if (!data || data.program_id !== programId) throw new LessonNotFound('Группа не найдена в этом потоке')
 }
 
+
+/**
+ * iPhone/iPad open a downloaded attachment in the in-app browser as a blank page. A file served inline
+ * is previewed there (Excel, Word, PDF) with a share button to save it.
+ */
+export const isIosDevice = (req: Request) => /iPhone|iPad|iPod/i.test(req.headers.get('user-agent') ?? '')
+
+/** The type a stored file is served as: the extension of its key says which of the allowed ones it is. */
+export function contentTypeOf(key: string) {
+  const ext = key.slice(key.lastIndexOf('.') + 1).toLowerCase()
+  return Object.entries(MATERIAL_TYPES).find(([, e]) => e === ext)?.[0] ?? 'application/octet-stream'
+}
+
+/** `inline; filename*=` with a name that may hold Cyrillic. */
+export const inlineDisposition = (name: string) => `inline; filename*=UTF-8''${encodeURIComponent(name).replace(/['()*]/g, c => `%${c.charCodeAt(0).toString(16).toUpperCase()}`)}`

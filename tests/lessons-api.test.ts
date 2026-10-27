@@ -162,6 +162,24 @@ describe('materials', () => {
     expect((await getMaterials(call(`/api/lessons/${id}/materials?download=not-a-uuid`, 'admin'), ctx(id))).status).toBe(400)
   })
 
+  it('passes a file through inline on an iPhone, with its own name and type', async () => {
+    const key = encodeKey('План 2026.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 1700000000000)
+    fake.buckets.get('lesson-materials')!.set(`${id}/${key}`, 10)
+    const mid = '77777777-7777-4777-8777-777777777777'
+    fake.rows('lesson_materials').push({ id: mid, lesson_id: id, kind: 'file', title: 'Шаблон', file_key: key, file_name: 'План 2026.xlsx' })
+    const fetched = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('xlsx-bytes', { headers: { 'content-length': '10' } }))
+    const req = new Request(`http://test/api/lessons/${id}/materials?download=${mid}`, { headers: { cookie: who('participant', ALI), 'user-agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)' } })
+    const res = await getMaterials(req, ctx(id))
+    expect(res.status).toBe(200)
+    expect(res.headers.get('content-type')).toBe('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    expect(res.headers.get('content-disposition')).toBe(`inline; filename*=UTF-8''${encodeURIComponent('План 2026.xlsx')}`)
+    expect(await res.text()).toBe('xlsx-bytes')
+    // the storage is unreachable: the plain link still works
+    fetched.mockRejectedValue(new Error('offline'))
+    expect((await getMaterials(req, ctx(id))).status).toBe(302)
+    fetched.mockRestore()
+  })
+
   it('lists materials without storage keys and removes one with its file', async () => {
     const key = encodeKey('Урок.pdf', 'application/pdf', 1700000000000)
     fake.buckets.get('lesson-materials')!.set(`${id}/${key}`, 10)

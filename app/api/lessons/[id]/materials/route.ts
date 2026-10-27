@@ -4,7 +4,7 @@ import { getActor, logAudit } from '@/lib/audit'
 import { forbidden } from '@/lib/api-auth'
 import { decodeName, isReportKey } from '@/lib/report-files'
 import { MAX_MATERIALS, LessonInputError, parseLinkMaterial } from '@/lib/lessons'
-import { LESSON_BUCKET, LessonBadRequest, LessonNotFound, MATERIALS, checkLessons, denyLesson, ensureLessonBucket, getLesson, isLessonStaff, lessonsError, mayOpenLesson, publicMaterial, requireUuid } from '../../_lib'
+import { LESSON_BUCKET, LessonBadRequest, LessonNotFound, MATERIALS, checkLessons, contentTypeOf, denyLesson, ensureLessonBucket, getLesson, inlineDisposition, isIosDevice, isLessonStaff, lessonsError, mayOpenLesson, publicMaterial, requireUuid } from '../../_lib'
 
 export const dynamic = 'force-dynamic'
 
@@ -26,8 +26,23 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       checkLessons(error)
       if (!m || m.kind !== 'file' || !isReportKey(m.file_key)) throw new LessonNotFound('Материал не найден')
       await ensureLessonBucket()
-      const { data, error: sErr } = await supabaseAdmin.storage.from(LESSON_BUCKET).createSignedUrl(`${id}/${m.file_key}`, 60, { download: m.file_name || decodeName(m.file_key) })
+      const name = m.file_name || decodeName(m.file_key)
+      const { data, error: sErr } = await supabaseAdmin.storage.from(LESSON_BUCKET).createSignedUrl(`${id}/${m.file_key}`, 60, { download: name })
       if (sErr || !data) throw new LessonNotFound('Файл не найден в хранилище')
+      if (isIosDevice(req)) {
+        // an attachment opens as a blank page in the in-app browser of an iPhone: pass the file through, inline
+        try {
+          const file = await fetch(data.signedUrl)
+          if (file.ok && file.body) {
+            const headers: Record<string, string> = { 'Content-Type': contentTypeOf(m.file_key), 'Content-Disposition': inlineDisposition(name), 'Cache-Control': 'private, no-store' }
+            const length = file.headers.get('content-length')
+            if (length) headers['Content-Length'] = length
+            return new Response(file.body, { headers })
+          }
+        } catch {
+          // fall back to the plain link below
+        }
+      }
       return NextResponse.redirect(data.signedUrl, 302)
     }
 
