@@ -48,7 +48,7 @@ export function LessonsCalendarSection({ participantId }: { participantId: strin
           <LessonCalendar year={ym.year} month={ym.month} onMonthChange={(year, month) => setYm({ year, month })} lessons={lessons} onOpen={l => setOpen(l as MyLesson)} />
         </>
       )}
-      <LessonViewSheet open={!!open} onOpenChange={o => !o && setOpen(null)} lesson={open} materials={open?.materials ?? []} />
+      <LessonViewSheet open={!!open} onOpenChange={o => !o && setOpen(null)} lesson={open} materials={open?.materials ?? []} participantId={participantId} />
     </section>
   )
 }

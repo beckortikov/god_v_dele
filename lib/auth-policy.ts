@@ -72,6 +72,9 @@ const RULES: Rule[] = [
   // Lesson calendar: curators plan lessons and attach materials; a participant opens lessons meant for them
   // (the route checks program and group) and lists them through /api/my-lessons.
   { prefix: '/api/lessons', read: ['wheels_manager', 'manager', 'participant'], write: ['wheels_manager', 'manager'] },
+  // Lesson reviews: a participant reads and sends their own; the summary is for the curators (admin passes everywhere).
+  { prefix: '/api/lesson-feedback/summary', read: ['wheels_manager', 'manager'], write: NONE },
+  { prefix: '/api/lesson-feedback', read: ['participant'], write: ['participant'], scope: { kind: 'self-participant', param: 'participant_id' } },
   { prefix: '/api/my-lessons', read: ['participant'], write: NONE, scope: { kind: 'self-participant', param: 'participant_id' } },
 
   { prefix: '/api/programs', read: ['finance', 'wheels_manager', 'manager'], write: ['finance'] },

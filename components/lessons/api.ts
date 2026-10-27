@@ -10,6 +10,6 @@ export async function call<T = any>(url: string, init?: RequestInit & { json?: u
   })
   const body = await res.json().catch(() => ({}))
   if (res.status === 503 && body?.error === 'lessons_migration_required') throw new LessonsMigrationRequired(body.message)
-  if (!res.ok || body?.error) throw new Error(body?.error || `Сервер ответил ${res.status}`)
+  if (!res.ok || body?.error) throw new Error((res.status === 503 && body?.message) || body?.error || `Сервер ответил ${res.status}`)
   return body as T
 }

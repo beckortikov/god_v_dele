@@ -2,7 +2,7 @@
 
 import * as React from 'react'
 import { toast } from 'sonner'
-import { CalendarDays, Loader2, MapPin, Trash2, User, Video } from 'lucide-react'
+import { CalendarDays, ClipboardCheck, Loader2, MapPin, Trash2, User, Video } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { MAX_REPEAT_WEEKS, fromFormParts, lessonState, lessonWhen, toFormParts, type Lesson, type LessonFormat, type LessonMaterial } from '@/lib/lessons'
 import { Button } from '@/components/ui/button'
@@ -14,7 +14,10 @@ import { Sheet, SheetBody, SheetContent, SheetDescription, SheetFooter, SheetHea
 import { Field, FieldGroup } from '@/components/erp/field'
 import { Segmented } from '@/components/erp/segmented'
 import { useConfirm } from '@/components/erp/confirm'
+import { average, SCORE_KEYS } from '@/lib/lesson-feedback'
 import { call } from './api'
+import { useMyFeedback } from './feedback-api'
+import { LessonFeedbackSheet } from './lesson-feedback-sheet'
 import { MaterialsEditor, MaterialsList } from './materials'
 
 // ---------------------------------------------------------------------------
@@ -26,12 +29,15 @@ export function LessonViewSheet({
   lesson,
   materials,
   groupName,
+  participantId,
 }: {
   open: boolean
   onOpenChange: (o: boolean) => void
   lesson: Lesson | null
   materials: LessonMaterial[]
   groupName?: string
+  /** The participant who is looking: with it a started lesson offers «Оценить урок». */
+  participantId?: string
 }) {
   const state = lesson ? lessonState(lesson) : 'upcoming'
   return (
@@ -76,6 +82,8 @@ export function LessonViewSheet({
                 </Button>
               )}
 
+              {participantId && state !== 'upcoming' && <FeedbackBlock lesson={lesson} participantId={participantId} />}
+
               {lesson.description && (
                 <section>
                   <h3 className="mb-1.5 text-sm font-semibold">О чём урок</h3>
@@ -92,6 +100,23 @@ export function LessonViewSheet({
         )}
       </SheetContent>
     </Sheet>
+  )
+}
+
+/** «Оценить урок» / «Вы оценили урок на 8,6 из 10» in the lesson card of a participant. */
+function FeedbackBlock({ lesson, participantId }: { lesson: Lesson; participantId: string }) {
+  const feedback = useMyFeedback(participantId)
+  const [open, setOpen] = React.useState(false)
+  if (!feedback.available) return null
+  const mine = feedback.given.get(lesson.id) ?? null
+  const score = mine ? average(SCORE_KEYS.map(k => mine[k])) : null
+  return (
+    <>
+      <Button variant={mine ? 'outline' : 'default'} size="lg" className="w-full" disabled={!feedback.ready} onClick={() => setOpen(true)}>
+        <ClipboardCheck /> {mine ? `Вы оценили урок: ${String(score).replace('.', ',')} из 10. Изменить` : 'Оценить урок'}
+      </Button>
+      <LessonFeedbackSheet open={open} onOpenChange={setOpen} lesson={lesson} participantId={participantId} existing={mine} onSent={feedback.remember} />
+    </>
   )
 }
 

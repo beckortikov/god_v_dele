@@ -8,11 +8,13 @@ import type { GroupsData } from '@/app/api/sprints/groups/route'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { PageContainer, PageHeader, Panel } from '@/components/erp/page-header'
+import { Segmented } from '@/components/erp/segmented'
 import { EmptyState } from '@/components/erp/empty-state'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useStoredState } from '@/components/sprints/shared'
 import { LessonCalendar } from './lesson-calendar'
 import { LessonEditSheet } from './lesson-sheets'
+import { LessonReviews } from './lesson-reviews'
 import { LessonsMigrationRequired, call } from './api'
 
 interface Program {
@@ -32,6 +34,7 @@ export function LessonsPage() {
   const [groups, setGroups] = React.useState<GroupsData | null>(null)
   const [groupFilter, setGroupFilter] = React.useState(ALL)
   const [migration, setMigration] = React.useState(false)
+  const [tab, setTab] = useStoredState<'calendar' | 'reviews'>('lessons-tab', 'calendar')
 
   const [sheetOpen, setSheetOpen] = React.useState(false)
   const [editing, setEditing] = React.useState<LessonWithCount | null>(null)
@@ -94,7 +97,7 @@ export function LessonsPage() {
   const header = (
     <PageHeader
       title="Календарь уроков"
-      description="Расписание занятий потока и материалы к ним"
+      description="Расписание занятий потока, материалы к ним и отзывы участников"
       actions={
         <>
           {programs && programs.length > 0 && (
@@ -127,9 +130,21 @@ export function LessonsPage() {
               </SelectContent>
             </Select>
           )}
-          <Button size="sm" disabled={!programId || migration} onClick={() => openNew(localDayKey(new Date()))}>
-            <Plus /> Новый урок
-          </Button>
+          <Segmented
+            size="sm"
+            value={tab}
+            onChange={setTab}
+            aria-label="Раздел"
+            options={[
+              { value: 'calendar', label: 'Календарь' },
+              { value: 'reviews', label: 'Отзывы' },
+            ]}
+          />
+          {tab === 'calendar' && (
+            <Button size="sm" disabled={!programId || migration} onClick={() => openNew(localDayKey(new Date()))}>
+              <Plus /> Новый урок
+            </Button>
+          )}
         </>
       }
     />
@@ -161,6 +176,15 @@ export function LessonsPage() {
         <Panel>
           <EmptyState icon={CalendarRange} title="Нет программ" description="Сначала создайте программу, и для неё можно будет планировать уроки." />
         </Panel>
+      </PageContainer>
+    )
+  }
+
+  if (tab === 'reviews') {
+    return (
+      <PageContainer>
+        {header}
+        <LessonReviews programId={programId} groupFilter={groupFilter} groupName={groupList.length ? groupName : undefined} />
       </PageContainer>
     )
   }
