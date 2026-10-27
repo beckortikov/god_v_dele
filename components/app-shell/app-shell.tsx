@@ -53,6 +53,7 @@ import { CommandPalette } from '@/components/app-shell/command-palette'
 import { NotificationsBell } from '@/components/app-shell/notifications-bell'
 import { useTabBadges } from '@/components/app-shell/use-tab-badges'
 import { display } from '@/components/landing/fonts'
+import { PARTICIPANT_PAYMENTS_VISIBLE } from '@/lib/feature-flags'
 
 export interface CreateAction {
   id: string
@@ -403,12 +404,16 @@ function ParticipantTabBar({
   onNavigate: (p: PageType) => void
   onOpenSection: (s: NavSection) => void
 }) {
+  // A tab whose page the participant may not open (payments are switched off) is not drawn
+  const allowed = new Set(sections.flatMap(s => s.pages))
+  const tabs = PARTICIPANT_TABS.filter(t => !t.page || allowed.has(t.page))
   return (
     <nav
       aria-label="Разделы"
-      className="relative z-30 grid shrink-0 grid-cols-5 border-t border-nav-border bg-nav px-1.5 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] backdrop-blur-xl lg:hidden"
+      style={{ gridTemplateColumns: `repeat(${tabs.length}, minmax(0, 1fr))` }}
+      className="relative z-30 grid shrink-0 border-t border-nav-border bg-nav px-1.5 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] backdrop-blur-xl lg:hidden"
     >
-      {PARTICIPANT_TABS.map(t => {
+      {tabs.map(t => {
         const section = t.section ? sections.find(s => s.id === t.section) : undefined
         if (t.section && !section) return null
         const active = t.page ? page === t.page : !!section?.pages.includes(page)

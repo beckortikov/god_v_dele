@@ -1,3 +1,4 @@
+import { PARTICIPANT_PAYMENTS_VISIBLE } from '@/lib/feature-flags'
 import { describe, expect, it } from 'vitest'
 import {
   PAGES,
@@ -52,7 +53,7 @@ describe('getSections', () => {
     const cabinet = (r: UserRole) => getSections(r).find(s => s.id === 'cabinet')?.pages
     expect(cabinet('manager')).toEqual(['employee-dashboard', 'manager-dashboard'])
     expect(cabinet('employee')).toEqual(['employee-dashboard'])
-    expect(cabinet('participant')).toEqual(['my-today', 'my-sprint', 'my-payments', 'my-profile'])
+    expect(cabinet('participant')).toEqual(['my-today', 'my-sprint', ...(PARTICIPANT_PAYMENTS_VISIBLE ? ['my-payments'] : []), 'my-profile'])
   })
 })
 
@@ -77,7 +78,8 @@ describe('getAllowedPages', () => {
 
   it('every page is reachable by at least one role', () => {
     const all = new Set(ROLES.flatMap(getAllowedPages))
-    for (const id of Object.keys(PAGES)) expect(all.has(id as PageType)).toBe(true)
+    // «Мои оплаты» is parked behind the flag
+    for (const id of Object.keys(PAGES)) expect(all.has(id as PageType) || (id === 'my-payments' && !PARTICIPANT_PAYMENTS_VISIBLE)).toBe(true)
   })
 
   it.each(ROLES.filter(r => r !== 'admin'))('admin-only pages are hidden from %s', role => {
@@ -107,7 +109,7 @@ describe('getAllowedPages', () => {
   it('only participants see «Сегодня», «Мой спринт», «Мои оплаты» and «Мой профиль»', () => {
     for (const role of ROLES) {
       for (const page of ['my-today', 'my-sprint', 'my-payments', 'my-profile'] as PageType[]) {
-        expect(getAllowedPages(role).includes(page)).toBe(role === 'participant')
+        expect(getAllowedPages(role).includes(page)).toBe(role === 'participant' && (page !== 'my-payments' || PARTICIPANT_PAYMENTS_VISIBLE))
       }
     }
   })
@@ -159,5 +161,13 @@ describe('findSection / metadata', () => {
     for (const role of ROLES) {
       expect(getAllowedPages(role).includes('lessons')).toBe(['admin', 'wheels_manager', 'manager'].includes(role))
     }
+  })
+})
+
+describe('payments are hidden from participants for now', () => {
+  it('is switched off, and with it off the participant has no payments page', () => {
+    // Flip lib/feature-flags.ts to bring «Мои оплаты» back; the other tests follow the flag
+    expect(PARTICIPANT_PAYMENTS_VISIBLE).toBe(false)
+    expect(getAllowedPages('participant')).not.toContain('my-payments')
   })
 })

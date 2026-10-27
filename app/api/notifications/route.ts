@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-client'
 import { participantSprintNotices, reviewQueueNotices, type OpenAssignment } from '@/lib/sprint-notices'
 import { isMissingSprintTable } from '@/app/api/sprints/_lib/store'
+import { PARTICIPANT_PAYMENTS_VISIBLE } from '@/lib/feature-flags'
 
 /**
  * GET /api/notifications?role=&userId=&employeeId=&participantId=
@@ -529,7 +530,8 @@ export async function GET(req: Request) {
         tasks.push(Promise.resolve(birthdays(employees, today, null)))
         break
       case 'participant':
-        if (participantId) tasks.push(mySprintWork(participantId, today), myDebt(participantId, now))
+        if (participantId) tasks.push(mySprintWork(participantId, today))
+        if (PARTICIPANT_PAYMENTS_VISIBLE) tasks.push(myDebt(participantId, now))
         break
     }
 

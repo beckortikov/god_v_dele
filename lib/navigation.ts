@@ -1,3 +1,4 @@
+import { PARTICIPANT_PAYMENTS_VISIBLE } from '@/lib/feature-flags'
 import {
   LayoutDashboard,
   Users,
@@ -112,7 +113,7 @@ export function getSections(role: UserRole): NavSection[] {
     case 'employee':
       return [{ id: 'cabinet', label: 'Кабинет', icon: UserCircle2, pages: ['employee-dashboard'] }, S.wheels]
     case 'participant':
-      return [{ id: 'cabinet', label: 'Кабинет', icon: UserCircle2, pages: ['my-today', 'my-sprint', 'my-payments', 'my-profile'] }, S.wheels]
+      return [{ id: 'cabinet', label: 'Кабинет', icon: UserCircle2, pages: ['my-today', 'my-sprint', ...(PARTICIPANT_PAYMENTS_VISIBLE ? (['my-payments'] as PageType[]) : []), 'my-profile'] }, S.wheels]
   }
 }
 

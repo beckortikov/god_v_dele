@@ -5,6 +5,7 @@ import { tasksNeedingAttention, type MySprintData } from '@/lib/sprints'
 import { todayISO } from '@/lib/format'
 import type { PageType } from '@/lib/navigation'
 import { buildView, useMyPayments } from '@/components/cabinet/my-payments-page'
+import { PARTICIPANT_PAYMENTS_VISIBLE } from '@/lib/feature-flags'
 
 /** Don't ask again sooner than this when the participant just moves between tabs. */
 const REFRESH_MS = 60_000
@@ -15,7 +16,7 @@ const REFRESH_MS = 60_000
  * (at most once a minute) and when they come back to the app. Silent on any error: a badge is a hint.
  */
 export function useTabBadges(participantId: string | null, page: PageType): Partial<Record<PageType, number>> {
-  const pay = useMyPayments(participantId)
+  const pay = useMyPayments(PARTICIPANT_PAYMENTS_VISIBLE ? participantId : null)
   const retryPayments = pay.retry
   const [sprint, setSprint] = React.useState(0)
   const lastLoad = React.useRef(Date.now())
@@ -53,5 +54,5 @@ export function useTabBadges(participantId: string | null, page: PageType): Part
 
   const debtMonths = React.useMemo(() => (pay.participant ? buildView(pay.participant, pay.program, pay.payments, pay.receipts).debtMonths : 0), [pay.participant, pay.program, pay.payments, pay.receipts])
 
-  return { 'my-sprint': sprint, 'my-payments': debtMonths }
+  return PARTICIPANT_PAYMENTS_VISIBLE ? { 'my-sprint': sprint, 'my-payments': debtMonths } : { 'my-sprint': sprint }
 }

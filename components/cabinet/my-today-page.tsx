@@ -24,6 +24,7 @@ import { NextLessonCard } from './next-lesson'
 import { LessonsCalendarSection } from './lessons-calendar-section'
 import { api } from '@/components/sprints/shared'
 import { buildView, useMyPayments } from './my-payments-page'
+import { PARTICIPANT_PAYMENTS_VISIBLE } from '@/lib/feature-flags'
 
 const WEEKDAYS = ['воскресенье', 'понедельник', 'вторник', 'среда', 'четверг', 'пятница', 'суббота']
 const MONTHS_GEN = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря']
@@ -43,7 +44,8 @@ export function MyTodayPage({ participantId, participantName }: { participantId:
   const [sprint, setSprint] = React.useState<MySprintData | null>(null)
   const [sprintUnavailable, setSprintUnavailable] = React.useState(false)
   const [busy, setBusy] = React.useState<string | null>(null)
-  const pay = useMyPayments(participantId)
+  // Payments are switched off for participants: do not even load them
+  const pay = useMyPayments(PARTICIPANT_PAYMENTS_VISIBLE ? participantId : null)
 
   const load = React.useCallback(async () => {
     if (!participantId) return
@@ -158,7 +160,8 @@ export function MyTodayPage({ participantId, participantName }: { participantId:
       {/* This week */}
       <section>
         <SectionHeader title="Ещё важное" />
-        <div className="grid grid-cols-2 gap-3">
+        <div className={cn('grid gap-3', PARTICIPANT_PAYMENTS_VISIBLE ? 'grid-cols-2' : 'grid-cols-1')}>
+          {PARTICIPANT_PAYMENTS_VISIBLE && (
           <button
             type="button"
             onClick={() => navigate('my-payments')}
@@ -172,6 +175,7 @@ export function MyTodayPage({ participantId, participantName }: { participantId:
             </span>
             <PaymentLine loading={pay.loading} error={!!pay.error} schedule={schedule} />
           </button>
+          )}
           <button
             type="button"
             onClick={() => navigate('life-wheel')}
