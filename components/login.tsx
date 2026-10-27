@@ -5,6 +5,7 @@ import Image from 'next/image'
 import { AlertCircle, ArrowLeft, Eye, EyeOff, Loader2, Send } from 'lucide-react'
 import { display } from '@/components/landing/fonts'
 import '@/components/landing/landing.css'
+import { isIosApp } from '@/lib/native-app'
 
 interface SignedInUser {
   role: string
@@ -192,6 +193,9 @@ export function LoginPage({ onLoginSuccess, onBack }: { onLoginSuccess: () => vo
               <input
                 id="login"
                 autoComplete="username"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
                 autoFocus
                 value={login}
                 onChange={e => setLogin(e.target.value)}
@@ -227,12 +231,14 @@ export function LoginPage({ onLoginSuccess, onBack }: { onLoginSuccess: () => vo
             </button>
           </form>
 
-          <TelegramSignIn
-            onSignedIn={user => {
-              rememberUser(user)
-              onLoginSuccess()
-            }}
-          />
+          {!isIosApp() && (
+            <TelegramSignIn
+              onSignedIn={user => {
+                rememberUser(user)
+                onLoginSuccess()
+              }}
+            />
+          )}
 
           {onBack && (
             <button type="button" onClick={onBack} className="login-back">

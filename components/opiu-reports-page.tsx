@@ -114,8 +114,8 @@ export default function OPiUReportsPage() {
     if (!reportData) return
     setExporting(kind)
     try {
-      if (kind === 'pdf') exportOpiuToPDF(reportData)
-      else exportOpiuToExcel(reportData)
+      if (kind === 'pdf') await exportOpiuToPDF(reportData)
+      else await exportOpiuToExcel(reportData)
     } catch (err: any) {
       toast.error('Не удалось сформировать файл', { description: err?.message })
     } finally {

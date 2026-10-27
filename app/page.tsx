@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo, useCallback, type ReactNode } from 'react'
+import dynamic from 'next/dynamic'
 import { PAGES, getAllowedPages, getDefaultPage, type UserRole } from '@/lib/navigation'
 import { NavProvider, useNav } from '@/components/app-shell/nav-context'
 import { AppShell } from '@/components/app-shell/app-shell'
@@ -8,37 +9,40 @@ import { ConfirmProvider } from '@/components/erp/confirm'
 import { ErrorBoundary } from '@/components/erp/error-boundary'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { clearLocalSession, installAuthGuard } from '@/lib/client-actor'
-import { Dashboard } from '@/components/dashboard'
-import { ParticipantsPage } from '@/components/participants-page'
-import { IncomeExpensesPage } from '@/components/income-expenses-page'
-import { PlanFactPage } from '@/components/plan-fact-page'
-import { OfflineEventsPage } from '@/components/offline-events-page'
-import { BalanceForecastPage } from '@/components/balance-forecast-page'
-import { ProgramsPage } from '@/components/programs-page'
-import OPiUReportsPage from '@/components/opiu-reports-page'
-import { LoginPage } from '@/components/login'
-import { LandingPage } from '@/components/landing/landing-page'
-import { LifeWheelPage } from '@/components/life-wheel-page'
-import { LifeBalancePage } from '@/components/life-balance-page'
-import { BusinessWheelPage } from '@/components/business-wheel-page'
+import { hideNativeSplash, isIosApp } from '@/lib/native-app'
 
-import { HRDashboard } from '@/components/hr/hr-dashboard'
-import { EmployeesPage } from '@/components/hr/employees-page'
-import { SchedulePage } from '@/components/hr/schedule-page'
-import { TimesheetPage } from '@/components/hr/timesheet-page'
-import { PayrollPage } from '@/components/hr/payroll-page'
-import { VacationsPage } from '@/components/hr/vacations-page'
-import { UsersPage } from '@/components/admin/users-page'
-import { EmployeeDashboard } from '@/components/employee/employee-dashboard'
-import { ManagerDashboard } from '@/components/employee/manager-dashboard'
-import { AnalyticsPage } from '@/components/reports/analytics-page'
-import { AuditPage } from '@/components/admin/audit-page'
-import { MyPaymentsPage } from '@/components/cabinet/my-payments-page'
-import { MySprintPage } from '@/components/cabinet/my-sprint-page'
-import { MyProfilePage } from '@/components/cabinet/my-profile-page'
-import { LessonsPage } from '@/components/lessons/lessons-page'
-import { MyTodayPage } from '@/components/cabinet/my-today-page'
-import { SprintsPage } from '@/components/sprints/sprints-page'
+// Every screen is its own chunk: a participant opening the cabinet must not download the admin pages,
+// charts and the PDF/Excel exporters (one 3.4 MB bundle before this).
+const Dashboard = dynamic(() => import('@/components/dashboard').then(m => m.Dashboard), { loading: PageSpinner })
+const ParticipantsPage = dynamic(() => import('@/components/participants-page').then(m => m.ParticipantsPage), { loading: PageSpinner })
+const IncomeExpensesPage = dynamic(() => import('@/components/income-expenses-page').then(m => m.IncomeExpensesPage), { loading: PageSpinner })
+const PlanFactPage = dynamic(() => import('@/components/plan-fact-page').then(m => m.PlanFactPage), { loading: PageSpinner })
+const OfflineEventsPage = dynamic(() => import('@/components/offline-events-page').then(m => m.OfflineEventsPage), { loading: PageSpinner })
+const BalanceForecastPage = dynamic(() => import('@/components/balance-forecast-page').then(m => m.BalanceForecastPage), { loading: PageSpinner })
+const ProgramsPage = dynamic(() => import('@/components/programs-page').then(m => m.ProgramsPage), { loading: PageSpinner })
+const OPiUReportsPage = dynamic(() => import('@/components/opiu-reports-page'), { loading: PageSpinner })
+const LoginPage = dynamic(() => import('@/components/login').then(m => m.LoginPage), { loading: ScreenSpinner })
+const LandingPage = dynamic(() => import('@/components/landing/landing-page').then(m => m.LandingPage), { loading: ScreenSpinner })
+const LifeWheelPage = dynamic(() => import('@/components/life-wheel-page').then(m => m.LifeWheelPage), { loading: PageSpinner })
+const LifeBalancePage = dynamic(() => import('@/components/life-balance-page').then(m => m.LifeBalancePage), { loading: PageSpinner })
+const BusinessWheelPage = dynamic(() => import('@/components/business-wheel-page').then(m => m.BusinessWheelPage), { loading: PageSpinner })
+const HRDashboard = dynamic(() => import('@/components/hr/hr-dashboard').then(m => m.HRDashboard), { loading: PageSpinner })
+const EmployeesPage = dynamic(() => import('@/components/hr/employees-page').then(m => m.EmployeesPage), { loading: PageSpinner })
+const SchedulePage = dynamic(() => import('@/components/hr/schedule-page').then(m => m.SchedulePage), { loading: PageSpinner })
+const TimesheetPage = dynamic(() => import('@/components/hr/timesheet-page').then(m => m.TimesheetPage), { loading: PageSpinner })
+const PayrollPage = dynamic(() => import('@/components/hr/payroll-page').then(m => m.PayrollPage), { loading: PageSpinner })
+const VacationsPage = dynamic(() => import('@/components/hr/vacations-page').then(m => m.VacationsPage), { loading: PageSpinner })
+const UsersPage = dynamic(() => import('@/components/admin/users-page').then(m => m.UsersPage), { loading: PageSpinner })
+const EmployeeDashboard = dynamic(() => import('@/components/employee/employee-dashboard').then(m => m.EmployeeDashboard), { loading: PageSpinner })
+const ManagerDashboard = dynamic(() => import('@/components/employee/manager-dashboard').then(m => m.ManagerDashboard), { loading: PageSpinner })
+const AnalyticsPage = dynamic(() => import('@/components/reports/analytics-page').then(m => m.AnalyticsPage), { loading: PageSpinner })
+const AuditPage = dynamic(() => import('@/components/admin/audit-page').then(m => m.AuditPage), { loading: PageSpinner })
+const MyPaymentsPage = dynamic(() => import('@/components/cabinet/my-payments-page').then(m => m.MyPaymentsPage), { loading: PageSpinner })
+const MySprintPage = dynamic(() => import('@/components/cabinet/my-sprint-page').then(m => m.MySprintPage), { loading: PageSpinner })
+const MyProfilePage = dynamic(() => import('@/components/cabinet/my-profile-page').then(m => m.MyProfilePage), { loading: PageSpinner })
+const LessonsPage = dynamic(() => import('@/components/lessons/lessons-page').then(m => m.LessonsPage), { loading: PageSpinner })
+const MyTodayPage = dynamic(() => import('@/components/cabinet/my-today-page').then(m => m.MyTodayPage), { loading: PageSpinner })
+const SprintsPage = dynamic(() => import('@/components/sprints/sprints-page').then(m => m.SprintsPage), { loading: PageSpinner })
 
 interface SessionUser {
   role: UserRole
@@ -80,8 +84,9 @@ export default function Home() {
   useEffect(() => {
     installAuthGuard(showLogin)
     setSession(readSession())
-    if (new URLSearchParams(window.location.search).has('login')) setLoginRequested(true)
+    if (new URLSearchParams(window.location.search).has('login') || isIosApp()) setLoginRequested(true)
     setIsLoading(false)
+    hideNativeSplash()
   }, [showLogin])
 
   const handleLogout = () => {
@@ -90,17 +95,13 @@ export default function Home() {
     showLogin()
   }
 
-  if (isLoading) {
-    return (
-      <div className="flex h-dvh w-full items-center justify-center bg-background">
-        <div className="size-7 animate-spin rounded-full border-[3px] border-primary border-t-transparent" />
-      </div>
-    )
-  }
+  if (isLoading) return <ScreenSpinner />
 
   if (!session) {
     if (!loginRequested) return <LandingPage onLogin={() => setLoginRequested(true)} />
-    return <LoginPage onLoginSuccess={() => setSession(readSession())} onBack={() => setLoginRequested(false)} />
+    // The iOS app has no landing to go back to
+    const onBack = isIosApp() ? undefined : () => setLoginRequested(false)
+    return <LoginPage onLoginSuccess={() => setSession(readSession())} onBack={onBack} />
   }
 
   return <AuthedApp session={session} onLogout={handleLogout} />
@@ -167,4 +168,21 @@ function PageRouter({ session }: { session: SessionUser }) {
     case 'my-profile': return <MyProfilePage participantId={session.participantId} />
     case 'my-today': return <MyTodayPage participantId={session.participantId} participantName={session.fullName} />
   }
+}
+
+function ScreenSpinner() {
+  return (
+    <div className="flex h-dvh w-full items-center justify-center bg-background">
+      <div className="size-7 animate-spin rounded-full border-[3px] border-primary border-t-transparent" />
+    </div>
+  )
+}
+
+/** Shown inside the app shell while a screen's chunk downloads. */
+function PageSpinner() {
+  return (
+    <div className="flex min-h-[50vh] w-full items-center justify-center">
+      <div className="size-7 animate-spin rounded-full border-[3px] border-primary border-t-transparent" />
+    </div>
+  )
 }

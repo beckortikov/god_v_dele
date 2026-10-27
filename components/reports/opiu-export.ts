@@ -2,17 +2,15 @@
 
 // PDF / XLSX export of the ОПиУ report. The document layout (including the
 // colours inside the generated PDF) is unchanged from the original page.
-import pdfMake from 'pdfmake/build/pdfmake'
-import * as pdfFonts from 'pdfmake/build/vfs_fonts'
-import * as XLSX from 'xlsx'
+// pdfmake with its fonts and SheetJS weigh about 2 MB, so they load only when a file is actually exported.
 
-// Configure pdfMake with fonts
-if (typeof window !== 'undefined') {
-    (pdfMake as any).vfs = pdfFonts
-}
-
-export function exportOpiuToPDF(reportData: any) {
+export async function exportOpiuToPDF(reportData: any) {
     if (!reportData) return
+    const [{ default: pdfMake }, pdfFonts] = await Promise.all([
+        import('pdfmake/build/pdfmake'),
+        import('pdfmake/build/vfs_fonts'),
+    ])
+    ;(pdfMake as any).vfs = pdfFonts
 
     const docDefinition: any = {
         content: [
@@ -210,8 +208,9 @@ export function exportOpiuToPDF(reportData: any) {
     pdfMake.createPdf(docDefinition).download(`opiu-report-${reportData.period.month}-${reportData.period.year}.pdf`)
 }
 
-export function exportOpiuToExcel(reportData: any) {
+export async function exportOpiuToExcel(reportData: any) {
     if (!reportData) return
+    const XLSX = await import('xlsx')
 
     const wb = XLSX.utils.book_new()
 
