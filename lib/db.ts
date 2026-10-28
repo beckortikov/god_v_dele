@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import { createPostgresClient, type QueryBuilder } from '@/lib/db-postgres'
+import { createFileStorage } from '@/lib/file-storage'
 
 /**
  * Server-side data access. Only for API routes and server code, never for client components.
@@ -9,7 +10,8 @@ import { createPostgresClient, type QueryBuilder } from '@/lib/db-postgres'
  *
  *   const { data, error } = await db.from('participants').select('id, name').eq('status', 'active')
  *
- * Files stay on Supabase Storage until FILES_URL points at the file service on the server.
+ * Files go to the file service on the server when FILES_URL is set (lib/file-storage.ts),
+ * otherwise to Supabase Storage.
  */
 
 export type { DbError, DbResult, DbRow } from '@/lib/db-postgres'
@@ -35,10 +37,11 @@ function supabaseClient(): SupabaseClient {
 }
 
 const postgres = process.env.DATABASE_URL ? createPostgresClient() : null
+const files = process.env.FILES_URL ? (createFileStorage() as unknown as Storage) : null
 
 export const db: Db = {
   from: table => (postgres ? postgres.from(table) : (supabaseClient().from(table) as unknown as QueryBuilder)),
   get storage() {
-    return supabaseClient().storage
+    return files ?? supabaseClient().storage
   },
 }
