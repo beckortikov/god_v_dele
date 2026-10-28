@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase-client'
+import { db } from '@/lib/db'
 import { fetchRow, logAudit } from '@/lib/audit'
 import { changeSuffix, monthLabel, rowMoney, roundMoneyFields } from '@/lib/audit-labels'
 import { fetchRowsWhere, logDeletedRows } from '@/app/api/audit/_server'
@@ -12,7 +12,7 @@ import { AccountError, assertLoginFree, insertAccount, validateCredentials } fro
 export async function GET(req: Request) {
     try {
         const id = new URL(req.url).searchParams.get('id')
-        let query = supabaseAdmin
+        let query = db
             .from('participants')
             .select(`
         *,
@@ -44,7 +44,7 @@ export async function POST(req: Request) {
             await assertLoginFree(creds.username)
         }
 
-        const { data, error } = await supabaseAdmin
+        const { data, error } = await db
             .from('participants')
             .insert([body])
             .select(`
@@ -60,7 +60,7 @@ export async function POST(req: Request) {
                 const user = await insertAccount(req, { ...creds, role: 'participant', full_name: data[0].name, participant_id: data[0].id })
                 created = { username: user.username }
             } catch (e) {
-                await supabaseAdmin.from('participants').delete().eq('id', data[0].id)
+                await db.from('participants').delete().eq('id', data[0].id)
                 throw e
             }
         }
@@ -97,7 +97,7 @@ export async function PUT(req: Request) {
         const updateData = roundMoneyFields(rawUpdate)
         const before = await fetchRow('participants', id)
 
-        const { data, error } = await supabaseAdmin
+        const { data, error } = await db
             .from('participants')
             .update(updateData)
             .eq('id', id)
@@ -112,9 +112,9 @@ export async function PUT(req: Request) {
         // (Accounts stay as they are: money does not move between accounts by itself.)
         if (data?.[0] && before && updateData.program_id && before.program_id !== updateData.program_id) {
             const moved = { program_id: updateData.program_id }
-            const m = await supabaseAdmin.from('monthly_payments').update(moved).eq('participant_id', id)
+            const m = await db.from('monthly_payments').update(moved).eq('participant_id', id)
             if (m.error) console.error('Could not move the schedule to the new program:', m.error.message)
-            const t = await supabaseAdmin.from('payment_transactions').update(moved).eq('participant_id', id)
+            const t = await db.from('payment_transactions').update(moved).eq('participant_id', id)
             // The table is missing until migration 014: nothing to move then
             if (t.error && t.error.code !== '42P01' && t.error.code !== 'PGRST205') console.error('Could not move the receipts to the new program:', t.error.message)
         }
@@ -157,7 +157,7 @@ export async function DELETE(req: Request) {
                 ? await receiptsOfMonths(payments.map(p => p.id))
                 : []
 
-        const { error } = await supabaseAdmin
+        const { error } = await db
             .from('participants')
             .delete()
             .eq('id', id)

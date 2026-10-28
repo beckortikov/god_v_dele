@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase-client'
+import { db } from '@/lib/db'
 import { logAudit } from '@/lib/audit'
 import {
   BadRequest,
@@ -36,7 +36,7 @@ export async function PUT(req: Request) {
     const groupIds = [...new Set(items.map(i => i.group_id).filter((g): g is string => !!g))]
     const groupName = new Map<string, string>()
     if (groupIds.length) {
-      const { data, error } = await supabaseAdmin.from(GROUPS).select('id, name, program_id').in('id', groupIds)
+      const { data, error } = await db.from(GROUPS).select('id, name, program_id').in('id', groupIds)
       checkGroups(error)
       for (const g of data ?? []) {
         if (g.program_id !== programId) throw new BadRequest('Группа из другого потока')
@@ -46,7 +46,7 @@ export async function PUT(req: Request) {
     }
 
     const ids = items.map(i => i.participant_id)
-    const { data: people, error: pErr } = await supabaseAdmin.from('participants').select('id, name, program_id, group_id').in('id', ids)
+    const { data: people, error: pErr } = await db.from('participants').select('id, name, program_id, group_id').in('id', ids)
     checkGroups(pErr)
     const byId = new Map((people ?? []).map(p => [p.id, p]))
     for (const id of ids) {
@@ -60,7 +60,7 @@ export async function PUT(req: Request) {
     const targets = new Map<string | null, string[]>()
     for (const c of changed) targets.set(c.group_id, [...(targets.get(c.group_id) ?? []), c.participant_id])
     for (const [groupId, pids] of targets) {
-      const { error } = await supabaseAdmin.from('participants').update({ group_id: groupId }).in('id', pids)
+      const { error } = await db.from('participants').update({ group_id: groupId }).in('id', pids)
       checkGroups(error)
     }
 
@@ -69,11 +69,11 @@ export async function PUT(req: Request) {
     let handedOut = 0
     for (const [groupId, pids] of targets) {
       if (!groupId) continue
-      const { data: sprints, error: sErr } = await supabaseAdmin.from(SPRINTS).select('id').eq('group_id', groupId).gte('end_date', today)
+      const { data: sprints, error: sErr } = await db.from(SPRINTS).select('id').eq('group_id', groupId).gte('end_date', today)
       checkGroups(sErr)
       const sprintIds = (sprints ?? []).map((s: { id: string }) => s.id)
       if (!sprintIds.length) continue
-      const { data: tasks, error: tErr } = await supabaseAdmin.from(TASKS).select('id').in('sprint_id', sprintIds).eq('audience', 'all')
+      const { data: tasks, error: tErr } = await db.from(TASKS).select('id').in('sprint_id', sprintIds).eq('audience', 'all')
       checkGroups(tErr)
       for (const t of tasks ?? []) handedOut += (await assign(t.id, pids)).length
     }

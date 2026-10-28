@@ -1,6 +1,6 @@
 /** Server-only helpers for the participant-profile routes. */
 import { NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase-client'
+import { db } from '@/lib/db'
 import { forbidden, mayUseProfile } from '@/lib/api-auth'
 import { ProfileInputError, MAX_SCAN_BYTES, PASSPORT_BUCKET, SCAN_TYPES } from '@/lib/participant-profile'
 import { decodeName, isReportKey } from '@/lib/report-files'
@@ -62,7 +62,7 @@ export async function profileOwner(req: Request): Promise<{ id: string; name: st
   const id = new URL(req.url).searchParams.get('participant_id')
   if (!isUuid(id)) return NextResponse.json({ error: 'participant_id: нужен UUID' }, { status: 400 })
   if (!mayUseProfile(req, id)) return forbidden()
-  const { data, error } = await supabaseAdmin.from('participants').select('id, name, phone, email').eq('id', id).maybeSingle()
+  const { data, error } = await db.from('participants').select('id, name, phone, email').eq('id', id).maybeSingle()
   if (error) throw new Error(error.message)
   if (!data) throw new ProfileNotFound('Участник не найден')
   return data
@@ -73,9 +73,9 @@ let bucketReady = false
 /** The bucket is private; it is created on first use so no setup step is needed. */
 export async function ensureDocsBucket() {
   if (bucketReady) return
-  const { data } = await supabaseAdmin.storage.getBucket(PASSPORT_BUCKET)
+  const { data } = await db.storage.getBucket(PASSPORT_BUCKET)
   if (!data) {
-    const { error } = await supabaseAdmin.storage.createBucket(PASSPORT_BUCKET, {
+    const { error } = await db.storage.createBucket(PASSPORT_BUCKET, {
       public: false,
       fileSizeLimit: MAX_SCAN_BYTES,
       allowedMimeTypes: Object.keys(SCAN_TYPES),
@@ -92,7 +92,7 @@ export interface ScanFile {
 }
 
 export async function listScans(participantId: string): Promise<ScanFile[]> {
-  const { data, error } = await supabaseAdmin.storage.from(PASSPORT_BUCKET).list(participantId, { limit: 100, sortBy: { column: 'name', order: 'asc' } })
+  const { data, error } = await db.storage.from(PASSPORT_BUCKET).list(participantId, { limit: 100, sortBy: { column: 'name', order: 'asc' } })
   if (error) throw new Error(error.message)
   return (data ?? [])
     .filter(f => isReportKey(f.name))

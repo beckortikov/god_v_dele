@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-vi.mock('@/lib/supabase-client', async () => ({ supabaseAdmin: (await import('./helpers/fake-db')).fakeAdmin }))
+vi.mock('@/lib/db', async () => ({ db: (await import('./helpers/fake-db')).fakeAdmin }))
 process.env.SUPABASE_SERVICE_ROLE_KEY ||= 'service-key-for-tests'
 
 import { GET, PUT } from '@/app/api/participant-profile/route'

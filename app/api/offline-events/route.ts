@@ -1,12 +1,12 @@
 import { NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase-client'
+import { db } from '@/lib/db'
 import { fetchRow, logAudit } from '@/lib/audit'
 import { changeSuffix, roundMoneyFields } from '@/lib/audit-labels'
 
 // GET - Fetch all offline events
 export async function GET() {
     try {
-        const { data, error } = await supabaseAdmin
+        const { data, error } = await db
             .from('offline_events')
             .select(`
                 *,
@@ -45,7 +45,7 @@ export async function POST(req: Request) {
             status: body.status || 'planned'
         }
 
-        const { data, error } = await supabaseAdmin
+        const { data, error } = await db
             .from('offline_events')
             .insert([eventData])
             .select()
@@ -82,7 +82,7 @@ export async function PUT(req: Request) {
         const updateData = roundMoneyFields(rawUpdate)
         const before = await fetchRow('offline_events', id)
 
-        const { data, error } = await supabaseAdmin
+        const { data, error } = await db
             .from('offline_events')
             .update(updateData)
             .eq('id', id)

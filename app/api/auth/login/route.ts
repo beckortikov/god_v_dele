@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { clientIp, recordFailure, recordSuccess, retryAfterMs } from '@/lib/login-limiter';
-import { supabaseAdmin } from '@/lib/supabase-client';
+import { db } from '@/lib/db';
 import { signedInResponse } from '../_lib/session-response';
 import { fakeVerify, hashPassword, isHashed, verifyPassword } from '@/lib/password';
 
@@ -24,7 +24,7 @@ export async function POST(request: Request) {
         }
 
         // Look the account up by login only; the password is checked here, never in the query.
-        const { data: candidates, error } = await supabaseAdmin
+        const { data: candidates, error } = await db
             .from('app_users')
             .select('*')
             .eq('username', login);
@@ -52,7 +52,7 @@ export async function POST(request: Request) {
 
         // Plain-text passwords from before hashing are replaced with a hash on the first login
         if (!isHashed(user.password)) {
-            await supabaseAdmin.from('app_users').update({ password: await hashPassword(password) }).eq('id', user.id);
+            await db.from('app_users').update({ password: await hashPassword(password) }).eq('id', user.id);
         }
 
         return await signedInResponse(user);

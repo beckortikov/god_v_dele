@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase-client'
+import { db } from '@/lib/db'
 import { logAudit } from '@/lib/audit'
 import { dateRange, nextSprintNumber, type Sprint, type SprintSummary } from '@/lib/sprints'
 import {
@@ -27,7 +27,7 @@ export async function GET(req: Request) {
   const programId = new URL(req.url).searchParams.get('program_id')
   if (!isUuid(programId)) return NextResponse.json({ error: 'program_id: нужен UUID' }, { status: 400 })
   try {
-    const { data: sprints, error } = await supabaseAdmin.from(SPRINTS).select('*').eq('program_id', programId).order('number')
+    const { data: sprints, error } = await db.from(SPRINTS).select('*').eq('program_id', programId).order('number')
     check(error)
     const list = (sprints ?? []) as Sprint[]
     const ids = list.map(s => s.id)
@@ -35,7 +35,7 @@ export async function GET(req: Request) {
     const tasksBySprint = new Map<string, string[]>()
     const sprintOfTask = new Map<string, string>()
     if (ids.length) {
-      const { data: tasks, error: tErr } = await supabaseAdmin.from(TASKS).select('id, sprint_id').in('sprint_id', ids)
+      const { data: tasks, error: tErr } = await db.from(TASKS).select('id, sprint_id').in('sprint_id', ids)
       check(tErr)
       for (const t of tasks ?? []) {
         sprintOfTask.set(t.id, t.sprint_id)
@@ -46,7 +46,7 @@ export async function GET(req: Request) {
     const counts = new Map<string, { assigned: number; done: number; review: number }>()
     const taskIds = [...sprintOfTask.keys()]
     if (taskIds.length) {
-      const { data: rows, error: aErr } = await supabaseAdmin.from(ASSIGNMENTS).select('task_id, status').in('task_id', taskIds)
+      const { data: rows, error: aErr } = await db.from(ASSIGNMENTS).select('task_id, status').in('task_id', taskIds)
       check(aErr)
       for (const r of rows ?? []) {
         const sid = sprintOfTask.get(r.task_id)!
@@ -95,18 +95,18 @@ export async function POST(req: Request) {
     let groupName: string | null = null
     if (body.group_id) {
       groupId = requireUuid(body.group_id, 'group_id')
-      const { data: group, error: gErr } = await supabaseAdmin.from(GROUPS).select('id, name, program_id').eq('id', groupId).maybeSingle()
+      const { data: group, error: gErr } = await db.from(GROUPS).select('id, name, program_id').eq('id', groupId).maybeSingle()
       checkGroups(gErr)
       if (!group || group.program_id !== programId) throw new NotFound('Группа не найдена в этом потоке')
       groupName = group.name
     }
 
-    const { data: existing, error: lastErr } = await supabaseAdmin.from(SPRINTS).select('*').eq('program_id', programId)
+    const { data: existing, error: lastErr } = await db.from(SPRINTS).select('*').eq('program_id', programId)
     check(lastErr)
     const number = nextSprintNumber((existing ?? []) as Sprint[], groupId)
 
     // group_id is sent only for a group sprint, so a database without migration 018 keeps working.
-    const { data: sprint, error } = await supabaseAdmin
+    const { data: sprint, error } = await db
       .from(SPRINTS)
       .insert({
         program_id: programId,
@@ -123,7 +123,7 @@ export async function POST(req: Request) {
 
     let moved = 0
     if (pick.length) {
-      const { data: tasks, error: tErr } = await supabaseAdmin
+      const { data: tasks, error: tErr } = await db
         .from(TASKS)
         .select('*')
         .in('id', pick)
@@ -132,7 +132,7 @@ export async function POST(req: Request) {
       check(tErr)
       const everyone = await activeParticipantIds(programId, groupId)
       for (const t of tasks ?? []) {
-        const { error: uErr } = await supabaseAdmin
+        const { error: uErr } = await db
           .from(TASKS)
           .update({ sprint_id: sprint.id, due_date: t.due_date ?? end, updated_at: new Date().toISOString() })
           .eq('id', t.id)
@@ -145,7 +145,7 @@ export async function POST(req: Request) {
     let carried = 0
     if (carry.length) {
       // Only tasks of this program that already sit in some sprint (not the backlog).
-      const { data: tasks, error: cErr } = await supabaseAdmin
+      const { data: tasks, error: cErr } = await db
         .from(TASKS)
         .select('id')
         .in('id', carry)
@@ -155,9 +155,9 @@ export async function POST(req: Request) {
       check(cErr)
       const ids = (tasks ?? []).map((t: { id: string }) => t.id)
       if (ids.length) {
-        const { error: uErr } = await supabaseAdmin.from(TASKS).update({ sprint_id: sprint.id, due_date: end, updated_at: new Date().toISOString() }).in('id', ids)
+        const { error: uErr } = await db.from(TASKS).update({ sprint_id: sprint.id, due_date: end, updated_at: new Date().toISOString() }).in('id', ids)
         check(uErr)
-        const { error: dErr } = await supabaseAdmin
+        const { error: dErr } = await db
           .from(ASSIGNMENTS)
           .update({ due_date: null })
           .in('task_id', ids)

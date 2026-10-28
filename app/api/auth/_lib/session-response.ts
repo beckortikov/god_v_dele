@@ -1,13 +1,13 @@
 import { NextResponse } from 'next/server'
 import { createSessionToken, SESSION_COOKIE, sessionCookieOptions } from '@/lib/session'
-import { supabaseAdmin } from '@/lib/supabase-client'
+import { db } from '@/lib/db'
 
 /** The answer to a successful sign-in, however it was proved (password or Telegram): the user for the interface and the session cookie. */
 export async function signedInResponse(user: any) {
     let position = null
     let employeeName = null
     if (user.employee_id) {
-        const { data: employeeData } = await supabaseAdmin
+        const { data: employeeData } = await db
             .from('employees')
             .select('position, first_name, last_name')
             .eq('id', user.employee_id)
@@ -19,7 +19,7 @@ export async function signedInResponse(user: any) {
     }
 
     // Awaited on purpose: an edge function may stop right after the response
-    await supabaseAdmin
+    await db
         .from('app_users')
         .update({ last_login_at: new Date().toISOString() })
         .eq('id', user.id)

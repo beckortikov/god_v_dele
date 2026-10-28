@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { forbidden, mayUseEmployee } from '@/lib/api-auth'
-import { supabaseAdmin } from '@/lib/supabase-client';
+import { db } from '@/lib/db';
 import { logAudit } from '@/lib/audit';
 import { employeeName } from '@/app/api/audit/_server';
 
@@ -14,7 +14,7 @@ export async function GET(request: Request) {
             return NextResponse.json({ error: 'employee_id is required' }, { status: 400 });
         }
 
-        let query = supabaseAdmin
+        let query = db
             .from('time_logs')
             .select('*')
             .eq('employee_id', employeeId)
@@ -47,7 +47,7 @@ export async function POST(request: Request) {
         if (!mayUseEmployee(request, employee_id)) return forbidden();
 
         if (action === 'start') {
-            const { data, error } = await supabaseAdmin
+            const { data, error } = await db
                 .from('time_logs')
                 .insert([{ employee_id, status: 'active', notes }])
                 .select()
@@ -60,7 +60,7 @@ export async function POST(request: Request) {
         }
         else if (action === 'end') {
             // Find active log
-            const { data: activeLogs, error: logError } = await supabaseAdmin
+            const { data: activeLogs, error: logError } = await db
                 .from('time_logs')
                 .select('*')
                 .eq('employee_id', employee_id)
@@ -77,7 +77,7 @@ export async function POST(request: Request) {
             const endTime = new Date();
             const durationMinutes = Math.floor((endTime.getTime() - startTime.getTime()) / 60000);
 
-            const { data, error } = await supabaseAdmin
+            const { data, error } = await db
                 .from('time_logs')
                 .update({ end_time: endTime.toISOString(), duration_minutes: durationMinutes, status: 'completed' })
                 .eq('id', activeLog.id)

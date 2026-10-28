@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase-client'
+import { db } from '@/lib/db'
 import { fetchRow, logAudit } from '@/lib/audit'
 import { roundMoney, roundRate } from '@/lib/money'
 import { TRANSFERS_TABLE, isMissingTable, migrationRequired } from './shared'
@@ -19,7 +19,7 @@ export async function GET(req: Request) {
     const limit = Math.min(Math.max(Number(searchParams.get('limit')) || 50, 1), 500)
     const accountId = searchParams.get('account_id')
 
-    let query = supabaseAdmin
+    let query = db
       .from(TRANSFERS_TABLE)
       .select('*')
       .order('transfer_date', { ascending: false })
@@ -56,7 +56,7 @@ export async function POST(req: Request) {
     if (!ISO_DATE.test(date)) return bad('Укажите дату перевода')
     if (!(amountFrom > 0)) return bad('Укажите сумму перевода')
 
-    const { data: accs, error: accError } = await supabaseAdmin.from('accounts').select('id, name, currency').in('id', [fromId, toId])
+    const { data: accs, error: accError } = await db.from('accounts').select('id, name, currency').in('id', [fromId, toId])
     if (accError) throw accError
     const from = accs?.find(a => a.id === fromId)
     const to = accs?.find(a => a.id === toId)
@@ -81,7 +81,7 @@ export async function POST(req: Request) {
       note,
     }
 
-    const { data, error } = await supabaseAdmin.from(TRANSFERS_TABLE).insert([row]).select().single()
+    const { data, error } = await db.from(TRANSFERS_TABLE).insert([row]).select().single()
     if (error) {
       if (isMissingTable(error)) return migrationRequired()
       throw error
@@ -109,7 +109,7 @@ export async function DELETE(req: Request) {
     if (!id) return bad('ID is required')
 
     const before = await fetchRow(TRANSFERS_TABLE, id)
-    const { data, error } = await supabaseAdmin.from(TRANSFERS_TABLE).delete().eq('id', id).select('id')
+    const { data, error } = await db.from(TRANSFERS_TABLE).delete().eq('id', id).select('id')
     if (error) {
       if (isMissingTable(error)) return migrationRequired()
       throw error

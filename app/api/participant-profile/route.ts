@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase-client'
+import { db } from '@/lib/db'
 import { getActor, logAudit } from '@/lib/audit'
 import { FIELD_LABELS, parseProfile, type BusinessYear, type ParticipantProfile } from '@/lib/participant-profile'
 import { checkProfile, ensureDocsBucket, listScans, profileError, profileOwner, type ScanFile } from './_lib'
@@ -24,8 +24,8 @@ export async function GET(req: Request) {
     if (owner instanceof NextResponse) return owner
 
     const [{ data: profile, error: pErr }, { data: years, error: yErr }] = await Promise.all([
-      supabaseAdmin.from('participant_profiles').select('*').eq('participant_id', owner.id).maybeSingle(),
-      supabaseAdmin.from('participant_business_years').select('*').eq('participant_id', owner.id).order('year'),
+      db.from('participant_profiles').select('*').eq('participant_id', owner.id).maybeSingle(),
+      db.from('participant_business_years').select('*').eq('participant_id', owner.id).order('year'),
     ])
     checkProfile(pErr)
     checkProfile(yErr)
@@ -60,10 +60,10 @@ export async function PUT(req: Request) {
     const fields = parseProfile(await req.json())
     if (!Object.keys(fields).length) return NextResponse.json({ error: 'Нечего сохранять' }, { status: 400 })
 
-    const { data: before, error: bErr } = await supabaseAdmin.from('participant_profiles').select('*').eq('participant_id', owner.id).maybeSingle()
+    const { data: before, error: bErr } = await db.from('participant_profiles').select('*').eq('participant_id', owner.id).maybeSingle()
     checkProfile(bErr)
 
-    const { data, error } = await supabaseAdmin
+    const { data, error } = await db
       .from('participant_profiles')
       .upsert({ participant_id: owner.id, ...fields, updated_by: getActor(req).name, updated_at: new Date().toISOString() }, { onConflict: 'participant_id' })
       .select('*')

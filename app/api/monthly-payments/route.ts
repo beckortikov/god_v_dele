@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase-client'
+import { db } from '@/lib/db'
 import { fetchRow, getActor, logAudit } from '@/lib/audit'
 import { changeSuffix, monthLabel, rowMoney, roundMoneyFields } from '@/lib/audit-labels'
 import { logDeletedRows, participantName } from '@/app/api/audit/_server'
@@ -19,7 +19,7 @@ export async function GET(req: Request) {
         const year = searchParams.get('year')
         const status = searchParams.get('status')
 
-        let query = supabaseAdmin
+        let query = db
             .from('monthly_payments')
             .select(`
         *,
@@ -101,7 +101,7 @@ async function postToLedger(req: Request, body: any) {
     // A brand-new month gets the plan the client sent (the tariff by default)
     if (row && Number(row.fact_amount) === 0 && body.plan_amount != null && roundMoney(body.plan_amount) !== roundMoney(row.plan_amount)) {
         const before = row
-        const { data, error } = await supabaseAdmin.from('monthly_payments').update(planUpdate(row, Number(body.plan_amount))).eq('id', row.id).select('*').single()
+        const { data, error } = await db.from('monthly_payments').update(planUpdate(row, Number(body.plan_amount))).eq('id', row.id).select('*').single()
         if (error) throw error
         row = data
         await logAudit(req, { table: 'monthly_payments', recordId: row.id, action: 'update', summary: `${planSummary(participant.name, row)}${changeSuffix(before, row)}`, before, after: row })
@@ -111,7 +111,7 @@ async function postToLedger(req: Request, body: any) {
     if (fact > 0) {
         const actor = getActor(req)
         const currency = String(body.currency || 'USD').toUpperCase()
-        const { data: tx, error } = await supabaseAdmin
+        const { data: tx, error } = await db
             .from(LEDGER_TABLE)
             .insert([{
                 monthly_payment_id: row.id,
@@ -132,7 +132,7 @@ async function postToLedger(req: Request, body: any) {
         await logAudit(req, { table: LEDGER_TABLE, recordId: tx.id, action: 'create', summary: receiptSummary(participant.name, tx, month, year), after: tx })
     }
 
-    const { data, error } = await supabaseAdmin.from('monthly_payments').select(MONTH_SELECT).eq('id', row.id)
+    const { data, error } = await db.from('monthly_payments').select(MONTH_SELECT).eq('id', row.id)
     if (error) throw error
     return NextResponse.json({ data }, { status: 201 })
 }
@@ -146,7 +146,7 @@ export async function POST(req: Request) {
         // Upsert: read the current row first so the журнал records update vs create
         let before: any = null
         if (body?.participant_id && body?.month_number != null && body?.year != null) {
-            const { data: existing } = await supabaseAdmin
+            const { data: existing } = await db
                 .from('monthly_payments')
                 .select('*')
                 .eq('participant_id', body.participant_id)
@@ -156,7 +156,7 @@ export async function POST(req: Request) {
             before = existing ?? null
         }
 
-        const { data, error } = await supabaseAdmin
+        const { data, error } = await db
             .from('monthly_payments')
             .upsert([body], { onConflict: 'participant_id,month_number,year' })
             .select(`
@@ -202,7 +202,7 @@ export async function DELETE(req: Request) {
         // Receipts are removed by ON DELETE CASCADE — keep them in the корзина too
         const receipts = before && !ledgerMock(req) && (await ledgerEnabled(req).catch(() => false)) ? await receiptsOfMonths([id]) : []
 
-        const { error } = await supabaseAdmin
+        const { error } = await db
             .from('monthly_payments')
             .delete()
             .eq('id', id)
@@ -248,7 +248,7 @@ export async function PUT(req: Request) {
         const before = await fetchRow('monthly_payments', id)
         if (!before) return NextResponse.json({ error: 'Месяц не найден — возможно, его удалили' }, { status: 404 })
 
-        const { data, error } = await supabaseAdmin
+        const { data, error } = await db
             .from('monthly_payments')
             .update(planUpdate(before, plan))
             .eq('id', id)

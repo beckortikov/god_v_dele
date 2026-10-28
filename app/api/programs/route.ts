@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase-client'
+import { db } from '@/lib/db'
 import { logAudit } from '@/lib/audit'
 import { roundMoney } from '@/lib/money'
 import { formatMoney } from '@/lib/format'
@@ -7,7 +7,7 @@ import { formatMoney } from '@/lib/format'
 // GET - Fetch all programs
 export async function GET() {
     try {
-        const { data, error } = await supabaseAdmin
+        const { data, error } = await db
             .from('programs')
             .select('*')
             .order('name', { ascending: true })
@@ -31,7 +31,7 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
         }
 
-        const { data, error } = await supabaseAdmin
+        const { data, error } = await db
             .from('programs')
             .insert([{ name, price_per_month: roundMoney(price_per_month), duration_months }])
             .select()

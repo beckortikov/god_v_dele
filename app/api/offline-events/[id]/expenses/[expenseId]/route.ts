@@ -1,6 +1,6 @@
 
 import { NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase-client'
+import { db } from '@/lib/db'
 import { fetchRow, logAudit } from '@/lib/audit'
 import { changeSuffix, rowMoney, roundMoneyFields } from '@/lib/audit-labels'
 import { eventName } from '@/app/api/audit/_server'
@@ -14,7 +14,7 @@ export async function PUT(
         const body = roundMoneyFields(await req.json())
         const before = await fetchRow('expenses', expenseId)
 
-        const { data, error } = await supabaseAdmin
+        const { data, error } = await db
             .from('expenses')
             .update(body)
             .eq('id', expenseId)
@@ -50,7 +50,7 @@ export async function DELETE(
         const before = await fetchRow('expenses', expenseId)
         const ev = before ? await eventName(before.event_id ?? id) : ''
 
-        const { error } = await supabaseAdmin
+        const { error } = await db
             .from('expenses')
             .delete()
             .eq('id', expenseId)

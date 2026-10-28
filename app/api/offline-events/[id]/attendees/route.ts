@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase-client'
+import { db } from '@/lib/db'
 import { logAudit } from '@/lib/audit'
 import { rowMoney, roundMoneyFields } from '@/lib/audit-labels'
 import { eventName, participantNames } from '@/app/api/audit/_server'
@@ -17,7 +17,7 @@ export async function GET(
         // then manually fetch participant names if needed, or use Supabase join syntax:
         // select(..., participant:participants(name))
 
-        const { data, error } = await supabaseAdmin
+        const { data, error } = await db
             .from('event_attendees')
             .select('*, participant:participants(name)')
             .eq('event_id', id)
@@ -65,7 +65,7 @@ export async function POST(
                 payment_notes: attendee.payment_notes || null
             }))
 
-            const res = await supabaseAdmin
+            const res = await db
                 .from('event_attendees')
                 .insert(roundMoneyFields(attendeesData))
                 .select()
@@ -89,7 +89,7 @@ export async function POST(
                 payment_notes: body.payment_notes || null
             }
 
-            const res = await supabaseAdmin
+            const res = await db
                 .from('event_attendees')
                 .insert([roundMoneyFields(attendeeData)])
                 .select()

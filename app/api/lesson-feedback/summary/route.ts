@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase-client'
+import { db } from '@/lib/db'
 import { forbidden } from '@/lib/api-auth'
 import { reviewLesson, type LessonFeedback, type LessonReview } from '@/lib/lesson-feedback'
 import type { Lesson } from '@/lib/lessons'
@@ -19,7 +19,7 @@ export async function GET(req: Request) {
     const q = new URL(req.url).searchParams
     const programId = requireUuid(q.get('program_id'), 'program_id')
 
-    let query = supabaseAdmin.from(LESSONS).select('*').eq('program_id', programId)
+    let query = db.from(LESSONS).select('*').eq('program_id', programId)
     const from = q.get('from')
     const to = q.get('to')
     if (from) query = query.gte('starts_at', new Date(from).toISOString())
@@ -30,8 +30,8 @@ export async function GET(req: Request) {
     if (!lessons.length) return NextResponse.json({ data: [] })
 
     const [{ data: rows, error: fErr }, { data: people, error: pErr }] = await Promise.all([
-      supabaseAdmin.from(FEEDBACK).select('*').in('lesson_id', lessons.map(l => l.id)),
-      supabaseAdmin.from('participants').select('id, group_id, status').eq('program_id', programId),
+      db.from(FEEDBACK).select('*').in('lesson_id', lessons.map(l => l.id)),
+      db.from('participants').select('id, group_id, status').eq('program_id', programId),
     ])
     checkFeedback(fErr)
     if (pErr) throw new Error(pErr.message)

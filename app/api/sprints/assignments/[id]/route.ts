@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase-client'
+import { db } from '@/lib/db'
 import { getActor, logAudit } from '@/lib/audit'
 import { forbidden, isSprintCurator, sessionOf } from '@/lib/api-auth'
 import { participantName } from '@/app/api/audit/_server'
@@ -29,7 +29,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     const session = sessionOf(req)
     if (session?.role === 'participant' && session.pid !== assignment.participant_id) return forbidden()
     const task = await getTask(assignment.task_id)
-    const { data: events, error } = await supabaseAdmin.from(EVENTS).select('*').eq('assignment_id', id).order('created_at')
+    const { data: events, error } = await db.from(EVENTS).select('*').eq('assignment_id', id).order('created_at')
     check(error)
     return NextResponse.json({ data: { assignment, task, events: (events ?? []) as TaskEvent[] } })
   } catch (e) {
@@ -82,7 +82,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const { patch, event } = applyAction(task, assignment, action)
     const actor = getActor(req)
     const update = { ...patch, updated_at: new Date().toISOString(), ...(type === 'accept' || type === 'return' ? { reviewed_by: actor.name } : {}) }
-    const { data, error } = await supabaseAdmin.from(ASSIGNMENTS).update(update).eq('id', id).select('*').single()
+    const { data, error } = await db.from(ASSIGNMENTS).update(update).eq('id', id).select('*').single()
     check(error)
 
     await addEvent(id, event, {

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase-client'
+import { db } from '@/lib/db'
 
 export async function GET(
     req: Request,
@@ -9,7 +9,7 @@ export async function GET(
         const { id } = await params
 
         // Fetch event stats
-        const { data: eventData, error: eventError } = await supabaseAdmin
+        const { data: eventData, error: eventError } = await db
             .from('offline_events')
             .select('total_income, total_expenses, balance, attendees_registered, attendees_attended')
             .eq('id', id)
@@ -30,14 +30,14 @@ export async function GET(
         // We need to query event_attendees for this detail
 
         // Fetch expenses breakdown
-        const { data: expenses, error: expensesError } = await supabaseAdmin
+        const { data: expenses, error: expensesError } = await db
             .from('expenses')
             .select('amount, category')
             .eq('event_id', id)
 
         if (expensesError) throw expensesError
 
-        const { data: attendees, error: attendeesError } = await supabaseAdmin
+        const { data: attendees, error: attendeesError } = await db
             .from('event_attendees')
             .select('attendee_type, payment_received')
             .eq('event_id', id)

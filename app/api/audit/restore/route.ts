@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase-client'
+import { db } from '@/lib/db'
 import { getActor, logAudit } from '@/lib/audit'
 import { RESTORABLE_TABLES, fieldLabel, tableLabel } from '@/lib/audit-labels'
 import { isMissingTableError } from '../_server'
@@ -56,7 +56,7 @@ export async function POST(req: Request) {
     const id = body?.id
     if (!id) return fail('Не указана запись журнала', 400)
 
-    const { data: entry, error: readError } = await supabaseAdmin.from('audit_log').select('*').eq('id', id).maybeSingle()
+    const { data: entry, error: readError } = await db.from('audit_log').select('*').eq('id', id).maybeSingle()
     if (readError) {
       if (isMissingTableError(readError)) return NextResponse.json({ error: 'migration_required' }, { status: 503 })
       throw readError
@@ -74,7 +74,7 @@ export async function POST(req: Request) {
       return fail('В журнале нет сохранённой копии записи', 400)
     }
 
-    const { data: restored, error: insertError } = await supabaseAdmin
+    const { data: restored, error: insertError } = await db
       .from(entry.table_name)
       .insert([row])
       .select()
@@ -88,7 +88,7 @@ export async function POST(req: Request) {
     const actor = getActor(req)
     const restoredBy = actor.name || actor.id || null
     // Guard against a double click: only the first restore marks the entry
-    await supabaseAdmin
+    await db
       .from('audit_log')
       .update({ restored_at: new Date().toISOString(), restored_by: restoredBy })
       .eq('id', id)

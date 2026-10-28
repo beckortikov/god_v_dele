@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase-client'
+import { db } from '@/lib/db'
 import { forbidden, sessionOf } from '@/lib/api-auth'
 import { PASSPORT_BUCKET, completeness, type ParticipantProfile } from '@/lib/participant-profile'
 import { checkProfile, ensureDocsBucket, profileError } from '../_lib'
@@ -22,8 +22,8 @@ export async function GET(req: Request) {
     if (role !== 'admin' && role !== 'wheels_manager') return forbidden()
 
     const [{ data: profiles, error: pErr }, { data: years, error: yErr }] = await Promise.all([
-      supabaseAdmin.from('participant_profiles').select('participant_id, birth_date, city, activity'),
-      supabaseAdmin.from('participant_business_years').select('participant_id'),
+      db.from('participant_profiles').select('participant_id, birth_date, city, activity'),
+      db.from('participant_business_years').select('participant_id'),
     ])
     checkProfile(pErr)
     checkProfile(yErr)
@@ -32,7 +32,7 @@ export async function GET(req: Request) {
     const withScans = new Set<string>()
     try {
       await ensureDocsBucket()
-      const { data } = await supabaseAdmin.storage.from(PASSPORT_BUCKET).list('', { limit: 1000 })
+      const { data } = await db.storage.from(PASSPORT_BUCKET).list('', { limit: 1000 })
       for (const f of data ?? []) withScans.add(f.name)
     } catch {
       // Storage unreachable: the scan part counts as missing

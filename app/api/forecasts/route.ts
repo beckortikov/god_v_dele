@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase-client'
+import { db } from '@/lib/db'
 import { logAudit } from '@/lib/audit'
 import { changeSuffix, monthLabel, roundMoneyFields } from '@/lib/audit-labels'
 import { formatMoney } from '@/lib/format'
@@ -7,7 +7,7 @@ import { formatMoney } from '@/lib/format'
 // GET - Fetch monthly forecasts
 export async function GET() {
     try {
-        const { data, error } = await supabaseAdmin
+        const { data, error } = await db
             .from('monthly_forecasts')
             .select('*')
             .order('year', { ascending: false })
@@ -30,7 +30,7 @@ export async function POST(req: Request) {
         // Upsert: read the current row first so the журнал records update vs create
         let before: any = null
         if (body && !Array.isArray(body) && body.month_number != null && body.year != null) {
-            const { data: existing } = await supabaseAdmin
+            const { data: existing } = await db
                 .from('monthly_forecasts')
                 .select('*')
                 .eq('month_number', body.month_number)
@@ -39,7 +39,7 @@ export async function POST(req: Request) {
             before = existing ?? null
         }
 
-        const { data, error } = await supabaseAdmin
+        const { data, error } = await db
             .from('monthly_forecasts')
             .upsert([body], { onConflict: 'month_number,year' })
             .select()

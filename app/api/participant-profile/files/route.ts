@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase-client'
+import { db } from '@/lib/db'
 import { logAudit } from '@/lib/audit'
 import { PASSPORT_BUCKET, scanProblem } from '@/lib/participant-profile'
 import { decodeName, encodeKey, isReportKey } from '@/lib/report-files'
@@ -20,7 +20,7 @@ export async function GET(req: Request) {
     const download = new URL(req.url).searchParams.get('download')
     if (download !== null) {
       if (!isReportKey(download)) throw new ProfileBadRequest('Неверное имя файла')
-      const { data, error } = await supabaseAdmin.storage.from(PASSPORT_BUCKET).createSignedUrl(`${owner.id}/${download}`, 60, { download: decodeName(download) })
+      const { data, error } = await db.storage.from(PASSPORT_BUCKET).createSignedUrl(`${owner.id}/${download}`, 60, { download: decodeName(download) })
       if (error || !data) throw new ProfileBadRequest('Файл не найден')
       await logAudit(req, { table: 'participant_profiles', recordId: owner.id, action: 'update', summary: `Скан паспорта участника «${owner.name}» открыт: ${decodeName(download)}` })
       return NextResponse.redirect(data.signedUrl, 302)
@@ -44,7 +44,7 @@ export async function POST(req: Request) {
     const problem = scanProblem(body, (await listScans(owner.id)).length)
     if (problem) throw new ProfileBadRequest(problem)
     const key = encodeKey(body.name, body.type)
-    const { data, error } = await supabaseAdmin.storage.from(PASSPORT_BUCKET).createSignedUploadUrl(`${owner.id}/${key}`)
+    const { data, error } = await db.storage.from(PASSPORT_BUCKET).createSignedUploadUrl(`${owner.id}/${key}`)
     if (error || !data) throw new Error(error?.message || 'Не удалось подготовить загрузку')
     await logAudit(req, { table: 'participant_profiles', recordId: owner.id, action: 'update', summary: `Профиль участника «${owner.name}»: загружен скан паспорта` })
     return NextResponse.json({ data: { key, signedUrl: data.signedUrl } }, { status: 201 })
@@ -60,7 +60,7 @@ export async function DELETE(req: Request) {
     if (owner instanceof NextResponse) return owner
     const key = new URL(req.url).searchParams.get('key')
     if (!isReportKey(key)) throw new ProfileBadRequest('Неверное имя файла')
-    const { error } = await supabaseAdmin.storage.from(PASSPORT_BUCKET).remove([`${owner.id}/${key}`])
+    const { error } = await db.storage.from(PASSPORT_BUCKET).remove([`${owner.id}/${key}`])
     if (error) throw new Error(error.message)
     await logAudit(req, { table: 'participant_profiles', recordId: owner.id, action: 'update', summary: `Профиль участника «${owner.name}»: удалён скан паспорта` })
     return NextResponse.json({ data: { key } })

@@ -1,22 +1,17 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { db } from '@/lib/db'
 import { fetchRow, logAudit } from '@/lib/audit'
 import { isMissingTable } from '@/app/api/account-transfers/shared'
 import { ledgerEnabled, loadTransactions } from '@/lib/payments-ledger'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
-
 export const dynamic = 'force-dynamic';
-
-const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey)
 
 export async function GET(request: Request) {
     try {
         const { searchParams } = new URL(request.url)
         const programId = searchParams.get('program_id')
 
-        let query = supabaseAdmin
+        let query = db
             .from('accounts')
             .select('*, program:programs(name)')
             .order('created_at', { ascending: true })
@@ -42,15 +37,15 @@ export async function GET(request: Request) {
                 .filter(t => t.account_id)
                 .map(t => ({ account_id: t.account_id, original_amount: t.original_amount, fact_amount: t.amount_usd, currency: t.currency }))
         } else {
-            const { data } = await supabaseAdmin.from('monthly_payments').select('account_id, original_amount, fact_amount, currency').not('account_id', 'is', null)
+            const { data } = await db.from('monthly_payments').select('account_id, original_amount, fact_amount, currency').not('account_id', 'is', null)
             payments = data
         }
-        const { data: expenses } = await supabaseAdmin.from('expenses').select('account_id, amount, original_amount, currency').not('account_id', 'is', null)
+        const { data: expenses } = await db.from('expenses').select('account_id, amount, original_amount, currency').not('account_id', 'is', null)
 
         // Transfers between accounts (migration 012). If the table is not there yet,
         // balances are computed exactly as before.
         let transfers: { from_account_id: string | null; to_account_id: string | null; amount_from: number; amount_to: number }[] = []
-        const { data: transferRows, error: transferError } = await supabaseAdmin
+        const { data: transferRows, error: transferError } = await db
             .from('account_transfers')
             .select('from_account_id, to_account_id, amount_from, amount_to')
         if (!transferError) transfers = transferRows || []
@@ -101,7 +96,7 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Name and currency are required' }, { status: 400 })
         }
 
-        const { data, error } = await supabaseAdmin
+        const { data, error } = await db
             .from('accounts')
             .insert([{ 
                 name, 
@@ -138,7 +133,7 @@ export async function PUT(request: Request) {
 
         const before = await fetchRow('accounts', id)
 
-        const { data, error } = await supabaseAdmin
+        const { data, error } = await db
             .from('accounts')
             .update({ 
                 name, 
@@ -176,7 +171,7 @@ export async function DELETE(request: Request) {
 
         const before = await fetchRow('accounts', id)
 
-        const { error } = await supabaseAdmin
+        const { error } = await db
             .from('accounts')
             .delete()
             .eq('id', id)

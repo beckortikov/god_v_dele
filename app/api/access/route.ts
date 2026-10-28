@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase-client'
+import { db } from '@/lib/db'
 import { fetchRow, logAudit } from '@/lib/audit'
 import { stripSecrets } from '@/lib/audit-labels'
 import { hashPassword } from '@/lib/password'
@@ -35,11 +35,11 @@ function target(req: Request, body?: Record<string, unknown>) {
 
 async function personName(kind: 'employee' | 'participant', id: string): Promise<string> {
   if (kind === 'participant') {
-    const { data } = await supabaseAdmin.from('participants').select('name').eq('id', id).maybeSingle()
+    const { data } = await db.from('participants').select('name').eq('id', id).maybeSingle()
     if (!data) throw new AccountError('Участник не найден', 404)
     return data.name
   }
-  const { data } = await supabaseAdmin.from('employees').select('first_name, last_name').eq('id', id).maybeSingle()
+  const { data } = await db.from('employees').select('first_name, last_name').eq('id', id).maybeSingle()
   if (!data) throw new AccountError('Сотрудник не найден', 404)
   return `${data.first_name} ${data.last_name}`.trim()
 }
@@ -96,7 +96,7 @@ export async function PUT(req: Request) {
     const account = await accountOf(t.kind, t.id)
     if (!account) throw new AccountError('У этого человека ещё нет входа', 404)
     const before = await fetchRow('app_users', account.id)
-    const { error } = await supabaseAdmin.from('app_users').update({ password: await hashPassword(String(body.password)) }).eq('id', account.id)
+    const { error } = await db.from('app_users').update({ password: await hashPassword(String(body.password)) }).eq('id', account.id)
     if (error) throw new Error(error.message)
     await logAudit(req, {
       table: 'app_users',

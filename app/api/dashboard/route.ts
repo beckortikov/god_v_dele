@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase-client'
+import { db } from '@/lib/db'
 import { overdueMonths, type MonthlyPayment, type Participant } from '@/components/participants/types'
 import { ledgerEnabled, loadTransactions } from '@/lib/payments-ledger'
 
@@ -13,7 +13,7 @@ export async function GET(request: Request) {
         const currentMonth = new Date().getMonth() + 1
 
         // Fetch all monthly payments for current year by actual receipt date OR planned billing year if not paid yet
-        let paymentsQuery = supabaseAdmin
+        let paymentsQuery = db
             .from('monthly_payments')
             .select(`
                 *,
@@ -31,7 +31,7 @@ export async function GET(request: Request) {
             : paymentsData
 
         // Fetch all expenses for current year
-        const { data: expenses, error: expensesError } = await supabaseAdmin
+        const { data: expenses, error: expensesError } = await db
             .from('expenses')
             .select('*')
             .gte('expense_date', `${currentYear}-01-01`)
@@ -95,7 +95,7 @@ export async function GET(request: Request) {
         // components/participants/types.ts): active participants only; every past
         // month that was billed (has a row, or lies inside the program duration)
         // and is not covered to the cent by fact vs plan_amount (tariff fallback).
-        let overdueParticipantsQuery = supabaseAdmin
+        let overdueParticipantsQuery = db
             .from('participants')
             .select('id, name, status, tariff, program_id, start_date, program:programs(id, name, price_per_month, duration_months)')
             .eq('status', 'active')
@@ -104,7 +104,7 @@ export async function GET(request: Request) {
         }
         const [overdueParticipantsRes, overduePaymentsRes] = await Promise.all([
             overdueParticipantsQuery,
-            supabaseAdmin
+            db
                 .from('monthly_payments')
                 .select('id, participant_id, year, month_number, plan_amount, fact_amount, status'),
         ])
@@ -112,7 +112,7 @@ export async function GET(request: Request) {
         if (overduePaymentsRes.error) throw overduePaymentsRes.error
 
         // Get recent payments (last 10 paid payments, sorted by updated_at DESC)
-        const { data: recentPaymentsData, error: recentError } = await supabaseAdmin
+        const { data: recentPaymentsData, error: recentError } = await db
             .from('monthly_payments')
             .select(`
                 *,

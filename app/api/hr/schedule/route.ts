@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/lib/supabase-client';
+import { db } from '@/lib/db';
 import { logAudit } from '@/lib/audit';
 import { SHIFT_LABELS, changeSuffix } from '@/lib/audit-labels';
 import { formatDate, plural } from '@/lib/format';
@@ -14,7 +14,7 @@ async function existingSchedules(records: any[]): Promise<any[]> {
         const empIds = [...new Set(records.map(r => r?.employee_id).filter(Boolean))];
         const dates = [...new Set(records.map(r => r?.work_date).filter(Boolean))];
         if (!empIds.length || !dates.length) return [];
-        const { data } = await supabaseAdmin
+        const { data } = await db
             .from('employee_schedules')
             .select('*')
             .in('employee_id', empIds)
@@ -65,7 +65,7 @@ export async function GET(request: Request) {
         const end_date = searchParams.get('end_date');
         const employee_id = searchParams.get('employee_id');
 
-        let query = supabaseAdmin
+        let query = db
             .from('employee_schedules')
             .select(`
         *,
@@ -109,7 +109,7 @@ export async function POST(request: Request) {
         const records = Array.isArray(body) ? body : [body];
         const before = await existingSchedules(records);
 
-        const { data, error } = await supabaseAdmin
+        const { data, error } = await db
             .from('employee_schedules')
             .upsert(records, { onConflict: 'employee_id, work_date' })
             .select();

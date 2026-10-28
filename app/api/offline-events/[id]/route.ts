@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase-client'
+import { db } from '@/lib/db'
 import { fetchRow, logAudit } from '@/lib/audit'
 import { changeSuffix, rowMoney } from '@/lib/audit-labels'
 import { fetchRowsWhere, logDeletedRows, participantNames } from '@/app/api/audit/_server'
@@ -11,7 +11,7 @@ export async function GET(
     try {
         const { id } = await params
 
-        const { data, error } = await supabaseAdmin
+        const { data, error } = await db
             .from('offline_events')
             .select('*')
             .eq('id', id)
@@ -48,7 +48,7 @@ export async function PUT(
 
         const before = await fetchRow('offline_events', id)
 
-        const { data, error } = await supabaseAdmin
+        const { data, error } = await db
             .from('offline_events')
             .update(updateData)
             .eq('id', id)
@@ -86,7 +86,7 @@ export async function DELETE(
         const attendees = before ? await fetchRowsWhere('event_attendees', 'event_id', id) : []
         const expenses = before ? await fetchRowsWhere('expenses', 'event_id', id) : []
 
-        const { error } = await supabaseAdmin
+        const { error } = await db
             .from('offline_events')
             .delete()
             .eq('id', id)

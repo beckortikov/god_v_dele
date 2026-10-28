@@ -2,7 +2,7 @@
  * Server-only helpers for writing the журнал from API routes: name lookups for
  * human summaries and logging of rows removed by ON DELETE CASCADE.
  */
-import { supabaseAdmin } from '@/lib/supabase-client'
+import { db } from '@/lib/db'
 import { logAudit } from '@/lib/audit'
 import { personName } from '@/lib/audit-labels'
 
@@ -10,7 +10,7 @@ import { personName } from '@/lib/audit-labels'
 export async function participantName(id: unknown): Promise<string> {
   if (!id) return ''
   try {
-    const { data } = await supabaseAdmin.from('participants').select('name').eq('id', id).maybeSingle()
+    const { data } = await db.from('participants').select('name').eq('id', id).maybeSingle()
     return data?.name ?? ''
   } catch {
     return ''
@@ -22,7 +22,7 @@ export async function participantNames(ids: unknown[]): Promise<Record<string, s
   const list = [...new Set(ids.filter(Boolean).map(String))]
   if (!list.length) return {}
   try {
-    const { data } = await supabaseAdmin.from('participants').select('id, name').in('id', list)
+    const { data } = await db.from('participants').select('id, name').in('id', list)
     return Object.fromEntries((data ?? []).map((p: any) => [p.id, p.name]))
   } catch {
     return {}
@@ -33,7 +33,7 @@ export async function participantNames(ids: unknown[]): Promise<Record<string, s
 export async function employeeName(id: unknown): Promise<string> {
   if (!id) return ''
   try {
-    const { data } = await supabaseAdmin.from('employees').select('first_name, last_name').eq('id', id).maybeSingle()
+    const { data } = await db.from('employees').select('first_name, last_name').eq('id', id).maybeSingle()
     return personName(data)
   } catch {
     return ''
@@ -44,7 +44,7 @@ export async function employeeName(id: unknown): Promise<string> {
 export async function eventName(id: unknown): Promise<string> {
   if (!id) return ''
   try {
-    const { data } = await supabaseAdmin.from('offline_events').select('name').eq('id', id).maybeSingle()
+    const { data } = await db.from('offline_events').select('name').eq('id', id).maybeSingle()
     return data?.name ?? ''
   } catch {
     return ''
@@ -55,7 +55,7 @@ export async function eventName(id: unknown): Promise<string> {
 export async function fetchRowsWhere(table: string, column: string, value: unknown): Promise<any[]> {
   if (value == null || value === '') return []
   try {
-    const { data } = await supabaseAdmin.from(table).select('*').eq(column, value)
+    const { data } = await db.from(table).select('*').eq(column, value)
     return data ?? []
   } catch {
     return []

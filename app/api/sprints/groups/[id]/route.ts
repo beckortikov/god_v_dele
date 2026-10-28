@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase-client'
+import { db } from '@/lib/db'
 import { fetchRow, logAudit } from '@/lib/audit'
 import { BadRequest, GROUPS, NotFound, SPRINTS, checkGroups, errorResponse, requireUuid } from '../../_lib/store'
 
@@ -16,7 +16,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const before = await fetchRow(GROUPS, id)
     if (!before) throw new NotFound('Группа не найдена')
 
-    const { data, error } = await supabaseAdmin
+    const { data, error } = await db
       .from(GROUPS)
       .update({ name, updated_at: new Date().toISOString() })
       .eq('id', id)
@@ -39,15 +39,15 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
     const before = await fetchRow(GROUPS, id)
     if (!before) throw new NotFound('Группа не найдена')
 
-    const { count, error: cErr } = await supabaseAdmin.from(SPRINTS).select('id', { count: 'exact', head: true }).eq('group_id', id)
+    const { count, error: cErr } = await db.from(SPRINTS).select('id', { count: 'exact', head: true }).eq('group_id', id)
     checkGroups(cErr)
     if (count) throw new BadRequest('У группы есть спринты. Чтобы не потерять отчёты, удалить её нельзя.')
 
     // Lessons of the group (migration 020) hold materials: keep them too. A missing table means no lessons.
-    const { count: lessonCount, error: lErr } = await supabaseAdmin.from('lessons').select('id', { count: 'exact', head: true }).eq('group_id', id)
+    const { count: lessonCount, error: lErr } = await db.from('lessons').select('id', { count: 'exact', head: true }).eq('group_id', id)
     if (!lErr && lessonCount) throw new BadRequest('У группы есть уроки в календаре. Чтобы не потерять материалы, удалить её нельзя.')
 
-    const { error } = await supabaseAdmin.from(GROUPS).delete().eq('id', id)
+    const { error } = await db.from(GROUPS).delete().eq('id', id)
     checkGroups(error)
     await logAudit(req, { table: GROUPS, recordId: id, action: 'delete', summary: `Группа «${before.name}»`, before })
     return NextResponse.json({ success: true })

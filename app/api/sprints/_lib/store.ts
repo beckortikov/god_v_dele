@@ -3,7 +3,7 @@
  * «migration not applied» answer, assignments and Telegram notices.
  */
 import { NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase-client'
+import { db } from '@/lib/db'
 import { isTelegramConfigured, sendMessage } from '@/lib/telegram'
 import { ActionError, type Assignment, type EventKind, type SprintTask } from '@/lib/sprints'
 
@@ -81,7 +81,7 @@ export function optionalDate(v: unknown, field: string): string | null {
 }
 
 export async function getTask(id: string): Promise<SprintTask> {
-  const { data, error } = await supabaseAdmin.from(TASKS).select('*').eq('id', id).maybeSingle()
+  const { data, error } = await db.from(TASKS).select('*').eq('id', id).maybeSingle()
   check(error)
   if (!data) throw new NotFound('Задача не найдена')
   return data as SprintTask
@@ -114,7 +114,7 @@ export function checkGroups(error: PgError) {
  * the group when the sprint belongs to one.
  */
 export async function activeParticipantIds(programId: string, groupId?: string | null): Promise<string[]> {
-  let query = supabaseAdmin.from('participants').select('id').eq('program_id', programId).eq('status', 'active')
+  let query = db.from('participants').select('id').eq('program_id', programId).eq('status', 'active')
   if (groupId) query = query.eq('group_id', groupId)
   const { data, error } = await query
   if (error) throw new Error(error.message)
@@ -124,12 +124,12 @@ export async function activeParticipantIds(programId: string, groupId?: string |
 /** Creates the missing assignments of a task. Returns the ids of participants who got it now. */
 export async function assign(taskId: string, participantIds: string[]): Promise<string[]> {
   if (!participantIds.length) return []
-  const { data: existing, error } = await supabaseAdmin.from(ASSIGNMENTS).select('participant_id').eq('task_id', taskId)
+  const { data: existing, error } = await db.from(ASSIGNMENTS).select('participant_id').eq('task_id', taskId)
   check(error)
   const have = new Set((existing ?? []).map((r: { participant_id: string }) => r.participant_id))
   const fresh = [...new Set(participantIds)].filter(id => !have.has(id))
   if (!fresh.length) return []
-  const { error: insertError } = await supabaseAdmin
+  const { error: insertError } = await db
     .from(ASSIGNMENTS)
     .insert(fresh.map(participant_id => ({ task_id: taskId, participant_id })))
   check(insertError)
@@ -137,14 +137,14 @@ export async function assign(taskId: string, participantIds: string[]): Promise<
 }
 
 export async function getAssignment(id: string): Promise<Assignment> {
-  const { data, error } = await supabaseAdmin.from(ASSIGNMENTS).select('*').eq('id', id).maybeSingle()
+  const { data, error } = await db.from(ASSIGNMENTS).select('*').eq('id', id).maybeSingle()
   check(error)
   if (!data) throw new NotFound('Задача участника не найдена')
   return data as Assignment
 }
 
 export async function addEvent(assignmentId: string, kind: EventKind, extra: { comment?: string | null; due_date?: string | null; actor_name?: string | null } = {}) {
-  const { error } = await supabaseAdmin.from(EVENTS).insert({
+  const { error } = await db.from(EVENTS).insert({
     assignment_id: assignmentId,
     kind,
     comment: extra.comment ?? null,
@@ -162,7 +162,7 @@ export async function addEvent(assignmentId: string, kind: EventKind, extra: { c
 export async function notifyParticipants(participantIds: string[], text: string) {
   if (!participantIds.length || !isTelegramConfigured()) return
   try {
-    const { data, error } = await supabaseAdmin
+    const { data, error } = await db
       .from('telegram_links')
       .select('chat_id, subject_id')
       .eq('subject_type', 'participant')

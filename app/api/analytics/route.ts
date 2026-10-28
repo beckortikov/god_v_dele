@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase-client'
+import { db } from '@/lib/db'
 import { computeAnalytics, type AnalyticsInput } from '@/components/reports/analytics/compute'
 
 /**
@@ -30,18 +30,18 @@ export async function GET(req: Request) {
     // Four independent reads in parallel; only the columns the report uses.
     const [participants, payments, programs, expenses] = await Promise.all([
       fetchAll<AnalyticsInput['participants'][number]>(() =>
-        supabaseAdmin
+        db
           .from('participants')
           .select('id, name, status, tariff, program_id, start_date, updated_at, program:programs(id, name, price_per_month, duration_months)')
           .order('id'),
       ),
       fetchAll<AnalyticsInput['payments'][number]>(() =>
-        supabaseAdmin.from('monthly_payments').select('participant_id, year, month_number, plan_amount, fact_amount').order('id'),
+        db.from('monthly_payments').select('participant_id, year, month_number, plan_amount, fact_amount').order('id'),
       ),
-      fetchAll<AnalyticsInput['programs'][number]>(() => supabaseAdmin.from('programs').select('id, name').order('name')),
+      fetchAll<AnalyticsInput['programs'][number]>(() => db.from('programs').select('id, name').order('name')),
       // Event expenses belong to offline events, not to the programs' running costs
       fetchAll<AnalyticsInput['expenses'][number]>(() =>
-        supabaseAdmin.from('expenses').select('amount, expense_date, program_id').is('event_id', null).order('id'),
+        db.from('expenses').select('amount, expense_date, program_id').is('event_id', null).order('id'),
       ),
     ])
 

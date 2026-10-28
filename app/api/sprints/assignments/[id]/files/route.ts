@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase-client'
+import { db } from '@/lib/db'
 import { forbidden, isSprintCurator, sessionOf } from '@/lib/api-auth'
 import { logAudit } from '@/lib/audit'
 import { REPORT_BUCKET, decodeName, encodeKey, isReportKey, uploadProblem } from '@/lib/report-files'
@@ -28,7 +28,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     const download = new URL(req.url).searchParams.get('download')
     if (download !== null) {
       if (!isReportKey(download)) throw new BadRequest('Неверное имя файла')
-      const { data, error } = await supabaseAdmin.storage.from(REPORT_BUCKET).createSignedUrl(`${id}/${download}`, 60, { download: decodeName(download) })
+      const { data, error } = await db.storage.from(REPORT_BUCKET).createSignedUrl(`${id}/${download}`, 60, { download: decodeName(download) })
       if (error || !data) throw new BadRequest('Файл не найден')
       return NextResponse.redirect(data.signedUrl, 302)
     }
@@ -66,7 +66,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     if (problem) throw new BadRequest(problem)
 
     const key = encodeKey(body.name, body.type)
-    const { data, error } = await supabaseAdmin.storage.from(REPORT_BUCKET).createSignedUploadUrl(`${id}/${key}`)
+    const { data, error } = await db.storage.from(REPORT_BUCKET).createSignedUploadUrl(`${id}/${key}`)
     if (error || !data) throw new Error(error?.message || 'Не удалось подготовить загрузку')
     await logAudit(req, { table: 'sprint_task_assignments', recordId: id, action: 'update', summary: `«${own.task.title}»: приложен файл ${decodeName(key)}` })
     return NextResponse.json({ data: { key, signedUrl: data.signedUrl } }, { status: 201 })
@@ -83,7 +83,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
     if ('error' in own) return own.error
     const key = new URL(req.url).searchParams.get('key')
     if (!isReportKey(key)) throw new BadRequest('Неверное имя файла')
-    const { error } = await supabaseAdmin.storage.from(REPORT_BUCKET).remove([`${id}/${key}`])
+    const { error } = await db.storage.from(REPORT_BUCKET).remove([`${id}/${key}`])
     if (error) throw new Error(error.message)
     await logAudit(req, { table: 'sprint_task_assignments', recordId: id, action: 'update', summary: `«${own.task.title}»: удалён файл ${decodeName(key)}` })
     return NextResponse.json({ data: { key } })

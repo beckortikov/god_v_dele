@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase-client'
+import { db } from '@/lib/db'
 import { fetchRow, getActor, logAudit } from '@/lib/audit'
 import { roundMoney, roundRate } from '@/lib/money'
 import { todayISO } from '@/lib/format'
@@ -75,7 +75,7 @@ export async function POST(req: Request) {
     const { row: monthly } = await findOrCreateMonth(req, participant, month, year)
 
     const actor = getActor(req)
-    const { data: tx, error } = await supabaseAdmin
+    const { data: tx, error } = await db
       .from(LEDGER_TABLE)
       .insert([
         {
@@ -125,9 +125,9 @@ export async function DELETE(req: Request) {
     const before = await fetchRow(LEDGER_TABLE, id)
     if (!before) return fail('Поступление не найдено — возможно, его уже удалили', 404)
     const monthly = await fetchRow('monthly_payments', before.monthly_payment_id)
-    const { data: person } = await supabaseAdmin.from('participants').select('name').eq('id', before.participant_id).maybeSingle()
+    const { data: person } = await db.from('participants').select('name').eq('id', before.participant_id).maybeSingle()
 
-    const { error } = await supabaseAdmin.from(LEDGER_TABLE).delete().eq('id', id)
+    const { error } = await db.from(LEDGER_TABLE).delete().eq('id', id)
     if (error) throw error
 
     await logAudit(req, {

@@ -1,4 +1,4 @@
-import { supabaseAdmin } from '@/lib/supabase-client'
+import { db } from '@/lib/db'
 import { getSession } from '@/lib/session'
 
 export type AuditAction = 'create' | 'update' | 'delete' | 'restore'
@@ -41,7 +41,7 @@ export async function logAudit(
 ) {
   try {
     const actor = getActor(req)
-    const { error } = await supabaseAdmin.from('audit_log').insert({
+    const { error } = await db.from('audit_log').insert({
       table_name: entry.table,
       record_id: entry.recordId != null ? String(entry.recordId) : null,
       action: entry.action,
@@ -66,6 +66,6 @@ export async function logAudit(
 /** Reads a row before changing it, so the log can keep the previous version. */
 export async function fetchRow(table: string, id: string | number | null | undefined) {
   if (id == null || id === '') return null
-  const { data } = await supabaseAdmin.from(table).select('*').eq('id', id).maybeSingle()
+  const { data } = await db.from(table).select('*').eq('id', id).maybeSingle()
   return data ?? null
 }

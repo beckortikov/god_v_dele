@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase-client'
+import { db } from '@/lib/db'
 import { forbidden } from '@/lib/api-auth'
 import { encodeKey } from '@/lib/report-files'
 import { materialProblem } from '@/lib/lessons'
@@ -19,13 +19,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const id = requireUuid((await params).id, 'id')
     await getLesson(id)
     const body = await req.json()
-    const { count, error } = await supabaseAdmin.from(MATERIALS).select('id', { count: 'exact', head: true }).eq('lesson_id', id)
+    const { count, error } = await db.from(MATERIALS).select('id', { count: 'exact', head: true }).eq('lesson_id', id)
     checkLessons(error)
     const problem = materialProblem(body, count ?? 0)
     if (problem) throw new LessonBadRequest(problem)
     await ensureLessonBucket()
     const key = encodeKey(body.name, body.type)
-    const { data, error: uErr } = await supabaseAdmin.storage.from(LESSON_BUCKET).createSignedUploadUrl(`${id}/${key}`)
+    const { data, error: uErr } = await db.storage.from(LESSON_BUCKET).createSignedUploadUrl(`${id}/${key}`)
     if (uErr || !data) throw new Error(uErr?.message || 'Не удалось подготовить загрузку')
     return NextResponse.json({ data: { key, signedUrl: data.signedUrl } }, { status: 201 })
   } catch (e) {

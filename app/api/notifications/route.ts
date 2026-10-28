@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase-client'
+import { db } from '@/lib/db'
 import { participantSprintNotices, reviewQueueNotices, type OpenAssignment } from '@/lib/sprint-notices'
 import { isMissingSprintTable } from '@/app/api/sprints/_lib/store'
 import { PARTICIPANT_PAYMENTS_VISIBLE } from '@/lib/feature-flags'
@@ -177,11 +177,11 @@ function computeDebts(participants: any[], payments: any[], now: Date): DebtRow[
 
 async function overduePayments(now: Date): Promise<AppNotification[]> {
   const [{ data: participants, error: e1 }, { data: payments, error: e2 }] = await Promise.all([
-    supabaseAdmin
+    db
       .from('participants')
       .select('id, name, start_date, tariff, status, program:programs(price_per_month, duration_months)')
       .not('status', 'in', '(archived,completed)'),
-    supabaseAdmin.from('monthly_payments').select('participant_id, month_number, year, plan_amount, fact_amount'),
+    db.from('monthly_payments').select('participant_id, month_number, year, plan_amount, fact_amount'),
   ])
   if (e1) throw e1
   if (e2) throw e2
@@ -214,11 +214,11 @@ async function overduePayments(now: Date): Promise<AppNotification[]> {
 
 async function myDebt(participantId: string, now: Date): Promise<AppNotification[]> {
   const [{ data: participants, error: e1 }, { data: payments, error: e2 }] = await Promise.all([
-    supabaseAdmin
+    db
       .from('participants')
       .select('id, name, start_date, tariff, status, program:programs(price_per_month, duration_months)')
       .eq('id', participantId),
-    supabaseAdmin
+    db
       .from('monthly_payments')
       .select('participant_id, month_number, year, plan_amount, fact_amount')
       .eq('participant_id', participantId),
@@ -242,7 +242,7 @@ async function myDebt(participantId: string, now: Date): Promise<AppNotification
 }
 
 async function employeesById() {
-  const { data, error } = await supabaseAdmin.from('employees').select('id, first_name, last_name, birth_date, status')
+  const { data, error } = await db.from('employees').select('id, first_name, last_name, birth_date, status')
   if (error) throw error
   const map = new Map<string, any>()
   for (const e of data ?? []) map.set(e.id, e)
@@ -252,7 +252,7 @@ async function employeesById() {
 const nameOf = (e: any) => (e ? [e.first_name, e.last_name].filter(Boolean).join(' ') : 'Сотрудник')
 
 async function pendingLeaves(page: string, employees: Map<string, any>, now: Date): Promise<AppNotification[]> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from('leave_requests')
     .select('id, employee_id, start_date, end_date, created_at')
     .eq('status', 'pending')
@@ -290,7 +290,7 @@ async function longTimers(
   onlyEmployeeId?: string
 ): Promise<AppNotification[]> {
   const cutoff = new Date(now.getTime() - TIMER_LIMIT_HOURS * 3600000).toISOString()
-  let query = supabaseAdmin
+  let query = db
     .from('time_logs')
     .select('id, employee_id, start_time')
     .eq('status', 'active')
@@ -343,7 +343,7 @@ function birthdays(employees: Map<string, any>, today: Date, page: string | null
 
 async function upcomingEvents(today: Date): Promise<AppNotification[]> {
   const until = new Date(today.getTime() + SOON_DAYS * 86400000)
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from('offline_events')
     .select('id, name, event_date, location, status, attendees_registered')
     .gte('event_date', localISO(today))
@@ -375,7 +375,7 @@ async function unpaidPayroll(now: Date): Promise<AppNotification[]> {
   const prevDate = new Date(now.getFullYear(), now.getMonth() - 1, 1)
   const prev = { month: prevDate.getMonth() + 1, year: prevDate.getFullYear() }
 
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from('payroll')
     .select('id, month_number, year, total_amount, status, employees(currency)')
     .eq('status', 'pending')
@@ -408,7 +408,7 @@ async function unpaidPayroll(now: Date): Promise<AppNotification[]> {
 }
 
 async function overdueTasks(employeeId: string, today: Date): Promise<AppNotification[]> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from('tasks')
     .select('id, title, due_date, status')
     .eq('assignee_id', employeeId)
@@ -439,7 +439,7 @@ async function overdueTasks(employeeId: string, today: Date): Promise<AppNotific
 
 /** The participant's open sprint work: returned, overdue, due soon. Sprints that have not started yet stay quiet. */
 async function mySprintWork(participantId: string, today: Date): Promise<AppNotification[]> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from('sprint_task_assignments')
     .select('id, status, due_date, review_comment, reviewed_at, task:sprint_tasks(id, title, due_date, sprint:sprints(start_date))')
     .eq('participant_id', participantId)
@@ -468,7 +468,7 @@ async function mySprintWork(participantId: string, today: Date): Promise<AppNoti
 
 /** Reports waiting for a curator. */
 async function sprintReviewQueue(today: Date): Promise<AppNotification[]> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from('sprint_task_assignments')
     .select('id, participant_id, submitted_at')
     .eq('status', 'review')

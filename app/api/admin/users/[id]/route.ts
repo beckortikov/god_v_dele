@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/lib/supabase-client';
+import { db } from '@/lib/db';
 import { fetchRow, logAudit } from '@/lib/audit';
 import { changeSuffix, stripSecrets } from '@/lib/audit-labels';
 import { hashPassword } from '@/lib/password';
@@ -26,7 +26,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
 
         const rawBefore = await fetchRow('app_users', id);
 
-        const { data, error } = await supabaseAdmin
+        const { data, error } = await db
             .from('app_users')
             .update(updateData)
             .eq('id', id)
@@ -67,7 +67,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
         const { id } = await params;
         const before = stripSecrets(await fetchRow('app_users', id));
 
-        const { error } = await supabaseAdmin
+        const { error } = await db
             .from('app_users')
             .delete()
             .eq('id', id);

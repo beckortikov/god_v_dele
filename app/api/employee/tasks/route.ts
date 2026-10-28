@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { forbidden, mayUseEmployee } from '@/lib/api-auth'
-import { supabaseAdmin } from '@/lib/supabase-client';
+import { db } from '@/lib/db';
 import { fetchRow, logAudit } from '@/lib/audit';
 import { changeSuffix } from '@/lib/audit-labels';
 import { employeeName } from '@/app/api/audit/_server';
@@ -16,7 +16,7 @@ export async function GET(request: Request) {
         const assigneeId = searchParams.get('assignee_id');
         const date = searchParams.get('date');
 
-        let query = supabaseAdmin
+        let query = db
             .from('tasks')
             .select('*, target:participants(*)')
             .order('due_date', { ascending: true })
@@ -52,7 +52,7 @@ export async function POST(request: Request) {
         }
         if (!mayUseEmployee(request, assignee_id)) return forbidden();
 
-        const { data, error } = await supabaseAdmin
+        const { data, error } = await db
             .from('tasks')
             .insert([{
                 assignee_id, creator_id, title, description,
@@ -93,7 +93,7 @@ export async function PUT(request: Request) {
         const before = await fetchRow('tasks', id);
         if (before && !mayUseEmployee(request, before.assignee_id)) return forbidden();
 
-        const { data, error } = await supabaseAdmin
+        const { data, error } = await db
             .from('tasks')
             .update(updateData)
             .eq('id', id)
@@ -133,7 +133,7 @@ export async function DELETE(request: Request) {
         const before = await fetchRow('tasks', id);
         if (before && !mayUseEmployee(request, before.assignee_id)) return forbidden();
 
-        const { error } = await supabaseAdmin
+        const { error } = await db
             .from('tasks')
             .delete()
             .eq('id', id);

@@ -2,7 +2,7 @@
  * Server-only: creates sign-in accounts (app_users) for people the app has just
  * created, or already has. The password is hashed here and never returned.
  */
-import { supabaseAdmin } from '@/lib/supabase-client'
+import { db } from '@/lib/db'
 import { logAudit } from '@/lib/audit'
 import { enumLabel, stripSecrets } from '@/lib/audit-labels'
 import { hashPassword } from '@/lib/password'
@@ -36,7 +36,7 @@ export function validateCredentials(input: AccountInput): { username: string; pa
 /** Logins compare case-insensitively, so «Ahmad» and «ahmad» cannot both exist. */
 export async function loginTaken(username: string): Promise<boolean> {
   const escaped = username.replace(/[\\%_]/g, c => `\\${c}`)
-  const { data, error } = await supabaseAdmin.from('app_users').select('id').ilike('username', escaped).limit(1)
+  const { data, error } = await db.from('app_users').select('id').ilike('username', escaped).limit(1)
   if (error) throw new Error(error.message)
   return !!data?.length
 }
@@ -64,7 +64,7 @@ export async function insertAccount(req: Request, acc: NewAccount) {
   }
   if (acc.employee_id) row.employee_id = acc.employee_id
   if (acc.participant_id) row.participant_id = acc.participant_id
-  const { data, error } = await supabaseAdmin.from('app_users').insert([row]).select().single()
+  const { data, error } = await db.from('app_users').insert([row]).select().single()
   if (error) {
     // Two people creating the same login at once: the unique index, if any, answers.
     if (error.code === '23505') throw new AccountError(`Логин «${acc.username}» уже занят, выберите другой`, 409)
@@ -82,7 +82,7 @@ export async function insertAccount(req: Request, acc: NewAccount) {
 
 /** The account that belongs to a person, if any (never with the password). */
 export async function accountOf(kind: 'employee' | 'participant', id: string) {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from('app_users')
     .select('*')
     .eq(kind === 'employee' ? 'employee_id' : 'participant_id', id)

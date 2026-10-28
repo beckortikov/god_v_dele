@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase-client'
+import { db } from '@/lib/db'
 import { lessonsForParticipant, type Lesson, type LessonMaterial } from '@/lib/lessons'
 import { LESSONS, LessonBadRequest, MATERIALS, checkLessons, lessonsError, publicMaterial, requireUuid } from '../lessons/_lib'
 
@@ -17,12 +17,12 @@ export async function GET(req: Request) {
   try {
     const q = new URL(req.url).searchParams
     const participantId = requireUuid(q.get('participant_id'), 'participant_id')
-    const { data: person, error: pErr } = await supabaseAdmin.from('participants').select('*').eq('id', participantId).maybeSingle()
+    const { data: person, error: pErr } = await db.from('participants').select('*').eq('id', participantId).maybeSingle()
     if (pErr) throw new Error(pErr.message)
     if (!person) throw new LessonBadRequest('Участник не найден')
     if (!person.program_id) return NextResponse.json({ data: [] })
 
-    let query = supabaseAdmin.from(LESSONS).select('*').eq('program_id', person.program_id)
+    let query = db.from(LESSONS).select('*').eq('program_id', person.program_id)
     const from = q.get('from')
     const to = q.get('to')
     if (from) query = query.gte('starts_at', new Date(from).toISOString())
@@ -34,7 +34,7 @@ export async function GET(req: Request) {
 
     const byLesson = new Map<string, LessonMaterial[]>()
     if (lessons.length) {
-      const { data: mats, error: mErr } = await supabaseAdmin.from(MATERIALS).select('*').in('lesson_id', lessons.map(l => l.id)).order('created_at')
+      const { data: mats, error: mErr } = await db.from(MATERIALS).select('*').in('lesson_id', lessons.map(l => l.id)).order('created_at')
       checkLessons(mErr)
       for (const m of mats ?? []) byLesson.set(m.lesson_id, [...(byLesson.get(m.lesson_id) ?? []), publicMaterial(m)])
     }

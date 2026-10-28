@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase-client'
+import { db } from '@/lib/db'
 import { pickCurrentSprint, sprintsForParticipant, type Assignment, type MySprintData, type MyTask, type Sprint, type SprintTask, type TaskEvent } from '@/lib/sprints'
 import { ASSIGNMENTS, EVENTS, NotFound, SPRINTS, check, errorResponse, requireUuid } from '../sprints/_lib/store'
 
@@ -16,7 +16,7 @@ export async function GET(req: Request) {
     const participantId = requireUuid(searchParams.get('participant_id'), 'participant_id')
     const wanted = searchParams.get('sprint_id')
 
-    const { data: participant, error: pErr } = await supabaseAdmin
+    const { data: participant, error: pErr } = await db
       .from('participants')
       .select('*, program:programs(id, name)')
       .eq('id', participantId)
@@ -35,13 +35,13 @@ export async function GET(req: Request) {
     }
     if (!participant.program_id) return NextResponse.json({ data: empty })
 
-    const { data: sprints, error: sErr } = await supabaseAdmin.from(SPRINTS).select('*').eq('program_id', participant.program_id).order('number')
+    const { data: sprints, error: sErr } = await db.from(SPRINTS).select('*').eq('program_id', participant.program_id).order('number')
     check(sErr)
     // Program-wide sprints and those of the participant's own group (group_id exists after migration 018).
     const list = sprintsForParticipant((sprints ?? []) as Sprint[], (participant as { group_id?: string | null }).group_id)
     if (!list.length) return NextResponse.json({ data: empty })
 
-    const { data: rows, error: aErr } = await supabaseAdmin
+    const { data: rows, error: aErr } = await db
       .from(ASSIGNMENTS)
       .select('*, task:sprint_tasks(*)')
       .eq('participant_id', participantId)
@@ -54,7 +54,7 @@ export async function GET(req: Request) {
     const inCurrent = mine.filter(r => r.task!.sprint_id === current?.id)
     let events: TaskEvent[] = []
     if (inCurrent.length) {
-      const { data, error } = await supabaseAdmin
+      const { data, error } = await db
         .from(EVENTS)
         .select('*')
         .in('assignment_id', inCurrent.map(r => r.id))

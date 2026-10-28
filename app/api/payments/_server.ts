@@ -1,7 +1,7 @@
 /**
  * Server helpers shared by /api/payments/* and /api/monthly-payments.
  */
-import { supabaseAdmin } from '@/lib/supabase-client'
+import { db } from '@/lib/db'
 import { logAudit } from '@/lib/audit'
 import { monthLabel, rowMoney } from '@/lib/audit-labels'
 import { MONTHS_RU } from '@/lib/format'
@@ -24,7 +24,7 @@ const one = <T>(v: T | T[] | null | undefined): T | null => (Array.isArray(v) ? 
 const PARTICIPANT_COLS = 'id, name, status, start_date, tariff, program_id, program:programs(id, name, price_per_month, duration_months)'
 
 export async function loadParticipants(ids?: string[] | null): Promise<ParticipantForPlan[]> {
-  let q = supabaseAdmin.from('participants').select(PARTICIPANT_COLS)
+  let q = db.from('participants').select(PARTICIPANT_COLS)
   if (ids) q = q.in('id', ids)
   const { data, error } = await q
   if (error) throw error
@@ -68,7 +68,7 @@ export async function findOrCreateMonth(
   year: number
 ): Promise<{ row: any; created: boolean }> {
   const find = () =>
-    supabaseAdmin
+    db
       .from('monthly_payments')
       .select('*')
       .eq('participant_id', p.id)
@@ -80,7 +80,7 @@ export async function findOrCreateMonth(
   if (existing.error) throw existing.error
   if (existing.data) return { row: existing.data, created: false }
 
-  const { data: inserted, error } = await supabaseAdmin
+  const { data: inserted, error } = await db
     .from('monthly_payments')
     .upsert([scheduleRow(p, month, year, defaultPlan(p))], { onConflict: 'participant_id,month_number,year', ignoreDuplicates: true })
     .select('*')
@@ -100,7 +100,7 @@ export async function findOrCreateMonth(
 export async function receiptsOfMonths(monthlyIds: string[]): Promise<any[]> {
   if (!monthlyIds.length) return []
   try {
-    const { data } = await supabaseAdmin.from(LEDGER_TABLE).select('*').in('monthly_payment_id', monthlyIds)
+    const { data } = await db.from(LEDGER_TABLE).select('*').in('monthly_payment_id', monthlyIds)
     return data ?? []
   } catch {
     return []

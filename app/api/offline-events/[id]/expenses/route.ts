@@ -1,6 +1,6 @@
 
 import { NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase-client'
+import { db } from '@/lib/db'
 import { logAudit } from '@/lib/audit'
 import { rowMoney, roundMoneyFields } from '@/lib/audit-labels'
 import { eventName } from '@/app/api/audit/_server'
@@ -12,7 +12,7 @@ export async function GET(
     try {
         const { id } = await params
 
-        const { data, error } = await supabaseAdmin
+        const { data, error } = await db
             .from('expenses')
             .select('*')
             .eq('event_id', id)
@@ -48,7 +48,7 @@ export async function POST(
             description: body.description || null
         }
 
-        const { data, error } = await supabaseAdmin
+        const { data, error } = await db
             .from('expenses')
             .insert([roundMoneyFields(expenseData)])
             .select()

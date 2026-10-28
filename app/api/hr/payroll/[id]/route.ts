@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/lib/supabase-client';
+import { db } from '@/lib/db';
 import { fetchRow, logAudit } from '@/lib/audit';
 import { changeSuffix, monthLabel, rowMoney, roundMoneyFields } from '@/lib/audit-labels';
 import { formatMoney } from '@/lib/format';
@@ -18,7 +18,7 @@ export async function PUT(
         const before = await fetchRow('payroll', id);
 
         // Update payroll record
-        const { data: updatedPayroll, error: updateError } = await supabaseAdmin
+        const { data: updatedPayroll, error: updateError } = await db
             .from('payroll')
             .update(body)
             .eq('id', id)
@@ -64,7 +64,7 @@ export async function DELETE(
         const { id } = await params;
 
         // 1. Fetch payroll details BEFORE deletion to identify the expense
-        const { data: payroll, error: fetchError } = await supabaseAdmin
+        const { data: payroll, error: fetchError } = await db
             .from('payroll')
             .select(`
                 *,
@@ -81,7 +81,7 @@ export async function DELETE(
         }
 
         // 2. Delete payroll record
-        const { error: deleteError } = await supabaseAdmin
+        const { error: deleteError } = await db
             .from('payroll')
             .delete()
             .eq('id', id);
@@ -113,7 +113,7 @@ export async function DELETE(
             const endDate = `${endYear}-${String(endMonth).padStart(2, '0')}-01`;
 
             // Find expenses with matching name in that month
-            const { data: expensesToDelete } = await supabaseAdmin
+            const { data: expensesToDelete } = await db
                 .from('expenses')
                 .select('*')
                 .eq('name', empName)
@@ -122,7 +122,7 @@ export async function DELETE(
 
             if (expensesToDelete && expensesToDelete.length > 0) {
                 const expenseIds = expensesToDelete.map(e => e.id);
-                const { error: expenseDelError } = await supabaseAdmin
+                const { error: expenseDelError } = await db
                     .from('expenses')
                     .delete()
                     .in('id', expenseIds);
@@ -135,7 +135,7 @@ export async function DELETE(
                 }
             } else if (payroll.payment_date) {
                 // Fallback specific date match
-                const { data: deletedByDate, error: dateDelError } = await supabaseAdmin
+                const { data: deletedByDate, error: dateDelError } = await db
                     .from('expenses')
                     .delete()
                     .eq('expense_date', payroll.payment_date)

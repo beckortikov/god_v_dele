@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { forbidden, mayUseEmployee, sessionOf } from '@/lib/api-auth'
-import { supabaseAdmin } from '@/lib/supabase-client';
+import { db } from '@/lib/db';
 import { fetchRow, logAudit } from '@/lib/audit';
 import { enumLabel } from '@/lib/audit-labels';
 import { formatDate } from '@/lib/format';
@@ -17,7 +17,7 @@ export async function GET(request: Request) {
         const { searchParams } = new URL(request.url);
         const employeeId = searchParams.get('employee_id');
 
-        let query = supabaseAdmin
+        let query = db
             .from('leave_requests')
             .select('*')
             .order('created_at', { ascending: false });
@@ -48,7 +48,7 @@ export async function POST(request: Request) {
         }
         if (!mayUseEmployee(request, employee_id)) return forbidden();
 
-        const { data, error } = await supabaseAdmin
+        const { data, error } = await db
             .from('leave_requests')
             .insert([{ employee_id, start_date, end_date, reason, type: type || 'time_off', status: 'pending' }])
             .select()
@@ -81,7 +81,7 @@ export async function PUT(request: Request) {
 
         const before = await fetchRow('leave_requests', id);
 
-        const { data, error } = await supabaseAdmin
+        const { data, error } = await db
             .from('leave_requests')
             .update({ status, approved_by, updated_at: new Date().toISOString() })
             .eq('id', id)

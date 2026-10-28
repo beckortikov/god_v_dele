@@ -211,13 +211,13 @@ describe('ledgerEnabled (feature detection)', () => {
   beforeEach(() => {
     vi.resetModules()
     select.mockReset()
-    vi.doMock('@/lib/supabase-client', () => ({
-      supabaseAdmin: { from: () => ({ select: () => ({ limit: () => select() }) }) },
+    vi.doMock('@/lib/db', () => ({
+      db: { from: () => ({ select: () => ({ limit: () => select() }) }) },
     }))
   })
   afterEach(() => {
     vi.useRealTimers()
-    vi.doUnmock('@/lib/supabase-client')
+    vi.doUnmock('@/lib/db')
   })
 
   it('caches "enabled" for the process lifetime', async () => {

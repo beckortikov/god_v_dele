@@ -1,12 +1,12 @@
 import { NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/lib/supabase-client';
+import { db } from '@/lib/db';
 import { logAudit } from '@/lib/audit';
 import { enumLabel, stripSecrets } from '@/lib/audit-labels';
 import { hashPassword } from '@/lib/password';
 
 export async function GET(request: Request) {
     try {
-        const { data, error } = await supabaseAdmin
+        const { data, error } = await db
             .from('app_users')
             .select(`
                 *,
@@ -50,7 +50,7 @@ export async function POST(request: Request) {
         if (employee_id) insertData.employee_id = employee_id;
         if (participant_id) insertData.participant_id = participant_id;
 
-        const { data, error } = await supabaseAdmin
+        const { data, error } = await db
             .from('app_users')
             .insert([insertData])
             .select()

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/lib/supabase-client';
+import { db } from '@/lib/db';
 import { logAudit } from '@/lib/audit';
 import { personName, roundMoneyFields } from '@/lib/audit-labels';
 import { isEmployeeAccountRole } from '@/lib/access';
@@ -7,7 +7,7 @@ import { AccountError, assertLoginFree, insertAccount, validateCredentials } fro
 
 export async function GET() {
     try {
-        const { data, error } = await supabaseAdmin
+        const { data, error } = await db
             .from('employees')
             .select('*')
             .order('first_name', { ascending: true });
@@ -42,7 +42,7 @@ export async function POST(request: Request) {
             await assertLoginFree(creds.username);
         }
 
-        const { data, error } = await supabaseAdmin
+        const { data, error } = await db
             .from('employees')
             .insert([body])
             .select()
@@ -64,7 +64,7 @@ export async function POST(request: Request) {
                 });
                 created = { username: user.username, role: user.role };
             } catch (e) {
-                await supabaseAdmin.from('employees').delete().eq('id', data.id);
+                await db.from('employees').delete().eq('id', data.id);
                 throw e;
             }
         }

@@ -1,9 +1,9 @@
 /**
- * A small in-memory stand-in for supabaseAdmin: tables with the query builder the
+ * A small in-memory stand-in for db (lib/db.ts): tables with the query builder the
  * routes use, and a storage bucket. Enough to run route handlers in tests without
  * a database. Use it from a test with:
  *
- *   vi.mock('@/lib/supabase-client', async () => ({ supabaseAdmin: (await import('./helpers/fake-db')).fakeAdmin }))
+ *   vi.mock('@/lib/db', async () => ({ db: (await import('./helpers/fake-db')).fakeAdmin }))
  */
 type Row = Record<string, any>
 type Err = { code?: string; message: string }

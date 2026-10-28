@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase-client'
+import { db } from '@/lib/db'
 import { getActor, logAudit } from '@/lib/audit'
 import { forbidden } from '@/lib/api-auth'
 import { dateRange } from '@/lib/sprints'
@@ -16,7 +16,7 @@ export async function GET(req: Request) {
     const q = new URL(req.url).searchParams
     const programId = q.get('program_id')
     if (!isUuid(programId)) throw new LessonBadRequest('program_id: нужен UUID')
-    let query = supabaseAdmin.from(LESSONS).select('*').eq('program_id', programId)
+    let query = db.from(LESSONS).select('*').eq('program_id', programId)
     const from = q.get('from')
     const to = q.get('to')
     if (from) query = query.gte('starts_at', new Date(from).toISOString())
@@ -27,7 +27,7 @@ export async function GET(req: Request) {
 
     const counts = new Map<string, number>()
     if (lessons.length) {
-      const { data: rows, error: mErr } = await supabaseAdmin.from(MATERIALS).select('lesson_id').in('lesson_id', lessons.map(l => l.id))
+      const { data: rows, error: mErr } = await db.from(MATERIALS).select('lesson_id').in('lesson_id', lessons.map(l => l.id))
       checkLessons(mErr)
       for (const r of rows ?? []) counts.set(r.lesson_id, (counts.get(r.lesson_id) ?? 0) + 1)
     }
@@ -58,7 +58,7 @@ export async function POST(req: Request) {
       created_by: getActor(req).name,
     }))
 
-    const { data, error } = await supabaseAdmin.from(LESSONS).insert(rows).select('*')
+    const { data, error } = await db.from(LESSONS).insert(rows).select('*')
     if (error?.code === '23503') throw new LessonNotFound('Поток не найден')
     checkLessons(error)
     const made = (data ?? []) as Lesson[]

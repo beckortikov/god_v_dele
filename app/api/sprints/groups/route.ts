@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase-client'
+import { db } from '@/lib/db'
 import { logAudit } from '@/lib/audit'
 import type { SprintGroup } from '@/lib/sprints'
 import { BadRequest, GROUPS, checkGroups, errorResponse, isMissingGroups, isUuid, requireUuid } from '../_lib/store'
@@ -25,11 +25,11 @@ export async function GET(req: Request) {
   const programId = new URL(req.url).searchParams.get('program_id')
   if (!isUuid(programId)) return NextResponse.json({ error: 'program_id: нужен UUID' }, { status: 400 })
   try {
-    const { data: groups, error } = await supabaseAdmin.from(GROUPS).select('id, program_id, name').eq('program_id', programId).order('created_at')
+    const { data: groups, error } = await db.from(GROUPS).select('id, program_id, name').eq('program_id', programId).order('created_at')
     if (isMissingGroups(error)) return NextResponse.json({ data: { available: false, groups: [], participants: [] } satisfies GroupsData })
     checkGroups(error)
 
-    const { data: people, error: pErr } = await supabaseAdmin
+    const { data: people, error: pErr } = await db
       .from('participants')
       .select('id, name, group_id')
       .eq('program_id', programId)
@@ -57,7 +57,7 @@ export async function POST(req: Request) {
     if (!name) throw new BadRequest('Назовите группу')
     if (name.length > 60) throw new BadRequest('Название группы длиннее 60 символов')
 
-    const { data, error } = await supabaseAdmin.from(GROUPS).insert({ program_id: programId, name }).select('id, program_id, name').single()
+    const { data, error } = await db.from(GROUPS).insert({ program_id: programId, name }).select('id, program_id, name').single()
     if (error?.code === '23505') throw new BadRequest(`Группа «${name}» уже есть в этом потоке`)
     if (error?.code === '23503') throw new BadRequest('Поток не найден')
     checkGroups(error)

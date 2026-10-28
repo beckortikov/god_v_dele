@@ -17,7 +17,7 @@
  * to the ledger are refused in this mode. Used only to preview the ledger UI
  * before the migration exists.
  */
-import { supabaseAdmin } from '@/lib/supabase-client'
+import { db } from '@/lib/db'
 import { receiptDate, toCents } from '@/lib/payment-schedule'
 
 export const LEDGER_TABLE = 'payment_transactions'
@@ -52,7 +52,7 @@ export async function ledgerEnabled(req?: Request | null): Promise<boolean> {
   if (ledgerMock(req)) return true
   const now = Date.now()
   if (cache && (cache.enabled || now - cache.at < FALSE_TTL_MS)) return cache.enabled
-  const { error } = await supabaseAdmin.from(LEDGER_TABLE).select('id').limit(1)
+  const { error } = await db.from(LEDGER_TABLE).select('id').limit(1)
   if (error && !isMissingLedger(error)) throw error
   cache = { enabled: !error, at: now }
   return cache.enabled
@@ -184,7 +184,7 @@ export async function loadTransactions(req: Request | null, f: TxFilter = {}): P
     .join(', ')
 
   const build = () => {
-    let q = supabaseAdmin.from(LEDGER_TABLE).select(cols)
+    let q = db.from(LEDGER_TABLE).select(cols)
     if (f.participantId) q = q.eq('participant_id', f.participantId)
     if (f.monthlyPaymentId) q = q.eq('monthly_payment_id', f.monthlyPaymentId)
     if (f.accountId) q = q.eq('account_id', f.accountId)
@@ -208,7 +208,7 @@ export async function loadTransactions(req: Request | null, f: TxFilter = {}): P
 
 /** Dev preview: receipts synthesised from monthly_payments, read-only. */
 async function mockTransactions(f: TxFilter, flat: boolean): Promise<LedgerTx[]> {
-  let q = supabaseAdmin
+  let q = db
     .from('monthly_payments')
     .select(
       'id, participant_id, program_id, month_number, year, plan_amount, fact_amount, status, original_amount, currency, exchange_rate, paid_date, account_id, notes, updated_at, created_at, participant:participants(name, program_id, program:programs(name)), account:accounts(name, currency)'

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase-client'
+import { db } from '@/lib/db'
 import { fetchRow, logAudit } from '@/lib/audit'
 import { changeSuffix } from '@/lib/audit-labels'
 import { BadRequest, NotFound, SPRINTS, TASKS, check, errorResponse, optionalDate, requireUuid } from '../_lib/store'
@@ -28,7 +28,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (!start || !end) throw new BadRequest('Укажите даты начала и конца')
     if (end < start) throw new BadRequest('Конец спринта раньше начала')
 
-    const { data, error } = await supabaseAdmin.from(SPRINTS).update(patch).eq('id', id).select('*').single()
+    const { data, error } = await db.from(SPRINTS).update(patch).eq('id', id).select('*').single()
     check(error)
     await logAudit(req, {
       table: SPRINTS,
@@ -50,10 +50,10 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
     const id = requireUuid((await params).id, 'id')
     const before = await fetchRow(SPRINTS, id)
     if (!before) throw new NotFound('Спринт не найден')
-    const { count, error: cErr } = await supabaseAdmin.from(TASKS).select('id', { count: 'exact', head: true }).eq('sprint_id', id)
+    const { count, error: cErr } = await db.from(TASKS).select('id', { count: 'exact', head: true }).eq('sprint_id', id)
     check(cErr)
     if (count) throw new BadRequest('В спринте есть задачи. Сначала удалите их или верните в бэклог.')
-    const { error } = await supabaseAdmin.from(SPRINTS).delete().eq('id', id)
+    const { error } = await db.from(SPRINTS).delete().eq('id', id)
     check(error)
     await logAudit(req, { table: SPRINTS, recordId: id, action: 'delete', summary: `Спринт ${before.number} «${before.title}»`, before })
     return NextResponse.json({ success: true })

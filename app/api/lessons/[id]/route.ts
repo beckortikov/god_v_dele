@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase-client'
+import { db } from '@/lib/db'
 import { logAudit } from '@/lib/audit'
 import { forbidden } from '@/lib/api-auth'
 import { parseLesson } from '@/lib/lessons'
@@ -13,7 +13,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     const id = requireUuid((await params).id, 'id')
     const lesson = await getLesson(id)
     if (!(await mayOpenLesson(req, lesson))) return denyLesson()
-    const { data, error } = await supabaseAdmin.from(MATERIALS).select('*').eq('lesson_id', id).order('created_at')
+    const { data, error } = await db.from(MATERIALS).select('*').eq('lesson_id', id).order('created_at')
     checkLessons(error)
     return NextResponse.json({ data: { ...lesson, materials: (data ?? []).map(publicMaterial) } })
   } catch (e) {
@@ -36,7 +36,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       if (groupId) await assertGroupInProgram(groupId, before.program_id)
       patch.group_id = groupId
     }
-    const { data, error } = await supabaseAdmin.from(LESSONS).update(patch).eq('id', id).select('*').single()
+    const { data, error } = await db.from(LESSONS).update(patch).eq('id', id).select('*').single()
     checkLessons(error)
     await logAudit(req, { table: LESSONS, recordId: id, action: 'update', summary: `Урок «${fields.title}»` })
     return NextResponse.json({ data })
@@ -51,17 +51,17 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
     if (!isLessonStaff(req)) return forbidden()
     const id = requireUuid((await params).id, 'id')
     const lesson = await getLesson(id)
-    const { data: mats, error: mErr } = await supabaseAdmin.from(MATERIALS).select('file_key').eq('lesson_id', id)
+    const { data: mats, error: mErr } = await db.from(MATERIALS).select('file_key').eq('lesson_id', id)
     checkLessons(mErr)
     const keys = (mats ?? []).filter(m => m.file_key).map(m => `${id}/${m.file_key}`)
     if (keys.length) {
       try {
-        await supabaseAdmin.storage.from(LESSON_BUCKET).remove(keys)
+        await db.storage.from(LESSON_BUCKET).remove(keys)
       } catch {
         // an orphaned file is harmless; the lesson still goes
       }
     }
-    const { error } = await supabaseAdmin.from(LESSONS).delete().eq('id', id)
+    const { error } = await db.from(LESSONS).delete().eq('id', id)
     checkLessons(error)
     await logAudit(req, { table: LESSONS, recordId: id, action: 'delete', summary: `Урок «${lesson.title}»${keys.length ? ` и файлов: ${keys.length}` : ''}`, before: lesson })
     return NextResponse.json({ success: true })

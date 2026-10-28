@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/lib/supabase-client';
+import { db } from '@/lib/db';
 import { fetchRow, logAudit } from '@/lib/audit';
 import { changeSuffix, monthLabel, personName, roundMoneyFields } from '@/lib/audit-labels';
 import { formatMoney } from '@/lib/format';
@@ -14,7 +14,7 @@ export async function PUT(
         const body = roundMoneyFields(await request.json());
         const before = await fetchRow('employees', id);
 
-        const { data, error } = await supabaseAdmin
+        const { data, error } = await db
             .from('employees')
             .update(body)
             .eq('id', id)
@@ -54,7 +54,7 @@ export async function DELETE(
         // Payroll rows are removed by ON DELETE CASCADE — keep them in the корзина too
         const payroll = before ? await fetchRowsWhere('payroll', 'employee_id', id) : [];
 
-        const { error } = await supabaseAdmin
+        const { error } = await db
             .from('employees')
             .delete()
             .eq('id', id);

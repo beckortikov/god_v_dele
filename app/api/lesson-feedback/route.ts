@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase-client'
+import { db } from '@/lib/db'
 import { getActor, logAudit } from '@/lib/audit'
 import { parseFeedback, type LessonFeedback } from '@/lib/lesson-feedback'
 import { lessonsForParticipant, lessonState } from '@/lib/lessons'
@@ -12,7 +12,7 @@ export const dynamic = 'force-dynamic'
 export async function GET(req: Request) {
   try {
     const participantId = requireUuid(new URL(req.url).searchParams.get('participant_id'), 'participant_id')
-    const { data, error } = await supabaseAdmin.from(FEEDBACK).select('*').eq('participant_id', participantId)
+    const { data, error } = await db.from(FEEDBACK).select('*').eq('participant_id', participantId)
     checkFeedback(error)
     return NextResponse.json({ data: (data ?? []) as LessonFeedback[] })
   } catch (e) {
@@ -32,14 +32,14 @@ export async function POST(req: Request) {
     const lessonId = requireUuid(body?.lesson_id, 'lesson_id')
     const { scores, comment } = parseFeedback(body)
 
-    const { data: person, error: pErr } = await supabaseAdmin.from('participants').select('id, name, program_id, group_id').eq('id', participantId).maybeSingle()
+    const { data: person, error: pErr } = await db.from('participants').select('id, name, program_id, group_id').eq('id', participantId).maybeSingle()
     if (pErr) throw new Error(pErr.message)
     if (!person) throw new LessonBadRequest('Участник не найден')
     const lesson = await getLesson(lessonId)
     if (lesson.program_id !== person.program_id || !lessonsForParticipant([lesson], person.group_id ?? null).length) throw new LessonBadRequest('Этот урок не для вас')
     if (lessonState(lesson) === 'upcoming') throw new LessonBadRequest('Урок ещё не начался: оценить его можно после занятия')
 
-    const { data, error } = await supabaseAdmin
+    const { data, error } = await db
       .from(FEEDBACK)
       .upsert({ lesson_id: lessonId, participant_id: participantId, ...scores, comment, updated_at: new Date().toISOString() }, { onConflict: 'lesson_id,participant_id' })
       .select('*')

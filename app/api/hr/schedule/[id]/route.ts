@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/lib/supabase-client';
+import { db } from '@/lib/db';
 import { fetchRow, logAudit } from '@/lib/audit';
 import { SHIFT_LABELS, changeSuffix } from '@/lib/audit-labels';
 import { formatDate } from '@/lib/format';
@@ -17,7 +17,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
         const { id } = await params;
         const before = await fetchRow('employee_schedules', id);
 
-        const { data, error } = await supabaseAdmin
+        const { data, error } = await db
             .from('employee_schedules')
             .update(body)
             .eq('id', id)
@@ -53,7 +53,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
         const { id } = await params;
         const before = await fetchRow('employee_schedules', id);
 
-        const { error } = await supabaseAdmin
+        const { error } = await db
             .from('employee_schedules')
             .delete()
             .eq('id', id);

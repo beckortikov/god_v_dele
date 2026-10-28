@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase-client'
+import { db } from '@/lib/db'
 import { fetchRow, logAudit } from '@/lib/audit'
 import { fetchRowsWhere, logDeletedRows } from '@/app/api/audit/_server'
 
@@ -18,7 +18,7 @@ export async function DELETE(
         // Program accounts are removed by ON DELETE CASCADE — keep them in the корзина too
         const accounts = before ? await fetchRowsWhere('accounts', 'program_id', id) : []
 
-        const { error } = await supabaseAdmin
+        const { error } = await db
             .from('programs')
             .delete()
             .eq('id', id)

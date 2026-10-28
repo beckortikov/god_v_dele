@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase-client'
+import { db } from '@/lib/db'
 import type { Assignment, BoardData, ParticipantLite, Sprint, SprintTask } from '@/lib/sprints'
 import { ASSIGNMENTS, NotFound, SPRINTS, TASKS, check, errorResponse, requireUuid } from '../../_lib/store'
 
@@ -12,17 +12,17 @@ export const dynamic = 'force-dynamic'
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const id = requireUuid((await params).id, 'id')
-    const { data: sprint, error } = await supabaseAdmin.from(SPRINTS).select('*').eq('id', id).maybeSingle()
+    const { data: sprint, error } = await db.from(SPRINTS).select('*').eq('id', id).maybeSingle()
     check(error)
     if (!sprint) throw new NotFound('Спринт не найден')
 
     // Tasks and the program's people do not depend on each other.
     // A sprint of a group shows only that group; a program-wide sprint shows everyone.
     const groupId = (sprint as Sprint).group_id ?? null
-    let peopleQuery = supabaseAdmin.from('participants').select('id, name, phone, status').eq('program_id', (sprint as Sprint).program_id).eq('status', 'active')
+    let peopleQuery = db.from('participants').select('id, name, phone, status').eq('program_id', (sprint as Sprint).program_id).eq('status', 'active')
     if (groupId) peopleQuery = peopleQuery.eq('group_id', groupId)
     const [{ data: tasks, error: tErr }, { data: active, error: pErr }] = await Promise.all([
-      supabaseAdmin
+      db
         .from(TASKS)
         .select('*')
         .eq('sprint_id', id)
@@ -36,7 +36,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
     let assignments: Assignment[] = []
     if (taskIds.length) {
-      const { data, error: aErr } = await supabaseAdmin.from(ASSIGNMENTS).select('*').in('task_id', taskIds)
+      const { data, error: aErr } = await db.from(ASSIGNMENTS).select('*').in('task_id', taskIds)
       check(aErr)
       assignments = (data ?? []) as Assignment[]
     }
@@ -44,7 +44,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     const people = new Map<string, ParticipantLite>((active ?? []).map(p => [p.id, p]))
     const missing = [...new Set(assignments.map(a => a.participant_id))].filter(pid => !people.has(pid))
     if (missing.length) {
-      const { data: extra, error: eErr } = await supabaseAdmin.from('participants').select('id, name, phone, status').in('id', missing)
+      const { data: extra, error: eErr } = await db.from('participants').select('id, name, phone, status').in('id', missing)
       if (eErr) throw new Error(eErr.message)
       for (const p of extra ?? []) people.set(p.id, p)
     }

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase-client'
+import { db } from '@/lib/db'
 import { getActor, logAudit } from '@/lib/audit'
 import { parseYear } from '@/lib/participant-profile'
 import { ProfileBadRequest, checkProfile, profileError, profileOwner } from '../_lib'
@@ -15,7 +15,7 @@ export async function PUT(req: Request) {
     const { goal_turnover, ...rest } = parseYear(body)
     // The goal column comes with migration 022: an older client, or a year saved without a goal, leaves it alone
     const y = body && typeof body === 'object' && 'goal_turnover' in body ? { ...rest, goal_turnover } : rest
-    const { data, error } = await supabaseAdmin
+    const { data, error } = await db
       .from('participant_business_years')
       .upsert({ participant_id: owner.id, ...y, updated_by: getActor(req).name, updated_at: new Date().toISOString() }, { onConflict: 'participant_id,year' })
       .select('*')
@@ -36,7 +36,7 @@ export async function DELETE(req: Request) {
     const raw = new URL(req.url).searchParams.get('year')
     const year = raw === null || !raw.trim() ? NaN : Number(raw)
     if (!Number.isInteger(year)) throw new ProfileBadRequest('Укажите год')
-    const { error } = await supabaseAdmin.from('participant_business_years').delete().eq('participant_id', owner.id).eq('year', year)
+    const { error } = await db.from('participant_business_years').delete().eq('participant_id', owner.id).eq('year', year)
     checkProfile(error)
     await logAudit(req, { table: 'participant_business_years', recordId: owner.id, action: 'delete', summary: `Бизнес участника «${owner.name}» за ${year} год удалён из динамики` })
     return NextResponse.json({ data: { year } })

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase-client'
+import { db } from '@/lib/db'
 import { logAudit } from '@/lib/audit'
 import { changeSuffix } from '@/lib/audit-labels'
 import { roundMoney } from '@/lib/money'
@@ -66,7 +66,7 @@ async function existingRows(ids: string[]) {
   for (let i = 0; i < ids.length; i += 50) {
     const chunk = ids.slice(i, i + 50)
     for (let from = 0; ; from += 1000) {
-      const { data, error } = await supabaseAdmin
+      const { data, error } = await db
         .from('monthly_payments')
         .select('id, participant_id, month_number, year, plan_amount, fact_amount, status')
         .in('participant_id', chunk)
@@ -170,7 +170,7 @@ export async function POST(req: Request) {
       try {
         if (pl.create.length) {
           // ignoreDuplicates: a month created meanwhile by someone else is left alone
-          const { data, error } = await supabaseAdmin
+          const { data, error } = await db
             .from('monthly_payments')
             .upsert(pl.create, { onConflict: 'participant_id,month_number,year', ignoreDuplicates: true })
             .select('*')
@@ -183,9 +183,9 @@ export async function POST(req: Request) {
           )
         }
         for (const { row, plan } of pl.update) {
-          const { data: before } = await supabaseAdmin.from('monthly_payments').select('*').eq('id', row.id).maybeSingle()
+          const { data: before } = await db.from('monthly_payments').select('*').eq('id', row.id).maybeSingle()
           if (!before) continue
-          const { data: after, error } = await supabaseAdmin
+          const { data: after, error } = await db
             .from('monthly_payments')
             .update(planUpdate(before, plan))
             .eq('id', row.id)

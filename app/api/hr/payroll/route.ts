@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/lib/supabase-client';
+import { db } from '@/lib/db';
 import { logAudit } from '@/lib/audit';
 import { roundMoney } from '@/lib/money';
 import { monthLabel } from '@/lib/audit-labels';
@@ -13,7 +13,7 @@ export async function GET(request: Request) {
         const year = searchParams.get('year');
         const employee_id = searchParams.get('employee_id');
 
-        let query = supabaseAdmin
+        let query = db
             .from('payroll')
             .select(`
         *,
@@ -55,7 +55,7 @@ export async function POST(request: Request) {
         }
 
         // 1. Fetch Employee Base Salary
-        const { data: employee, error: empError } = await supabaseAdmin
+        const { data: employee, error: empError } = await db
             .from('employees')
             .select('base_salary')
             .eq('id', employee_id)
@@ -86,7 +86,7 @@ export async function POST(request: Request) {
         const startStr = `${year}-${String(month_number).padStart(2, '0')}-01`;
         const endStr = `${year}-${String(month_number).padStart(2, '0')}-${daysInMonth}`;
 
-        const { count: absentCount, error: scheduleError } = await supabaseAdmin
+        const { count: absentCount, error: scheduleError } = await db
             .from('employee_schedules')
             .select('*', { count: 'exact', head: true })
             .eq('employee_id', employee_id)
@@ -123,7 +123,7 @@ export async function POST(request: Request) {
             status: body.status || 'pending'
         };
 
-        const { data, error } = await supabaseAdmin
+        const { data, error } = await db
             .from('payroll')
             .insert([payload])
             .select()

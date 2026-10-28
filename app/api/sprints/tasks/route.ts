@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase-client'
+import { db } from '@/lib/db'
 import { getActor, logAudit } from '@/lib/audit'
 import { shortDate, type Audience, type SubmissionType } from '@/lib/sprints'
 import {
@@ -27,7 +27,7 @@ export async function GET(req: Request) {
   const programId = searchParams.get('program_id')
   if (!isUuid(programId)) return NextResponse.json({ error: 'program_id: нужен UUID' }, { status: 400 })
   try {
-    const { data, error } = await supabaseAdmin
+    const { data, error } = await db
       .from(TASKS)
       .select('*')
       .eq('program_id', programId)
@@ -61,14 +61,14 @@ export async function POST(req: Request) {
     // A sprint of a group gives «всей группе» tasks only to that group.
     let sprintGroupId: string | null = null
     if (sprintId) {
-      const { data: sprint, error } = await supabaseAdmin.from(SPRINTS).select('*').eq('id', sprintId).maybeSingle()
+      const { data: sprint, error } = await db.from(SPRINTS).select('*').eq('id', sprintId).maybeSingle()
       check(error)
       if (!sprint || sprint.program_id !== programId) throw new NotFound('Спринт не найден в этом потоке')
       dueDate = dueDate ?? sprint.end_date
       sprintGroupId = sprint.group_id ?? null
     }
 
-    const { data: task, error } = await supabaseAdmin
+    const { data: task, error } = await db
       .from(TASKS)
       .insert({
         program_id: programId,

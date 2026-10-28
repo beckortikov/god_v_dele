@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase-client'
+import { db } from '@/lib/db'
 import { ledgerEnabled, loadTransactions } from '@/lib/payments-ledger'
 
 export async function GET(req: Request) {
@@ -27,17 +27,17 @@ export async function GET(req: Request) {
         // array scans with Map lookups. Rows keep the database order, so sums are
         // accumulated in the same order as before (the response is byte-identical).
 
-        let participantsQuery = supabaseAdmin
+        let participantsQuery = db
             .from('participants')
             .select('id, name, status, tariff, program_id, program:programs(name, price_per_month)')
         if (byProgram) participantsQuery = participantsQuery.eq('program_id', programId)
 
-        let accountsQuery = supabaseAdmin.from('accounts').select('id, name, currency, initial_balance')
+        let accountsQuery = db.from('accounts').select('id, name, currency, initial_balance')
         if (byProgram) accountsQuery = accountsQuery.or(`program_id.eq.${programId},program_id.is.null`)
 
         // One payments query covering every subset below: billed up to this year
         // (period / opening / YTD sets) or received up to the end of the month (cash sets).
-        let paymentsAllQuery = supabaseAdmin
+        let paymentsAllQuery = db
             .from('monthly_payments')
             .select('participant_id, month_number, year, plan_amount, fact_amount, status, notes, currency, original_amount, account_id, paid_date, participant:participants!inner(program_id)')
             .or(`year.lte.${year},paid_date.lte.${endDate}`)
@@ -48,14 +48,14 @@ export async function GET(req: Request) {
         // order, and a different summation order changes float sums in the last
         // digit. They run in parallel, so this costs no extra wall time.
         const expenseCols = 'amount, category, currency, original_amount, account_id'
-        let expensesQuery = supabaseAdmin.from('expenses').select(expenseCols).gte('expense_date', startDate).lte('expense_date', endDate)
+        let expensesQuery = db.from('expenses').select(expenseCols).gte('expense_date', startDate).lte('expense_date', endDate)
         if (byProgram) expensesQuery = expensesQuery.eq('program_id', programId)
 
-        let openingExpensesQuery = supabaseAdmin.from('expenses').select(expenseCols).lt('expense_date', startDate)
+        let openingExpensesQuery = db.from('expenses').select(expenseCols).lt('expense_date', startDate)
         if (byProgram) openingExpensesQuery = openingExpensesQuery.eq('program_id', programId)
 
         // YTD expenses are company-wide (no program filter), as before
-        const ytdExpensesQuery = supabaseAdmin.from('expenses').select(expenseCols).gte('expense_date', ytdStartDate).lte('expense_date', endDate)
+        const ytdExpensesQuery = db.from('expenses').select(expenseCols).gte('expense_date', ytdStartDate).lte('expense_date', endDate)
 
         // Partial payments on (migration 014): cash figures come from the
         // individual receipts by their own date, so a month paid in two parts

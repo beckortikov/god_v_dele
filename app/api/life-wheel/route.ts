@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { forbidden, mayUsePerson } from '@/lib/api-auth'
-import { supabaseAdmin } from '@/lib/supabase-client'
+import { db } from '@/lib/db'
 import { logAudit, fetchRow } from '@/lib/audit'
 import { participantName } from '@/app/api/audit/_server'
 
@@ -16,7 +16,7 @@ export async function GET(req: Request) {
         const period_type = searchParams.get('period_type')
         const period_label = searchParams.get('period_label')
 
-        let query = supabaseAdmin
+        let query = db
             .from('life_wheel_entries')
             .select('*')
             .order('period_label', { ascending: false })
@@ -47,13 +47,13 @@ export async function POST(req: Request) {
         }
         if (!mayUsePerson(req, participant_id)) return forbidden()
 
-        const { data: existing } = await supabaseAdmin
+        const { data: existing } = await db
             .from('life_wheel_entries')
             .select('id')
             .eq('participant_id', participant_id).eq('period_type', period_type).eq('period_label', period_label)
             .maybeSingle()
 
-        const { data, error } = await supabaseAdmin
+        const { data, error } = await db
             .from('life_wheel_entries')
             .upsert(
                 {
@@ -105,7 +105,7 @@ export async function DELETE(req: Request) {
         const before = await fetchRow('life_wheel_entries', id)
         if (before && !mayUsePerson(req, before.participant_id)) return forbidden()
 
-        const { error } = await supabaseAdmin
+        const { error } = await db
             .from('life_wheel_entries')
             .delete()
             .eq('id', id)

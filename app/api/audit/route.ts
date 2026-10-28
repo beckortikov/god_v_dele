@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase-client'
+import { db } from '@/lib/db'
 import { isMissingTableError } from './_server'
 
 const ACTIONS = new Set(['create', 'update', 'delete', 'restore'])
@@ -33,7 +33,7 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url)
 
     if (searchParams.get('facet') === 'actors') {
-      const { data, error } = await supabaseAdmin
+      const { data, error } = await db
         .from('audit_log')
         .select('actor_id, actor_name')
         .order('created_at', { ascending: false })
@@ -54,7 +54,7 @@ export async function GET(req: Request) {
     const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10) || 1)
     const pageSize = Math.min(MAX_PAGE_SIZE, Math.max(1, parseInt(searchParams.get('pageSize') || '50', 10) || 50))
 
-    let query = supabaseAdmin.from('audit_log').select('*', { count: 'exact' })
+    let query = db.from('audit_log').select('*', { count: 'exact' })
 
     const table = searchParams.get('table')
     if (table) query = query.eq('table_name', table)

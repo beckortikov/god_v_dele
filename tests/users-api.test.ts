@@ -6,7 +6,7 @@ const h = vi.hoisted(() => ({
   result: { data: null, error: null } as { data: unknown; error: unknown },
   writes: [] as { op: 'insert' | 'update'; row: Record<string, unknown> }[],
 }))
-vi.mock('@/lib/supabase-client', () => {
+vi.mock('@/lib/db', () => {
   const chain = () => {
     const b: Record<string, unknown> = {}
     for (const m of ['select', 'order', 'delete', 'eq', 'is', 'single', 'maybeSingle']) b[m] = () => b
@@ -21,7 +21,7 @@ vi.mock('@/lib/supabase-client', () => {
     b.then = (resolve: (v: unknown) => unknown, reject?: (e: unknown) => unknown) => Promise.resolve(h.result).then(resolve, reject)
     return b
   }
-  return { supabaseAdmin: { from: () => chain() } }
+  return { db: { from: () => chain() } }
 })
 
 import { GET, POST } from '@/app/api/admin/users/route'

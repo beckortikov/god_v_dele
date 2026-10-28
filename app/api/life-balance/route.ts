@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { forbidden, mayUsePerson } from '@/lib/api-auth'
-import { supabaseAdmin } from '@/lib/supabase-client'
+import { db } from '@/lib/db'
 import { logAudit, fetchRow } from '@/lib/audit'
 import { participantName } from '@/app/api/audit/_server'
 
@@ -15,7 +15,7 @@ export async function GET(req: Request) {
         const participant_id = searchParams.get('participant_id')
         const yearStr = searchParams.get('year')
 
-        let query = supabaseAdmin
+        let query = db
             .from('life_balance_entries')
             .select('*')
             .order('year', { ascending: false })
@@ -57,13 +57,13 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: 'Invalid year' }, { status: 400 })
         }
 
-        const { data: existing } = await supabaseAdmin
+        const { data: existing } = await db
             .from('life_balance_entries')
             .select('id')
             .eq('participant_id', participant_id).eq('year', parsedYear)
             .maybeSingle()
 
-        const { data, error } = await supabaseAdmin
+        const { data, error } = await db
             .from('life_balance_entries')
             .upsert(
                 {
@@ -115,7 +115,7 @@ export async function DELETE(req: Request) {
         const before = await fetchRow('life_balance_entries', id)
         if (before && !mayUsePerson(req, before.participant_id)) return forbidden()
 
-        const { error } = await supabaseAdmin
+        const { error } = await db
             .from('life_balance_entries')
             .delete()
             .eq('id', id)

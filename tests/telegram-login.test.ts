@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-vi.mock('@/lib/supabase-client', async () => ({ supabaseAdmin: (await import('./helpers/fake-db')).fakeAdmin }))
+vi.mock('@/lib/db', async () => ({ db: (await import('./helpers/fake-db')).fakeAdmin }))
 process.env.SUPABASE_SERVICE_ROLE_KEY ||= 'service-key-for-tests'
 process.env.TELEGRAM_BOT_TOKEN = '123:test'
 process.env.TELEGRAM_BOT_USERNAME = 'GvdBot'

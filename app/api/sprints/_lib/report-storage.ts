@@ -1,5 +1,5 @@
 /** Server-only: the private Storage bucket that holds report files. */
-import { supabaseAdmin } from '@/lib/supabase-client'
+import { db } from '@/lib/db'
 import { ALLOWED_TYPES, MAX_FILE_BYTES, REPORT_BUCKET, decodeName, isReportKey, type ReportFile } from '@/lib/report-files'
 
 let bucketReady = false
@@ -7,9 +7,9 @@ let bucketReady = false
 /** The bucket is private; it is created on first use so no setup step is needed. */
 export async function ensureBucket() {
   if (bucketReady) return
-  const { data } = await supabaseAdmin.storage.getBucket(REPORT_BUCKET)
+  const { data } = await db.storage.getBucket(REPORT_BUCKET)
   if (!data) {
-    const { error } = await supabaseAdmin.storage.createBucket(REPORT_BUCKET, {
+    const { error } = await db.storage.createBucket(REPORT_BUCKET, {
       public: false,
       fileSizeLimit: MAX_FILE_BYTES,
       allowedMimeTypes: Object.keys(ALLOWED_TYPES),
@@ -21,7 +21,7 @@ export async function ensureBucket() {
 }
 
 export async function listFiles(assignmentId: string): Promise<ReportFile[]> {
-  const { data, error } = await supabaseAdmin.storage.from(REPORT_BUCKET).list(assignmentId, { limit: 100, sortBy: { column: 'name', order: 'asc' } })
+  const { data, error } = await db.storage.from(REPORT_BUCKET).list(assignmentId, { limit: 100, sortBy: { column: 'name', order: 'asc' } })
   if (error) throw new Error(error.message)
   return (data ?? [])
     .filter(f => isReportKey(f.name))

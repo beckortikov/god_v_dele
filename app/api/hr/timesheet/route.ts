@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/lib/supabase-client';
+import { db } from '@/lib/db';
 
 export async function GET(request: Request) {
     try {
@@ -11,7 +11,7 @@ export async function GET(request: Request) {
         const startDate = new Date(year, month - 1, 1).toISOString();
         const endDate = new Date(year, month, 0, 23, 59, 59).toISOString();
 
-        const { data: logs, error: logsError } = await supabaseAdmin
+        const { data: logs, error: logsError } = await db
             .from('time_logs')
             .select('*, employee:employees(first_name, last_name, position)')
             .gte('work_date', startDate)

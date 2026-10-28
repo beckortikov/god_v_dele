@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase-client'
+import { db } from '@/lib/db'
 import { fetchRow, logAudit } from '@/lib/audit'
 import { roundMoney } from '@/lib/money'
 import { changeSuffix, monthLabel, rowMoney, roundMoneyFields } from '@/lib/audit-labels'
@@ -24,7 +24,7 @@ export async function GET(req: Request) {
             ? '*, offline_events(id, name, event_date, status)'
             : '*'
 
-        let query = supabaseAdmin
+        let query = db
             .from('expenses')
             .select(selectQuery)
 
@@ -62,7 +62,7 @@ export async function POST(req: Request) {
         const body = roundMoneyFields(await req.json())
 
         const { data, error } = await writeWithOptionalColumns(body, OPTIONAL_COLUMNS, row =>
-            supabaseAdmin.from('expenses').insert([row]).select()
+            db.from('expenses').insert([row]).select()
         )
 
         if (error) throw error
@@ -85,7 +85,7 @@ export async function POST(req: Request) {
             const year = expenseDate.getFullYear();
 
             // 1. Check if payroll record exists
-            const { data: payroll, error: payrollError } = await supabaseAdmin
+            const { data: payroll, error: payrollError } = await db
                 .from('payroll')
                 .select('*')
                 .eq('employee_id', body.employee_id)
@@ -98,7 +98,7 @@ export async function POST(req: Request) {
 
             // 2. If exists, update to PAID
             if (payroll) {
-                const { data: updatedPayroll } = await supabaseAdmin
+                const { data: updatedPayroll } = await db
                     .from('payroll')
                     .update({
                         status: 'paid',
@@ -124,7 +124,7 @@ export async function POST(req: Request) {
             else {
                 // Fetch employee base salary first? Or just trust the expense amount?
                 // Ideally, we should fetch base salary.
-                const { data: employee } = await supabaseAdmin
+                const { data: employee } = await db
                     .from('employees')
                     .select('base_salary')
                     .eq('id', body.employee_id)
@@ -132,7 +132,7 @@ export async function POST(req: Request) {
 
                 const salaryAmount = roundMoney(body.original_amount || body.amount * (body.exchange_rate || 1)); // Best guess at TJS amount
 
-                const { data: createdPayroll } = await supabaseAdmin
+                const { data: createdPayroll } = await db
                     .from('payroll')
                     .insert([{
                         employee_id: body.employee_id,
@@ -179,7 +179,7 @@ export async function PUT(req: Request) {
         const before = await fetchRow('expenses', id)
 
         const { data, error } = await writeWithOptionalColumns(updates, OPTIONAL_COLUMNS, row =>
-            supabaseAdmin.from('expenses').update(row).eq('id', id).select()
+            db.from('expenses').update(row).eq('id', id).select()
         )
 
         if (error) throw error
@@ -213,7 +213,7 @@ export async function DELETE(req: Request) {
 
         const before = await fetchRow('expenses', id)
 
-        const { error } = await supabaseAdmin
+        const { error } = await db
             .from('expenses')
             .delete()
             .eq('id', id)

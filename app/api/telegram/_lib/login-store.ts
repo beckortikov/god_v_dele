@@ -1,4 +1,4 @@
-import { supabaseAdmin } from '@/lib/supabase-client'
+import { db } from '@/lib/db'
 import { isMissingTelegramTable, type LoginStore, type TelegramLogin } from '@/lib/telegram'
 
 export const LOGINS_TABLE = 'telegram_logins'
@@ -24,14 +24,14 @@ function check(error: PgError) {
 }
 
 export async function loginTableExists() {
-  const { error } = await supabaseAdmin.from(LOGINS_TABLE).select('id').limit(1)
+  const { error } = await db.from(LOGINS_TABLE).select('id').limit(1)
   if (!error) return true
   if (isMissingTelegramTable(error)) return false
   throw new Error(error.message)
 }
 
 export async function createLogin(input: { token: string; secretHash: string; ip: string; device: string; expiresAt: Date }) {
-  const { error } = await supabaseAdmin.from(LOGINS_TABLE).insert({
+  const { error } = await db.from(LOGINS_TABLE).insert({
     token: input.token,
     secret_hash: input.secretHash,
     status: 'pending',
@@ -43,20 +43,20 @@ export async function createLogin(input: { token: string; secretHash: string; ip
 }
 
 export async function recentLoginsFrom(ip: string, since: Date) {
-  const { data, error } = await supabaseAdmin.from(LOGINS_TABLE).select('id').eq('ip', ip).gte('created_at', since.toISOString())
+  const { data, error } = await db.from(LOGINS_TABLE).select('id').eq('ip', ip).gte('created_at', since.toISOString())
   check(error)
   return data?.length ?? 0
 }
 
 export async function getLoginRow(token: string): Promise<LoginRow | null> {
-  const { data, error } = await supabaseAdmin.from(LOGINS_TABLE).select('*').eq('token', token).maybeSingle()
+  const { data, error } = await db.from(LOGINS_TABLE).select('*').eq('token', token).maybeSingle()
   check(error)
   return (data as LoginRow) ?? null
 }
 
 /** approved -> used, only once: whoever gets true holds the session. */
 export async function consumeLogin(token: string) {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from(LOGINS_TABLE)
     .update({ status: 'used', used_at: new Date().toISOString() })
     .eq('token', token)
@@ -67,14 +67,14 @@ export async function consumeLogin(token: string) {
 }
 
 async function moveFromPending(token: string, patch: Record<string, unknown>) {
-  const { data, error } = await supabaseAdmin.from(LOGINS_TABLE).update(patch).eq('token', token).eq('status', 'pending').select('token')
+  const { data, error } = await db.from(LOGINS_TABLE).update(patch).eq('token', token).eq('status', 'pending').select('token')
   check(error)
   return (data?.length ?? 0) > 0
 }
 
 /** The login the bot signs a participant in to: the account whose participant_id is theirs. */
 export async function accountOfParticipant(participantId: string) {
-  const { data, error } = await supabaseAdmin.from('app_users').select('*').eq('participant_id', participantId).eq('role', 'participant')
+  const { data, error } = await db.from('app_users').select('*').eq('participant_id', participantId).eq('role', 'participant')
   if (error) throw new Error(error.message)
   return data?.[0] ?? null
 }

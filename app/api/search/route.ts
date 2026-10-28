@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase-client'
+import { db } from '@/lib/db'
 
 /**
  * GET /api/search?q=…&role=…
@@ -62,7 +62,7 @@ export async function GET(req: Request) {
   try {
     const [participants, employees, events, expenses, payments] = await Promise.all([
       allow('participants')
-        ? supabaseAdmin
+        ? db
             .from('participants')
             .select('id, name, phone, email, status, program:programs(name)')
             .or(`name.ilike.${like},phone.ilike.${like},email.ilike.${like}`)
@@ -70,7 +70,7 @@ export async function GET(req: Request) {
             .limit(FETCH)
         : null,
       allow('employees')
-        ? supabaseAdmin
+        ? db
             .from('employees')
             .select('id, first_name, last_name, position, department, status')
             .or(`first_name.ilike.${like},last_name.ilike.${like},position.ilike.${like}`)
@@ -78,7 +78,7 @@ export async function GET(req: Request) {
             .limit(FETCH)
         : null,
       allow('events')
-        ? supabaseAdmin
+        ? db
             .from('offline_events')
             .select('id, name, location, event_date, status')
             .or(`name.ilike.${like},location.ilike.${like}`)
@@ -86,7 +86,7 @@ export async function GET(req: Request) {
             .limit(FETCH)
         : null,
       allow('expenses')
-        ? supabaseAdmin
+        ? db
             .from('expenses')
             .select('id, name, description, category, amount, currency, original_amount, expense_date')
             .or(`name.ilike.${like},description.ilike.${like},category.ilike.${like}`)
@@ -94,7 +94,7 @@ export async function GET(req: Request) {
             .limit(FETCH)
         : null,
       allow('payments')
-        ? supabaseAdmin
+        ? db
             .from('monthly_payments')
             .select('id, participant_id, month_number, year, plan_amount, fact_amount, status, paid_date, participant:participants!inner(id, name)')
             .ilike('participant.name', like)

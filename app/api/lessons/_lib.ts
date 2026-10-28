@@ -1,6 +1,6 @@
 /** Server-only helpers for the lesson routes. */
 import { NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase-client'
+import { db } from '@/lib/db'
 import { forbidden, sessionOf } from '@/lib/api-auth'
 import { LessonInputError, MAX_MATERIAL_BYTES, MATERIAL_TYPES, type Lesson, type LessonMaterial } from '@/lib/lessons'
 import { isUuid } from '@/app/api/sprints/_lib/store'
@@ -52,7 +52,7 @@ export const requireUuid = (v: unknown, field: string): string => {
 }
 
 export async function getLesson(id: string): Promise<Lesson> {
-  const { data, error } = await supabaseAdmin.from(LESSONS).select('*').eq('id', id).maybeSingle()
+  const { data, error } = await db.from(LESSONS).select('*').eq('id', id).maybeSingle()
   checkLessons(error)
   if (!data) throw new LessonNotFound('Урок не найден')
   return data as Lesson
@@ -66,7 +66,7 @@ export async function mayOpenLesson(req: Request, lesson: Lesson): Promise<boole
   if (isLessonStaff(req)) return true
   const s = sessionOf(req)
   if (s?.role !== 'participant' || !s.pid) return false
-  const { data } = await supabaseAdmin.from('participants').select('*').eq('id', s.pid).maybeSingle()
+  const { data } = await db.from('participants').select('*').eq('id', s.pid).maybeSingle()
   if (!data || data.program_id !== lesson.program_id) return false
   return !lesson.group_id || lesson.group_id === (data.group_id ?? null)
 }
@@ -92,9 +92,9 @@ let bucketReady = false
 /** The bucket is private; it is created on first use so no setup step is needed. */
 export async function ensureLessonBucket() {
   if (bucketReady) return
-  const { data } = await supabaseAdmin.storage.getBucket(LESSON_BUCKET)
+  const { data } = await db.storage.getBucket(LESSON_BUCKET)
   if (!data) {
-    const { error } = await supabaseAdmin.storage.createBucket(LESSON_BUCKET, {
+    const { error } = await db.storage.createBucket(LESSON_BUCKET, {
       public: false,
       fileSizeLimit: MAX_MATERIAL_BYTES,
       allowedMimeTypes: Object.keys(MATERIAL_TYPES),
@@ -106,7 +106,7 @@ export async function ensureLessonBucket() {
 
 /** The group must belong to the program (migration 018 gives groups; without it no group can be named). */
 export async function assertGroupInProgram(groupId: string, programId: string) {
-  const { data, error } = await supabaseAdmin.from('participant_groups').select('id, program_id').eq('id', groupId).maybeSingle()
+  const { data, error } = await db.from('participant_groups').select('id, program_id').eq('id', groupId).maybeSingle()
   if (error) throw new LessonBadRequest('Группы ещё не подключены')
   if (!data || data.program_id !== programId) throw new LessonNotFound('Группа не найдена в этом потоке')
 }

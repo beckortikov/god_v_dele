@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase-client'
+import { db } from '@/lib/db'
 import { fetchRow, logAudit } from '@/lib/audit'
 import { changeSuffix } from '@/lib/audit-labels'
 import type { SubmissionType } from '@/lib/sprints'
@@ -53,19 +53,19 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     let entering: { id: string; end_date: string; group_id?: string | null } | null = null
     if (body.sprint_id !== undefined && body.sprint_id !== before.sprint_id) {
       if (body.sprint_id === null) {
-        const { count, error } = await supabaseAdmin
+        const { count, error } = await db
           .from(ASSIGNMENTS)
           .select('id', { count: 'exact', head: true })
           .eq('task_id', id)
           .neq('status', 'todo')
         check(error)
         if (count) throw new BadRequest('По задаче уже есть сданные отчёты, её нельзя вернуть в бэклог')
-        const { error: dErr } = await supabaseAdmin.from(ASSIGNMENTS).delete().eq('task_id', id)
+        const { error: dErr } = await db.from(ASSIGNMENTS).delete().eq('task_id', id)
         check(dErr)
         patch.sprint_id = null
       } else {
         if (!isUuid(body.sprint_id)) throw new BadRequest('sprint_id: нужен UUID')
-        const { data: sprint, error } = await supabaseAdmin.from(SPRINTS).select('*').eq('id', body.sprint_id).maybeSingle()
+        const { data: sprint, error } = await db.from(SPRINTS).select('*').eq('id', body.sprint_id).maybeSingle()
         check(error)
         if (!sprint || sprint.program_id !== before.program_id) throw new NotFound('Спринт не найден в этом потоке')
         patch.sprint_id = sprint.id
@@ -74,7 +74,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       }
     }
 
-    const { data, error } = await supabaseAdmin.from(TASKS).update(patch).eq('id', id).select('*').single()
+    const { data, error } = await db.from(TASKS).update(patch).eq('id', id).select('*').single()
     check(error)
     if (entering && data.audience === 'all') await assign(id, await activeParticipantIds(data.program_id, entering.group_id ?? null))
 
@@ -98,7 +98,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
     const id = requireUuid((await params).id, 'id')
     const before = await fetchRow(TASKS, id)
     if (!before) throw new NotFound('Задача не найдена')
-    const { error } = await supabaseAdmin.from(TASKS).delete().eq('id', id)
+    const { error } = await db.from(TASKS).delete().eq('id', id)
     check(error)
     await logAudit(req, { table: TASKS, recordId: id, action: 'delete', summary: `Задача спринта «${before.title}»`, before })
     return NextResponse.json({ success: true })

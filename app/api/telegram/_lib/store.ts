@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase-client'
+import { db } from '@/lib/db'
 import {
   isMissingTelegramTable,
   type LinkPatch,
@@ -50,7 +50,7 @@ export function errorResponse(e: unknown, context: string) {
 /** Cheap check that migration 015 is applied. */
 export async function tablesExist() {
   // Not a HEAD request: PostgREST's 404 body (with the error code) is needed.
-  const { error } = await supabaseAdmin.from(LINKS_TABLE).select('id').limit(1)
+  const { error } = await db.from(LINKS_TABLE).select('id').limit(1)
   if (!error) return true
   if (isMissingTelegramTable(error)) return false
   throw new Error(error.message)
@@ -64,7 +64,7 @@ export const isSupportedSubjectType = (v: unknown): v is SubjectType => SUBJECT_
 
 export async function getSubject(type: SubjectType, id: string): Promise<LinkSubject | null> {
   if (type !== 'participant' || !isUuid(id)) return null
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from('participants')
     .select('id, name, phone, program:programs(name)')
     .eq('id', id)
@@ -77,7 +77,7 @@ export async function getSubject(type: SubjectType, id: string): Promise<LinkSub
 }
 
 export async function getActiveLinkBySubject(type: SubjectType, id: string): Promise<TelegramLink | null> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from(LINKS_TABLE)
     .select('*')
     .eq('subject_type', type)
@@ -89,7 +89,7 @@ export async function getActiveLinkBySubject(type: SubjectType, id: string): Pro
 }
 
 export async function listActiveLinks(type: SubjectType): Promise<TelegramLink[]> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from(LINKS_TABLE)
     .select('*')
     .eq('subject_type', type)
@@ -100,7 +100,7 @@ export async function listActiveLinks(type: SubjectType): Promise<TelegramLink[]
 }
 
 export async function updateLink(id: string, patch: LinkPatch) {
-  const { error } = await supabaseAdmin
+  const { error } = await db
     .from(LINKS_TABLE)
     .update({ ...patch, updated_at: new Date().toISOString() })
     .eq('id', id)
@@ -116,7 +116,7 @@ export async function getOrCreateCode(
   ttlDays: number
 ): Promise<TelegramLinkCode> {
   const minExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
-  const { data: existing, error } = await supabaseAdmin
+  const { data: existing, error } = await db
     .from(CODES_TABLE)
     .select('*')
     .eq('subject_type', type)
@@ -131,7 +131,7 @@ export async function getOrCreateCode(
   const expiresAt = new Date(Date.now() + ttlDays * 24 * 60 * 60 * 1000).toISOString()
   // A collision on 60 random bits is practically impossible; retry anyway.
   for (let attempt = 0; attempt < 3; attempt++) {
-    const { data, error: insertError } = await supabaseAdmin
+    const { data, error: insertError } = await db
       .from(CODES_TABLE)
       .insert({ code: generate(), subject_type: type, subject_id: id, expires_at: expiresAt, created_by: createdBy })
       .select('*')
@@ -145,13 +145,13 @@ export async function getOrCreateCode(
 /** Supabase-backed storage for handleUpdate. */
 export const supabaseTelegramStore: TelegramStore = {
   async getCode(code) {
-    const { data, error } = await supabaseAdmin.from(CODES_TABLE).select('*').eq('code', code).maybeSingle()
+    const { data, error } = await db.from(CODES_TABLE).select('*').eq('code', code).maybeSingle()
     check(error)
     return (data as TelegramLinkCode) ?? null
   },
 
   async claimCode(code, telegramUserId, at) {
-    const { data, error } = await supabaseAdmin
+    const { data, error } = await db
       .from(CODES_TABLE)
       .update({ used_at: at.toISOString(), used_by_telegram_user_id: telegramUserId })
       .eq('code', code)
@@ -164,7 +164,7 @@ export const supabaseTelegramStore: TelegramStore = {
   getSubject,
 
   async getActiveLinkByTelegramUser(telegramUserId) {
-    const { data, error } = await supabaseAdmin
+    const { data, error } = await db
       .from(LINKS_TABLE)
       .select('*')
       .eq('telegram_user_id', telegramUserId)
@@ -177,7 +177,7 @@ export const supabaseTelegramStore: TelegramStore = {
   getActiveLinkBySubject,
 
   async getLastSharedPhone(telegramUserId) {
-    const { data, error } = await supabaseAdmin
+    const { data, error } = await db
       .from(LINKS_TABLE)
       .select('phone')
       .eq('telegram_user_id', telegramUserId)
@@ -189,7 +189,7 @@ export const supabaseTelegramStore: TelegramStore = {
   },
 
   async createLink(input: NewLinkInput) {
-    const { data, error } = await supabaseAdmin.from(LINKS_TABLE).insert(input).select('*').single()
+    const { data, error } = await db.from(LINKS_TABLE).insert(input).select('*').single()
     check(error)
     return data as TelegramLink
   },
