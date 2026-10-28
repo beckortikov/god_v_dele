@@ -36,10 +36,12 @@ scp server/files/server.mjs godvdele:/opt/gvd-files/server.mjs && ssh godvdele s
 
 1. ✅ DNS в Vercel: `files.godvdele.com` и `db.godvdele.com` → A `77.42.8.140` (28.10.2026).
 2. ✅ HTTPS для файлов и TLS для pgbouncer, порт 6432 открыт (28.10.2026).
-3. Схема и данные: `pg_dump --schema=public --no-owner --no-privileges` из Supabase (нужен пароль базы
-   из панели Supabase), восстановление с `session_replication_role = replica`, чтобы триггеры
-   не пересчитали платежи; сверка числа строк по таблицам.
-4. Файлы: скопировать объекты из трёх бакетов Supabase Storage.
+3. ✅ Структура (`pg_dump --schema-only --schema=public`, владелец — `gvd_app`) и первая копия данных
+   (28.10.2026). Повторить копию: `sh server/sync-db.sh` — очищает таблицы на VPS, переносит строки
+   с выключенными триггерами (платежи не пересчитываются) и сверяет каждую таблицу по числу строк
+   и контрольной сумме. Нужен `SUPABASE_DB_URL` в `.env.local`.
+4. ✅ Файлы (28.10.2026). Повторить: `server/sync-files.mts` (команда в начале файла) — докачивает
+   новое и удаляет то, чего в Supabase уже нет.
 5. Тестовый деплой Vercel (Preview) с `DATABASE_URL`, `FILES_URL`, `FILES_SECRET` и регионом функций `arn1`.
 6. Переключение ночью: финальная копия данных, переменные в Production, `vercel.json` → `arn1`, деплой.
    Откат — удалить переменные и задеплоить снова. Проект Supabase держим на паузе две недели.
