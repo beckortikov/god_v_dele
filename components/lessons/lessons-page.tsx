@@ -217,6 +217,8 @@ export function LessonsPage() {
         newOnDate={newDate}
         defaultGroupId={groupFilter === ALL ? null : groupFilter}
         groups={groupList.map(g => ({ id: g.id, name: g.name }))}
+        programs={programs ?? []}
+        onProgramChange={setProgramId}
         onSaved={created => {
           if (created) setEditing({ ...created, material_count: 0 })
           load()

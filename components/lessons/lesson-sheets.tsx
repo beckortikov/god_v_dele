@@ -15,6 +15,7 @@ import { Field, FieldGroup } from '@/components/erp/field'
 import { Segmented } from '@/components/erp/segmented'
 import { useConfirm } from '@/components/erp/confirm'
 import { average, SCORE_KEYS } from '@/lib/lesson-feedback'
+import type { GroupsData } from '@/app/api/sprints/groups/route'
 import { call } from './api'
 import { useMyFeedback } from './feedback-api'
 import { LessonFeedbackSheet } from './lesson-feedback-sheet'
@@ -156,11 +157,17 @@ export function LessonEditSheet({
   newOnDate,
   defaultGroupId,
   groups,
+  programs,
+  onProgramChange,
   onSaved,
 }: {
   open: boolean
   onOpenChange: (o: boolean) => void
+  /** The program the calendar shows; a new lesson starts in it and may be put in another. */
   programId: string
+  programs: { id: string; name: string }[]
+  /** A new lesson went to another program: show that program's calendar. */
+  onProgramChange: (id: string) => void
   /** The lesson being edited; null to plan a new one. */
   lesson: Lesson | null
   /** For a new lesson: the day (YYYY-MM-DD) it starts on. */
@@ -176,13 +183,36 @@ export function LessonEditSheet({
   const [saving, setSaving] = React.useState(false)
   const [errors, setErrors] = React.useState<Record<string, string>>({})
   const [materials, setMaterials] = React.useState<LessonMaterial[]>([])
+  const [formProgramId, setFormProgramId] = React.useState(programId)
+  // Groups of another program picked in the form; the calendar's own come in `groups`
+  const [otherGroups, setOtherGroups] = React.useState<{ id: string; name: string }[]>([])
   const editingId = lesson?.id ?? null
+  const formGroups = formProgramId === programId ? groups : otherGroups
 
   React.useEffect(() => {
     if (!open) return
     setErrors({})
+    setFormProgramId(programId)
     setForm(lesson ? fromLesson(lesson) : { ...blank(newOnDate), group_id: defaultGroupId ?? ALL })
-  }, [open, lesson, newOnDate, defaultGroupId])
+  }, [open, lesson, newOnDate, defaultGroupId, programId])
+
+  React.useEffect(() => {
+    setOtherGroups([])
+    // on opening, formProgramId may still be the one from before the reset above: only another real program counts
+    if (!open || !formProgramId || formProgramId === programId) return
+    let live = true
+    call<{ data: GroupsData }>(`/api/sprints/groups?program_id=${formProgramId}`)
+      .then(r => live && setOtherGroups(r.data.available ? r.data.groups.map(g => ({ id: g.id, name: g.name })) : []))
+      .catch(() => live && setOtherGroups([]))
+    return () => {
+      live = false
+    }
+  }, [open, formProgramId, programId])
+
+  const pickProgram = (id: string) => {
+    setFormProgramId(id)
+    set('group_id', ALL) // a group belongs to one program
+  }
 
   const loadMaterials = React.useCallback(async () => {
     if (!editingId) {
@@ -217,7 +247,7 @@ export function LessonEditSheet({
     setSaving(true)
     try {
       const payload = {
-        program_id: programId,
+        program_id: formProgramId,
         group_id: form.group_id === ALL ? null : form.group_id,
         title: form.title,
         description: form.description,
@@ -238,6 +268,7 @@ export function LessonEditSheet({
         const r = await call<{ data: Lesson[] }>('/api/lessons', { method: 'POST', json: payload })
         const n = r.data.length
         toast.success(n > 1 ? `Добавлено уроков: ${n}` : 'Урок добавлен', { description: n > 1 ? 'Материалы прикрепляются к каждому уроку отдельно' : 'Теперь можно прикрепить презентацию' })
+        if (formProgramId !== programId) onProgramChange(formProgramId)
         // One lesson: stay on it, so the materials can be attached at once
         onSaved(n === 1 ? r.data[0] : undefined)
         if (n > 1) onOpenChange(false)
@@ -282,6 +313,41 @@ export function LessonEditSheet({
                 <Input id="ls-title" autoFocus={!editingId} value={form.title} onChange={text('title')} placeholder="Например: Финансовая модель бизнеса" maxLength={150} aria-invalid={!!errors.title || undefined} />
               </Field>
 
+              {/* Who sees it: the program (only while planning; a lesson does not move between programs) and a group in it */}
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                {!editingId && programs.length > 1 && (
+                  <Field label="Поток">
+                    <Select value={formProgramId} onValueChange={pickProgram}>
+                      <SelectTrigger className="w-full" aria-label="Поток">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {programs.map(p => (
+                          <SelectItem key={p.id} value={p.id}>
+                            {p.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </Field>
+                )}
+                <Field label="Группа" hint={formGroups.length ? undefined : 'Группы создаются на странице «Спринты»'}>
+                  <Select value={form.group_id} onValueChange={v => set('group_id', v)} disabled={!formGroups.length}>
+                    <SelectTrigger className="w-full" aria-label="Группа">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={ALL}>Весь поток</SelectItem>
+                      {formGroups.map(g => (
+                        <SelectItem key={g.id} value={g.id}>
+                          {g.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </Field>
+              </div>
+
               <div className="grid grid-cols-3 gap-3">
                 <Field label="Дата" htmlFor="ls-date" className="col-span-3 sm:col-span-1" hint={errors.date && <span className="text-destructive">{errors.date}</span>}>
                   <Input id="ls-date" type="date" value={form.date} onChange={text('date')} aria-invalid={!!errors.date || undefined} />
@@ -318,26 +384,9 @@ export function LessonEditSheet({
                 </Field>
               )}
 
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <Field label="Кто ведёт" htmlFor="ls-teacher">
-                  <Input id="ls-teacher" value={form.teacher} onChange={text('teacher')} placeholder="Необязательно" maxLength={100} />
-                </Field>
-                <Field label="Для кого" hint={groups.length ? undefined : 'Группы создаются на странице «Спринты»'}>
-                  <Select value={form.group_id} onValueChange={v => set('group_id', v)}>
-                    <SelectTrigger className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value={ALL}>Весь поток</SelectItem>
-                      {groups.map(g => (
-                        <SelectItem key={g.id} value={g.id}>
-                          {g.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </Field>
-              </div>
+              <Field label="Кто ведёт" htmlFor="ls-teacher">
+                <Input id="ls-teacher" value={form.teacher} onChange={text('teacher')} placeholder="Необязательно" maxLength={100} />
+              </Field>
 
               <Field label="О чём урок" htmlFor="ls-desc" hint="Участники увидят это в карточке урока">
                 <Textarea id="ls-desc" value={form.description} onChange={text('description')} placeholder="План урока, что подготовить заранее" className="min-h-24 resize-none" maxLength={2000} />
