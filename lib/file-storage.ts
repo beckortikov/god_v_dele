@@ -34,10 +34,27 @@ function signedLink(method: 'GET' | 'PUT', bucket: string, path: string, ttlSeco
   return `${url}/o/${bucket}/${path.split('/').map(encodeURIComponent).join('/')}?${q}`
 }
 
+/**
+ * A serverless function is frozen between requests and keeps its pooled connections; the server closes
+ * them meanwhile, and the first request after a thaw fails with "fetch failed" on a dead socket.
+ * A network error (never an HTTP answer) is retried on a fresh connection. Every call here is safe
+ * to repeat: reads, bucket creation and removal.
+ */
+async function fetchWithRetry(input: string, init: RequestInit) {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await fetch(input, init)
+    } catch (e) {
+      if (attempt >= 3) throw e
+      await new Promise(r => setTimeout(r, 200 * attempt))
+    }
+  }
+}
+
 async function call<T>(path: string, init?: { method?: 'GET' | 'POST'; body?: unknown }): Result<T> {
   try {
     const { url, secret } = config()
-    const res = await fetch(`${url}${path}`, {
+    const res = await fetchWithRetry(`${url}${path}`, {
       method: init?.method ?? 'GET',
       headers: { Authorization: `Bearer ${secret}`, ...(init?.body !== undefined ? { 'Content-Type': 'application/json' } : {}) },
       body: init?.body !== undefined ? JSON.stringify(init.body) : undefined,

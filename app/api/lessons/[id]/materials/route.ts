@@ -108,8 +108,9 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
     checkLessons(error)
     if (!m) throw new LessonNotFound('Материал не найден')
     if (m.kind === 'file' && isReportKey(m.file_key)) {
-      await ensureLessonBucket()
-      await db.storage.from(LESSON_BUCKET).remove([`${id}/${m.file_key}`])
+      // like deleting a lesson: an orphaned file is harmless, so storage trouble never keeps the material
+      const { error: sErr } = await db.storage.from(LESSON_BUCKET).remove([`${id}/${m.file_key}`])
+      if (sErr) console.error('[lessons] material file not removed:', sErr.message)
     }
     const { error: dErr } = await db.from(MATERIALS).delete().eq('id', materialId)
     checkLessons(dErr)
