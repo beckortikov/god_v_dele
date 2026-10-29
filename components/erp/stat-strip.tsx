@@ -11,6 +11,8 @@ export interface Stat {
   dot?: string
   tone?: 'default' | 'success' | 'destructive' | 'warning'
   onClick?: () => void
+  /** A clickable cell that is the filter in force. */
+  active?: boolean
 }
 
 const toneCls = {
@@ -44,7 +46,12 @@ export function StatStrip({ stats, loading, className }: { stats: Stat[]; loadin
           <Comp
             key={i}
             onClick={s.onClick}
-            className={cn('min-w-0 bg-card px-4 py-3.5 text-left sm:px-5 sm:py-4', s.onClick && 'transition-colors hover:bg-accent')}
+            {...(s.onClick ? { type: 'button' as const, 'aria-pressed': !!s.active } : {})}
+            className={cn(
+              'relative min-w-0 bg-card px-4 py-3.5 text-left sm:px-5 sm:py-4',
+              s.onClick && 'cursor-pointer outline-none transition-colors hover:bg-accent focus-visible:z-10 focus-visible:ring-[3px] focus-visible:ring-ring/30 focus-visible:ring-inset',
+              s.active && 'bg-primary-soft hover:bg-primary-soft after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:bg-primary'
+            )}
           >
             <p className="flex items-center gap-1.5 text-[13px] text-muted-foreground sm:text-sm">
               {s.dot && <span className="size-2 rounded-full" style={{ background: s.dot }} />}

@@ -2,7 +2,7 @@
 
 import * as React from 'react'
 import { toast } from 'sonner'
-import { Check, CornerUpLeft, Flag, ListChecks, MoreHorizontal, Plus, Search, Trash2, Users } from 'lucide-react'
+import { Check, CornerUpLeft, Flag, ListChecks, MoreHorizontal, Plus, Search, Trash2, Users, X } from 'lucide-react'
 import type { GroupsData } from '@/app/api/sprints/groups/route'
 import { cn } from '@/lib/utils'
 import { plural, todayISO } from '@/lib/format'
@@ -47,6 +47,15 @@ interface Program {
 
 type View = 'people' | 'tasks'
 
+/** The participants the stat cells narrow the table to. */
+type Focus = 'all' | 'finished' | 'review' | 'overdue'
+
+const FOCUS_LABEL: Record<Exclude<Focus, 'all'>, string> = {
+  finished: 'Сдали всё',
+  review: 'Ждут проверки',
+  overdue: 'С просрочкой',
+}
+
 export function SprintsPage() {
   const confirm = useConfirm()
   const today = todayISO()
@@ -63,6 +72,7 @@ export function SprintsPage() {
   const [migration, setMigration] = React.useState(false)
   const [view, setView] = useStoredState<View>('sprints-view', 'people')
   const [query, setQuery] = React.useState('')
+  const [focus, setFocus] = React.useState<Focus>('all')
   const [taskOpen, setTaskOpen] = React.useState(false)
   const [taskFor, setTaskFor] = React.useState<string[] | undefined>()
   const [sprintOpen, setSprintOpen] = React.useState(false)
@@ -193,8 +203,16 @@ export function SprintsPage() {
         return { p, cells, total: own.length, done, overdue, waiting, pct: percent(done, own.length) }
       })
       .filter(r => !query.trim() || r.p.name.toLowerCase().includes(query.trim().toLowerCase()))
+      .filter(r => (focus === 'finished' ? r.total > 0 && r.done === r.total : focus === 'review' ? r.waiting > 0 : focus === 'overdue' ? r.overdue > 0 : true))
       .sort((a, b) => b.overdue - a.overdue || a.pct - b.pct || a.p.name.localeCompare(b.p.name, 'ru'))
-  }, [board, byKey, cellState, query])
+  }, [board, byKey, cellState, query, focus])
+
+  // A stat cell filters the participants; pressing it again shows everyone
+  const toggleFocus = (f: Exclude<Focus, 'all'>) => {
+    setFocus(cur => (cur === f ? 'all' : f))
+    setView('people')
+  }
+  React.useEffect(() => setFocus('all'), [sprintId])
 
   const stats = React.useMemo(() => {
     const all = board?.assignments ?? []
@@ -423,17 +441,34 @@ export function SprintsPage() {
           {board && sprint && (
             <StatStrip
               stats={[
-                { label: 'Выполнено', value: `${stats.done} из ${stats.total}`, sub: `${percent(stats.done, stats.total)}% задач спринта` },
+                {
+                  label: 'Выполнено',
+                  value: `${stats.done} из ${stats.total}`,
+                  sub: `${percent(stats.done, stats.total)}% задач спринта`,
+                  onClick: () => toggleFocus('finished'),
+                  active: focus === 'finished',
+                },
                 {
                   label: 'Ждут проверки',
                   value: stats.waiting,
+                  onClick: () => toggleFocus('review'),
+                  active: focus === 'review',
                   tone: stats.waiting ? 'warning' : 'default',
                   sub: stats.waiting ? `от ${stats.waitingPeople} ${plural(stats.waitingPeople, ['участника', 'участников', 'участников'])}` : 'всё проверено',
                 },
-                { label: 'Просрочено', value: stats.overdue, tone: stats.overdue ? 'destructive' : 'default', sub: stats.overdue ? 'не сдано вовремя' : 'без просрочек' },
+                {
+                  label: 'Просрочено',
+                  value: stats.overdue,
+                  tone: stats.overdue ? 'destructive' : 'default',
+                  sub: stats.overdue ? 'не сдано вовремя' : 'без просрочек',
+                  onClick: () => toggleFocus('overdue'),
+                  active: focus === 'overdue',
+                },
                 {
                   label: 'Отстают',
                   value: stats.behind,
+                  onClick: () => toggleFocus('overdue'),
+                  active: focus === 'overdue',
                   tone: stats.behind ? 'warning' : 'default',
                   sub: `${plural(stats.behind, ['участник', 'участника', 'участников'])} с просрочкой`,
                 },
@@ -464,6 +499,17 @@ export function SprintsPage() {
                   />
                 </label>
               )}
+              {view === 'people' && focus !== 'all' && (
+                <button
+                  type="button"
+                  onClick={() => setFocus('all')}
+                  className="inline-flex h-8 items-center gap-1.5 rounded-full border border-primary-soft bg-primary-soft pr-2 pl-3 text-sm font-medium text-primary-soft-foreground outline-none transition-colors hover:border-primary/40 focus-visible:ring-[3px] focus-visible:ring-ring/30"
+                  aria-label={`Сбросить фильтр «${FOCUS_LABEL[focus]}»`}
+                >
+                  {FOCUS_LABEL[focus]}
+                  <X className="size-3.5" />
+                </button>
+              )}
               {view === 'people' && <Legend className="ml-auto max-lg:hidden" />}
             </PanelToolbar>
 
@@ -482,7 +528,24 @@ export function SprintsPage() {
                   }
                 />
               ) : rows.length === 0 ? (
-                <EmptyState icon={Users} title="Никого не нашли" description={query ? 'Попробуйте другое имя.' : 'В потоке нет активных участников.'} />
+                <EmptyState
+                  icon={Users}
+                  title="Никого не нашли"
+                  description={
+                    focus !== 'all'
+                      ? `Нет участников в выборке «${FOCUS_LABEL[focus]}»${query ? ' с таким именем' : ''}.`
+                      : query
+                        ? 'Попробуйте другое имя.'
+                        : 'В потоке нет активных участников.'
+                  }
+                  action={
+                    focus !== 'all' && (
+                      <Button size="sm" variant="outline" onClick={() => setFocus('all')}>
+                        Показать всех
+                      </Button>
+                    )
+                  }
+                />
               ) : (
                 <Table>
                   <TableHeader>
