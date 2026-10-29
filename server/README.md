@@ -17,7 +17,7 @@
 | PostgreSQL 17, база `godvdele`, роль `gvd_app` | `127.0.0.1:5432`, настройки в `/etc/postgresql/17/main/conf.d/gvd.conf` | нет |
 | pgbouncer (transaction pooling) | `db.godvdele.com:6432`, `/etc/pgbouncer/pgbouncer.ini` | да, только TLS; сертификат от Caddy копирует `gvd-pgbouncer-cert.timer` |
 | Файловая служба (`server/files/server.mjs`) | `127.0.0.1:8790`, сервис `gvd-files`, данные `/var/lib/gvd-files` | через Caddy на `files.godvdele.com` |
-| Caddy (HTTPS, сертификаты Let's Encrypt) | `:80`, `:443` | да |
+| Caddy (HTTPS, сертификаты Let's Encrypt) | `:80`, `:443`; журнал запросов к файлам `/var/log/caddy/files.log` (5 × 10 МБ) | да |
 | Резервные копии | `gvd-backup.timer`, 02:30 UTC, `/var/backups/gvd`, 14 дней | — |
 
 Пароли (`DB_APP_PASSWORD`, `FILES_SECRET`) лежат только в `/root/gvd-secrets.env` (доступ root).
