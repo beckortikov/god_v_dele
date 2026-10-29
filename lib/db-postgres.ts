@@ -1,4 +1,6 @@
-import { Pool } from 'pg'
+import { lookup } from 'node:dns/promises'
+import { isIP } from 'node:net'
+import { Pool, type PoolConfig } from 'pg'
 
 /**
  * Direct Postgres access with the slice of the supabase-js query builder this app uses:
@@ -33,24 +35,66 @@ export type DbRow = any
 
 // ---------------------------------------------------------------- connection
 
-let pool: Pool | null = null
+let pool: Promise<Pool> | null = null
 
-function getPool(): Pool {
-  if (!pool) {
-    pool = new Pool({
-      connectionString: process.env.DATABASE_URL,
-      // Serverless: a few connections per instance; pgbouncer on the server multiplexes them
-      max: Number(process.env.DATABASE_POOL_MAX ?? 3),
-      idleTimeoutMillis: 10_000,
-      connectionTimeoutMillis: 10_000,
-    })
-    pool.on('error', err => console.error('[db] idle client error:', err.message))
+async function lookupHost(host: string) {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return (await lookup(host)).address
+    } catch (e) {
+      if (attempt >= 4) throw e
+      await new Promise(r => setTimeout(r, 150 * attempt))
+    }
   }
+}
+
+/**
+ * The resolver inside serverless functions now and then answers ENOTFOUND for a name that exists, and
+ * every query of that request failed. So the database host is looked up once per instance, with
+ * retries, and connected to by address; TLS still checks the certificate against the host name.
+ * An address, localhost or a URL without a host is used as it is.
+ */
+export async function poolConfig(raw: string, resolve = lookupHost): Promise<PoolConfig> {
+  const base: PoolConfig = {
+    // Serverless: a few connections per instance; pgbouncer on the server multiplexes them
+    max: Number(process.env.DATABASE_POOL_MAX ?? 3),
+    idleTimeoutMillis: 10_000,
+    connectionTimeoutMillis: 10_000,
+  }
+  const url = new URL(raw)
+  const host = url.hostname.replace(/^\[|\]$/g, '')
+  if (!host || isIP(host) || host === 'localhost' || url.searchParams.has('host')) return { ...base, connectionString: raw }
+
+  const sslmode = url.searchParams.get('sslmode')
+  const ssl = !sslmode || sslmode === 'disable' ? false : sslmode === 'no-verify' ? { servername: host, rejectUnauthorized: false } : { servername: host }
+  return {
+    ...base,
+    host: await resolve(host),
+    port: Number(url.port || 5432),
+    user: decodeURIComponent(url.username),
+    password: decodeURIComponent(url.password),
+    database: decodeURIComponent(url.pathname.slice(1)),
+    ssl,
+  }
+}
+
+function getPool(): Promise<Pool> {
+  pool ??= poolConfig(process.env.DATABASE_URL ?? '').then(
+    config => {
+      const p = new Pool(config)
+      p.on('error', err => console.error('[db] idle client error:', err.message))
+      return p
+    },
+    err => {
+      pool = null // the next request looks the host up again
+      throw err
+    },
+  )
   return pool
 }
 
 async function query(text: string, params: Value[]) {
-  return getPool().query(text, params as any[])
+  return (await getPool()).query(text, params as any[])
 }
 
 // ---------------------------------------------------------------- catalog
@@ -668,7 +712,8 @@ export function createPostgresClient(): PostgresClient {
 
 /** For scripts and tests: closes the pool so the process can exit. */
 export async function closePostgres() {
-  await pool?.end()
+  const p = pool
   pool = null
+  await (await p?.catch(() => null))?.end()
   catalog = null
 }
