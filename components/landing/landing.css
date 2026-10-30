@@ -171,8 +171,10 @@
 .landing .about-photo img{width:100%;border-radius:var(--r);display:block}
 .landing .about-photo .chip{position:absolute;right:-20px;bottom:36px;padding:14px 20px;font-size:15px;color:var(--mute);border-radius:18px;background:var(--card);border:1px solid var(--line-2)}
 .landing .about-photo .chip b{display:block;font-size:26px;letter-spacing:-0.03em;color:var(--accent);font-weight:800}
-.landing .about p{color:var(--mute);font-size:20px;margin-top:22px}
+.landing .about p{color:var(--fg);font-size:19px;line-height:1.55;margin-top:20px;max-width:620px}
 .landing .about h2{margin-bottom:0}
+.landing .about .about-title .nowrap{white-space:nowrap}
+.landing .about .about-title{color:var(--accent);font-size:clamp(26px,2.5vw,36px);line-height:1.25;letter-spacing:-0.02em}
 .landing .geo{display:flex;flex-wrap:wrap;gap:10px;margin-top:32px}
 .landing .geo span{font-size:15px;padding:7px 16px;border-radius:99px;border:1px solid var(--line-2);color:var(--mute);font-weight:600}
 
