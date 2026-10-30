@@ -262,14 +262,14 @@ export function LandingPage({ onLogin }: { onLogin: () => void }) {
       <section className="hero" ref={heroRef} id="top">
         <div className="glow g1" /><div className="glow g2" />
         <div className="stage">
-          <h1 className="sr-only">Бизнес стратег. Анвар Халиков, предприниматель, автор программы «Год в деле»</h1>
+          <h1 className="sr-only">Бизнес-архитектор. Анвар Халиков, предприниматель, автор программы «Год в деле»</h1>
           {/* A running line: it leaves to the left and comes back from the right, behind the photo. */}
           <div className="marquee" aria-hidden="true">
             <div className="marquee-track">
               {[0, 1].map(g => (
                 <div className="marquee-group" key={g}>
-                  <span>Бизнес стратег</span><i />
-                  <span>Бизнес стратег</span><i />
+                  <span>Бизнес-архитектор</span><i />
+                  <span>Бизнес-архитектор</span><i />
                 </div>
               ))}
             </div>
@@ -287,8 +287,8 @@ export function LandingPage({ onLogin }: { onLogin: () => void }) {
               <a href="#program" className="link-arrow" onClick={go('program')}>Программа «Год в деле» <ArrowUpRight size={18} /></a>
             </div>
             <div className="hero-side">
-              <div><b>23 <small>года</small></b><span>в найме</span></div>
-              <div><b>12 <small>лет</small></b><span>в бизнесе</span></div>
+              <div><b>20+ <small>лет</small></b><span>в найме</span></div>
+              <div><b>10+ <small>лет</small></b><span>в бизнесе</span></div>
               <div><b>20+</b><span>проектов</span></div>
               <div><b>100+</b><span>учеников</span></div>
             </div>
