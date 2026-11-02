@@ -174,7 +174,7 @@
 .landing .about p{color:var(--fg);font-size:19px;line-height:1.55;margin-top:20px;max-width:620px}
 .landing .about h2{margin-bottom:0}
 .landing .about .about-title .nowrap{white-space:nowrap}
-.landing .about .about-title{color:var(--accent);font-size:clamp(26px,2.5vw,36px);line-height:1.25;letter-spacing:-0.02em}
+.landing .about .about-title{color:var(--fg);font-size:clamp(26px,2.5vw,36px);line-height:1.25;letter-spacing:-0.02em}
 .landing .geo{display:flex;flex-wrap:wrap;gap:10px;margin-top:32px}
 .landing .geo span{font-size:15px;padding:7px 16px;border-radius:99px;border:1px solid var(--line-2);color:var(--mute);font-weight:600}
 
@@ -255,6 +255,11 @@
 }
 @media (max-width:1320px){
 .landing .hero-actions{flex-direction:column;align-items:flex-end;gap:14px}
+/* the button and the link are stacked here: the stats start under them */
+.landing .hero-side{top:calc(var(--k)*.327 + 116px);gap:10px}
+.landing .hero-side div{padding:11px 16px}
+.landing .hero-side b{font-size:28px}
+.landing .hero .stage{height:max(calc(var(--k)*.6826),calc(var(--k)*.375 + 440px),calc(var(--k)*.327 + 500px))}
 }
 @media (max-width:1360px){
 .landing .nav nav{display:none}
@@ -265,14 +270,21 @@
 }
 @media (max-width:960px){
 .landing section{padding:80px 0}
+.landing .nav .wrap{padding:0 24px}
 .landing .hero .stage{height:auto;min-height:0;display:flex;flex-direction:column}
 .landing .hero .hero-layer{position:static;max-width:none;width:100%;min-width:0;display:flex;flex-direction:column}
 .landing .marquee{position:relative;top:auto;margin-top:104px}
 .landing .marquee-group span{font-size:96px}
 .landing .marquee-group i{width:28px;height:28px;margin:0 26px}
-.landing .hero-photo{position:relative;left:auto;top:auto;transform:none;width:min(82vw,380px);height:auto;margin:-6vw auto 0;overflow:visible;-webkit-mask-image:none;mask-image:none}
+/* Narrow screens read top-down: the title line, the role and the buttons first, then the photo */
+.landing .hero-copy{order:1}
+.landing .hero-actions{order:2}
+.landing .hero-photo{order:3}
+.landing .hero-side{order:4}
+.landing .strip{order:5}
+.landing .hero-photo{position:relative;left:auto;top:auto;transform:none;width:min(82vw,380px);height:auto;margin:4px auto 0;overflow:visible;-webkit-mask-image:none;mask-image:none}
 .landing .hero-photo img{height:auto;object-fit:initial}
-.landing .hero-copy{position:relative;left:auto;top:auto;padding:0 24px;margin-top:-28px;text-align:center}
+.landing .hero-copy{position:relative;left:auto;top:auto;padding:0 24px;margin-top:18px;text-align:center}
 .landing .hero-copy .role{font-size:clamp(26px,8vw,42px)}
 .landing .hero-actions{position:relative;right:auto;top:auto;flex-direction:row;flex-wrap:wrap;justify-content:center;padding:22px 24px 28px}
 .landing .hero-side{position:relative;right:auto;top:auto;width:auto;grid-template-columns:repeat(2,1fr);gap:10px;padding:0 18px 28px}
@@ -297,13 +309,15 @@
 }
 @media (max-width:640px){
 .landing .wrap{padding:0 18px}
-.landing .nav .wrap{height:68px}
+.landing .nav .wrap{height:68px;padding:0 18px}
 .landing .nav .acts .btn-accent,.landing .nav .acts .login-btn{display:none}
 /* the nav login button is hidden here, so the hero carries one above the main CTA */
 .landing .hero-login{display:inline-flex}
 .landing .marquee{margin-top:88px}
 .landing .marquee-group span{font-size:84px}
-.landing .hero-actions .btn{width:100%}
+.landing .hero-actions{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.7fr);gap:10px;padding:18px 18px 6px}
+.landing .hero-actions .btn{width:100%;justify-content:center;text-align:center;white-space:nowrap;padding-inline:12px}
+.landing .hero-actions .link-arrow{grid-column:1/-1;justify-self:center;margin-top:6px}
 .landing .for-list,.landing .counters,.landing .offers,.landing .offers.five,.landing .focus{grid-template-columns:1fr}
 .landing .offers.services .offer.main{grid-column:auto}
 .landing .counters.four{grid-template-columns:repeat(2,1fr)}
@@ -384,3 +398,5 @@
 .landing .legal-back:hover{color:var(--fg)}
 .landing .legal .legal-link{color:var(--accent);border-bottom:1px solid currentColor}
 @media (max-width:720px){.landing .legal{padding-top:28px}}
+/* the smallest phones: the two hero buttons do not fit side by side */
+@media (max-width:370px){.landing .hero-actions{grid-template-columns:1fr}}
