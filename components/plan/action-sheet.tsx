@@ -22,6 +22,7 @@ export function ActionSheet({
   excuses,
   place,
   participantId,
+  readOnly = false,
   onClose,
   onEdit,
   onChanged,
@@ -31,6 +32,8 @@ export function ActionSheet({
   /** «Стратегия · Юридические вопросы» */
   place: string
   participantId: string
+  /** A curator's view: the result and the history are shown, nothing can be changed. */
+  readOnly?: boolean
   onClose: () => void
   onEdit: (a: OpAction) => void
   onChanged: () => Promise<void> | void
@@ -137,11 +140,17 @@ export function ActionSheet({
                     Открыть результат
                   </a>
                 )}
-                <Button variant="outline" size="sm" disabled={saving} onClick={() => send({ type: 'reopen' }, 'Действие снова в работе')}>
-                  <RotateCcw />
-                  Вернуть в работу
-                </Button>
+                {!readOnly && (
+                  <Button variant="outline" size="sm" disabled={saving} onClick={() => send({ type: 'reopen' }, 'Действие снова в работе')}>
+                    <RotateCcw />
+                    Вернуть в работу
+                  </Button>
+                )}
               </section>
+            ) : readOnly ? (
+              overdue && (
+                <p className="rounded-2xl bg-warning-soft px-4 py-3 text-sm">Срок прошёл, участник ещё не отметил итог: сделано или отмазка.</p>
+              )
             ) : (
               <section className="space-y-4 rounded-2xl border bg-card p-4">
                 <h3 className="text-[17px] font-semibold">{overdue ? 'Срок прошёл. Что с результатом?' : 'Итог'}</h3>
@@ -231,7 +240,7 @@ export function ActionSheet({
             )}
           </SheetBody>
 
-          <SheetFooter className="pb-[max(0.875rem,env(safe-area-inset-bottom))]">
+          {!readOnly && <SheetFooter className="pb-[max(0.875rem,env(safe-area-inset-bottom))]">
             <Button variant="outline" onClick={() => onEdit(action)}>
               <Pencil />
               Изменить
@@ -240,7 +249,7 @@ export function ActionSheet({
               <Trash2 />
               Удалить
             </Button>
-          </SheetFooter>
+          </SheetFooter>}
         </div>
       </SheetContent>
     </Sheet>

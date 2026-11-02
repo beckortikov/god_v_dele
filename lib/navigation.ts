@@ -37,7 +37,7 @@ export type PageType =
   | 'hr-dashboard' | 'employees' | 'schedule' | 'payroll' | 'vacations' | 'timesheet'
   | 'users' | 'employee-dashboard' | 'manager-dashboard'
   | 'analytics' | 'audit' | 'my-payments'
-  | 'sprints' | 'my-sprint' | 'my-plan' | 'my-today' | 'my-profile' | 'lessons'
+  | 'sprints' | 'plans' | 'my-sprint' | 'my-plan' | 'my-today' | 'my-profile' | 'lessons'
 
 export type UserRole = 'admin' | 'finance' | 'employee' | 'manager' | 'wheels_manager' | 'participant'
 
@@ -81,6 +81,7 @@ export const PAGES: Record<PageType, NavPage> = {
   audit: { id: 'audit', label: 'Журнал изменений', title: 'Журнал изменений', description: 'Кто и что изменил, корзина удалённого', icon: History },
   'my-payments': { id: 'my-payments', label: 'Мои оплаты', title: 'Мои оплаты', description: 'График платежей и задолженность', icon: Receipt },
   sprints: { id: 'sprints', label: 'Спринты', title: 'Спринты', description: 'Задачи участников потока по спринтам', icon: Flag },
+  plans: { id: 'plans', label: 'Планы участников', title: 'Операционные планы', description: 'Планы участников потока: прогресс, сроки и отмазки', icon: ClipboardList },
   'my-today': { id: 'my-today', label: 'Сегодня', title: 'Сегодня', description: 'Главное на сегодня: уроки, задачи, оплата, колёса', icon: Sun },
   lessons: { id: 'lessons', label: 'Календарь', title: 'Календарь уроков', description: 'Расписание занятий потока и материалы к урокам', icon: CalendarRange },
   'my-profile': { id: 'my-profile', label: 'Мой профиль', title: 'Мой профиль', description: 'Личные данные, фото паспорта, бизнес и динамика по годам', icon: UserRound },
@@ -90,7 +91,7 @@ export const PAGES: Record<PageType, NavPage> = {
 
 const S = {
   home: { id: 'home', label: 'Главное', icon: LayoutDashboard, pages: ['dashboard'] },
-  people: { id: 'people', label: 'Участники', icon: Users, pages: ['participants', 'programs', 'sprints', 'lessons'] },
+  people: { id: 'people', label: 'Участники', icon: Users, pages: ['participants', 'programs', 'sprints', 'plans', 'lessons'] },
   finance: { id: 'finance', label: 'Финансы', icon: ArrowLeftRight, pages: ['income', 'plan-fact', 'balance', 'offline'] },
   reports: { id: 'reports', label: 'Отчёты', icon: FileSpreadsheet, pages: ['opiu-reports', 'analytics'] },
   wheels: { id: 'wheels', label: 'Колёса баланса', icon: Compass, pages: ['life-wheel', 'life-balance', 'business-wheel'] },
@@ -105,11 +106,11 @@ export function getSections(role: UserRole): NavSection[] {
     case 'finance':
       return [S.home, { ...S.people, pages: ['participants', 'programs'] }, S.finance, S.reports, S.wheels]
     case 'wheels_manager':
-      return [S.wheels, { ...S.people, pages: ['participants', 'sprints', 'lessons'] }]
+      return [S.wheels, { ...S.people, pages: ['participants', 'sprints', 'plans', 'lessons'] }]
     case 'manager':
       return [
         { id: 'cabinet', label: 'Кабинет', icon: UserCircle2, pages: ['employee-dashboard', 'manager-dashboard'] },
-        { ...S.people, pages: ['sprints', 'lessons'] },
+        { ...S.people, pages: ['sprints', 'plans', 'lessons'] },
         S.wheels,
       ]
     case 'employee':
@@ -144,9 +145,9 @@ export function findSection(sections: NavSection[], page: PageType) {
 /** What each role can reach; shown wherever an administrator picks a role. */
 export const ROLE_DESCRIPTIONS: Record<UserRole, string> = {
   admin: 'Полный доступ: финансы, участники, персонал и пользователи',
-  manager: 'Свой кабинет, задачи сотрудников, спринты, заявки на отгул, колёса баланса',
+  manager: 'Свой кабинет, задачи сотрудников, спринты и планы участников, заявки на отгул, колёса баланса',
   finance: 'Участники, финансы, отчёты и колёса баланса. Без раздела «Персонал»',
-  wheels_manager: 'Колёса баланса, участники, их профили и спринты',
+  wheels_manager: 'Колёса баланса, участники, их профили, спринты и планы',
   employee: 'Свой кабинет: задачи, учёт времени, заявки на отгул; колёса баланса',
   participant: 'Свой кабинет: сегодня, спринт, операционный план, оплаты, профиль и колёса баланса',
 }

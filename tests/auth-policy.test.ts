@@ -197,6 +197,9 @@ describe('participant', () => {
     expect(allowed('wheels_manager', 'GET', `/api/my-plan?participant_id=${P}`)).toBe(true)
     expect(allowed('wheels_manager', 'POST', `/api/my-plan/actions?participant_id=${P}`)).toBe(false)
     expect(allowed('finance', 'GET', `/api/my-plan?participant_id=${P}`)).toBe(false)
+    expect(allowed('manager', 'GET', '/api/op-plans?program_id=x')).toBe(true)
+    expect(allowed('participant', 'GET', '/api/op-plans?program_id=x')).toBe(false)
+    expect(allowed('wheels_manager', 'POST', '/api/op-plans')).toBe(false)
   })
   it('reads only their own sprint, payments and profile', () => {
     expect(allowed('participant', 'GET', `/api/my-sprint?participant_id=${P}`)).toBe(true)

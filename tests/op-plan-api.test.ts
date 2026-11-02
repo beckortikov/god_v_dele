@@ -10,12 +10,15 @@ import { POST as addGoal } from '@/app/api/my-plan/goals/route'
 import { POST as addAction } from '@/app/api/my-plan/actions/route'
 import { PATCH as editAction } from '@/app/api/my-plan/actions/[id]/route'
 import { POST as result } from '@/app/api/my-plan/actions/[id]/result/route'
+import { GET as overview } from '@/app/api/op-plans/route'
 import { todayISO } from '@/lib/format'
 import { addDays } from '@/lib/sprints'
 import { fake } from './helpers/fake-db'
 
 const ALI = '22222222-2222-4222-8222-222222222222'
 const BOB = '33333333-3333-4333-8333-333333333333'
+const OLD = '44444444-4444-4444-8444-444444444444'
+const PROG = '11111111-1111-4111-8111-111111111111'
 
 const req = (method: string, url: string, body?: unknown) =>
   new Request(`http://test${url}`, { method, headers: { 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) })
@@ -32,7 +35,11 @@ async function setup(pid = ALI) {
 beforeEach(() => {
   fake.reset()
   vi.spyOn(console, 'error').mockImplementation(() => {})
-  fake.rows('participants').push({ id: ALI, name: 'Алиев' }, { id: BOB, name: 'Бобоев' })
+  fake.rows('participants').push(
+    { id: ALI, name: 'Алиев', program_id: PROG, group_id: null, status: 'active' },
+    { id: BOB, name: 'Бобоев', program_id: PROG, group_id: null, status: 'active' },
+    { id: OLD, name: 'Архивный', program_id: PROG, group_id: null, status: 'archived' }
+  )
 })
 
 describe('/api/my-plan', () => {
@@ -110,5 +117,19 @@ describe('/api/my-plan', () => {
     const res = await json(await load(req('GET', `/api/my-plan?participant_id=${ALI}`)))
     expect(res.status).toBe(503)
     expect(res.body.error).toBe('migration_required')
+  })
+
+  it('gives the curators every active participant of the program with a summary of their plan', async () => {
+    const { goal } = await setup(ALI)
+    const late = addDays(todayISO(), -2)
+    await addAction(req('POST', `/api/my-plan/actions?participant_id=${ALI}`, { goal_id: goal.id, title: 'Просрочено', due_date: late, price: 700 }))
+    await addAction(req('POST', `/api/my-plan/actions?participant_id=${ALI}`, { goal_id: goal.id, title: 'Позже', due_date: addDays(todayISO(), 9) }))
+    const res = await json(await overview(req('GET', `/api/op-plans?program_id=${PROG}`)))
+    expect(res.status).toBe(200)
+    const rows = res.body.data.rows
+    expect(rows.map((r: any) => r.participant.name)).toEqual(['Алиев', 'Бобоев'])
+    expect(rows[0].summary).toMatchObject({ total: 2, waiting: 1, atStake: 700 })
+    expect(rows[0].next).toEqual({ title: 'Просрочено', due_date: late })
+    expect(rows[1]).toMatchObject({ plan: null, summary: null, next: null })
   })
 })

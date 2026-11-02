@@ -65,6 +65,7 @@ const RULES: Rule[] = [
 
   // Operational plan: the participant keeps their own; curators may open it (read) with the participant id.
   { prefix: '/api/my-plan', read: ['wheels_manager', 'manager', 'participant'], write: ['participant'], scope: { kind: 'self-participant', param: 'participant_id' } },
+  { prefix: '/api/op-plans', read: ['wheels_manager', 'manager'], write: NONE },
 
   // Sign-ins of people the user manages. The route itself limits employees' sign-ins to admin and participants' to the roles below.
   { prefix: '/api/access', read: ['finance', 'wheels_manager'], write: ['finance', 'wheels_manager'] },

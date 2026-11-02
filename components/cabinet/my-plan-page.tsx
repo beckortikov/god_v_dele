@@ -2,7 +2,7 @@
 
 import * as React from 'react'
 import { toast } from 'sonner'
-import { AlertTriangle, Check, ChevronRight, ClipboardList, MessageCircleQuestion, MoreHorizontal, Pencil, Plus, Search, Trash2 } from 'lucide-react'
+import { AlertTriangle, Check, ChevronLeft, ChevronRight, ClipboardList, MessageCircleQuestion, MoreHorizontal, Pencil, Plus, Search, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatDate, plural, todayISO } from '@/lib/format'
 import { addDays, shortDate } from '@/lib/sprints'
@@ -52,7 +52,19 @@ type NameTarget =
 /** Desktop columns of an action row; the header row uses the same template. */
 const ROW_GRID = 'lg:grid lg:grid-cols-[minmax(0,2.2fr)_minmax(0,1.5fr)_96px_minmax(0,1.1fr)_28px_88px_104px] lg:items-center lg:gap-4'
 
-export function MyPlanPage({ participantId }: { participantId: string | null }) {
+export function MyPlanPage({
+  participantId,
+  readOnly = false,
+  title,
+  onBack,
+}: {
+  participantId: string | null
+  /** A curator looking at a participant's plan: nothing can be changed. */
+  readOnly?: boolean
+  /** Shown instead of «Мой план» (the participant's name for a curator). */
+  title?: string
+  onBack?: () => void
+}) {
   const today = todayISO()
   const confirm = useConfirm()
   const [data, setData] = React.useState<MyPlanData | null>(null)
@@ -112,7 +124,15 @@ export function MyPlanPage({ participantId }: { participantId: string | null }) 
     )
   }
   if (!data) return <Shell><LoadingState /></Shell>
-  if (!data.plan || !data.directions.length) return <PlanSetup participantId={participantId} onCreated={setData} />
+  if (!data.plan || !data.directions.length) {
+    if (!readOnly) return <PlanSetup participantId={participantId} onCreated={setData} />
+    return (
+      <Shell wide>
+        <PageTitle title={title} onBack={onBack} />
+        <EmptyState icon={ClipboardList} title="Плана пока нет" description="Участник ещё не заполнил операционный план. Он появится здесь, как только будет создан." />
+      </Shell>
+    )
+  }
 
   const summary = planSummary(data, today)
   const stateOf = (a: OpAction) => actionState(a, index.excusesOf.get(a.id) ?? [], today)
@@ -214,32 +234,29 @@ export function MyPlanPage({ participantId }: { participantId: string | null }) 
 
   return (
     <Shell wide>
-      <header className="flex flex-wrap items-end justify-between gap-x-4 gap-y-3 px-1">
-        <div className="min-w-0">
-          <p className="text-sm text-muted-foreground">Операционный план</p>
-          <h1 className="mt-1 text-[26px] leading-tight font-bold tracking-tight sm:text-3xl">Мой план</h1>
-        </div>
-        <div className="flex gap-2">
-          <ExportButton className="max-sm:hidden" empty={!data.actions.length} onExport={exportPlan} />
+      <PageTitle title={title} onBack={onBack}>
+        <ExportButton className="max-sm:hidden" empty={!data.actions.length} onExport={exportPlan} />
+        {!readOnly && (
           <Button onClick={() => setForm({})}>
             <Plus />
             Новое действие
           </Button>
-        </div>
-      </header>
+        )}
+      </PageTitle>
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.25fr)]">
         <button
           type="button"
+          disabled={readOnly}
           onClick={() => setVisionOpen(true)}
           className="group flex flex-col items-start gap-1.5 rounded-2xl bg-primary-soft px-5 py-4 text-left outline-none focus-visible:ring-[3px] focus-visible:ring-ring/30"
         >
           <span className="flex w-full items-center justify-between text-[11px] font-semibold tracking-[0.06em] text-primary-soft-foreground uppercase">
             Видение{data.plan.vision_date ? ` · до ${formatDate(data.plan.vision_date)}` : ''}
-            <Pencil className="size-3.5 opacity-60 transition-opacity group-hover:opacity-100" />
+            {!readOnly && <Pencil className="size-3.5 opacity-60 transition-opacity group-hover:opacity-100" />}
           </span>
           <span className={cn('text-[15px] leading-snug font-medium text-pretty', data.plan.vision ? 'text-foreground' : 'text-primary-soft-foreground')}>
-            {data.plan.vision || 'Добавьте видение: каким станет бизнес и к какой дате'}
+            {data.plan.vision || (readOnly ? 'Видение не заполнено' : 'Добавьте видение: каким станет бизнес и к какой дате')}
           </span>
         </button>
 
@@ -289,7 +306,7 @@ export function MyPlanPage({ participantId }: { participantId: string | null }) 
           <AlertTriangle className="size-5 shrink-0 text-[color-mix(in_oklch,var(--warning)_75%,var(--foreground))]" />
           <span className="min-w-0 flex-1">
             <span className="block text-sm font-semibold">
-              Срок прошёл у {waiting.length} {plural(waiting.length, ['действия', 'действий', 'действий'])}: отметьте итог
+              Срок прошёл у {waiting.length} {plural(waiting.length, ['действия', 'действий', 'действий'])}{readOnly ? ', итог не отмечен' : ': отметьте итог'}
             </span>
             <span className="block truncate text-sm text-[color-mix(in_oklch,var(--warning)_75%,var(--foreground))]">
               «{waiting[0].title}»{waiting.length > 1 ? ` и ещё ${waiting.length - 1}` : ''} — сделано или отмазка?
@@ -368,6 +385,7 @@ export function MyPlanPage({ participantId }: { participantId: string | null }) 
               <span className="num shrink-0 text-sm text-muted-foreground">{done} из {all.length}</span>
               <ProgressBar value={all.length ? done / all.length : 0} className="w-14 shrink-0" />
               <span className="flex-1" />
+              {!readOnly && (<>
               <Button variant="ghost" size="sm" className="max-sm:hidden" onClick={() => setForm({ directionId: d.id })}>
                 <Plus />
                 Действие
@@ -398,6 +416,7 @@ export function MyPlanPage({ participantId }: { participantId: string | null }) 
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
+              </>)}
             </div>
 
             <div className="overflow-hidden rounded-2xl border bg-card shadow-xs">
@@ -422,6 +441,7 @@ export function MyPlanPage({ participantId }: { participantId: string | null }) 
                       <h3 className="min-w-0 truncate text-[12.5px] font-semibold tracking-[0.04em] text-primary-soft-foreground uppercase">{g.title}</h3>
                       <span className="num shrink-0 text-xs text-muted-foreground">{gDone}/{acts.length}</span>
                       <span className="flex-1" />
+                      {!readOnly && (<>
                       <Button variant="ghost" size="xs" onClick={() => setForm({ goalId: g.id })} aria-label={`Действие в «${g.title}»`}>
                         <Plus />
                         <span className="max-sm:sr-only">Действие</span>
@@ -444,6 +464,7 @@ export function MyPlanPage({ participantId }: { participantId: string | null }) 
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
+                      </>)}
                     </div>
                     {shown.length ? (
                       <ul className="divide-y border-t">
@@ -455,11 +476,14 @@ export function MyPlanPage({ participantId }: { participantId: string | null }) 
                             excuses={index.excusesOf.get(a.id)?.length ?? 0}
                             today={today}
                             busy={busy === a.id}
+                            readOnly={readOnly}
                             onToggle={() => quickToggle(a)}
                             onOpen={() => setOpenId(a.id)}
                           />
                         ))}
                       </ul>
+                    ) : readOnly ? (
+                      <p className="border-t border-dashed px-4 py-3 text-sm text-muted-foreground lg:pl-[3.25rem]">Действий пока нет</p>
                     ) : (
                       <button
                         type="button"
@@ -473,7 +497,7 @@ export function MyPlanPage({ participantId }: { participantId: string | null }) 
                 )
               })}
 
-              {!narrowed && (
+              {!narrowed && !readOnly && (
                 <div className="flex flex-wrap items-center gap-2 border-t bg-muted/30 px-4 py-2.5 lg:pl-[3.25rem]">
                   <Button variant="ghost" size="sm" className="-ml-2 text-primary hover:text-primary" onClick={() => setNaming({ kind: 'goal-new', direction: d })}>
                     <Plus />
@@ -494,7 +518,7 @@ export function MyPlanPage({ participantId }: { participantId: string | null }) 
         )
       })}
 
-      {!narrowed && (
+      {!narrowed && !readOnly && (
         <Button variant="outline" className="h-11 self-start border-dashed" onClick={() => setNaming({ kind: 'direction-new' })}>
           <Plus />
           Направление
@@ -514,6 +538,7 @@ export function MyPlanPage({ participantId }: { participantId: string | null }) 
         excuses={selected ? (index.excusesOf.get(selected.id) ?? []) : []}
         place={selected ? placeOf(selected) : ''}
         participantId={participantId}
+        readOnly={readOnly}
         onClose={() => setOpenId(null)}
         onEdit={a => {
           setOpenId(null)
@@ -540,6 +565,29 @@ export function MyPlanPage({ participantId }: { participantId: string | null }) 
         onSubmit={submitName}
       />
     </Shell>
+  )
+}
+
+function PageTitle({ title, onBack, children }: { title?: string; onBack?: () => void; children?: React.ReactNode }) {
+  return (
+    <header className="flex flex-wrap items-end justify-between gap-x-4 gap-y-3 px-1">
+      <div className="min-w-0">
+        {onBack ? (
+          <button
+            type="button"
+            onClick={onBack}
+            className="-my-2 inline-flex items-center gap-1 rounded-md py-2 text-sm font-medium text-primary outline-none focus-visible:ring-[3px] focus-visible:ring-ring/30"
+          >
+            <ChevronLeft className="size-4" />
+            Все планы
+          </button>
+        ) : (
+          <p className="text-sm text-muted-foreground">Операционный план</p>
+        )}
+        <h1 className="mt-1 text-[26px] leading-tight font-bold tracking-tight text-balance sm:text-3xl">{title ?? 'Мой план'}</h1>
+      </div>
+      {children && <div className="flex gap-2">{children}</div>}
+    </header>
   )
 }
 
@@ -593,6 +641,7 @@ function ActionRow({
   excuses,
   today,
   busy,
+  readOnly,
   onToggle,
   onOpen,
 }: {
@@ -601,25 +650,39 @@ function ActionRow({
   excuses: number
   today: string
   busy: boolean
+  readOnly?: boolean
   onToggle: () => void
   onOpen: () => void
 }) {
   const done = state === 'done'
   return (
     <li className={cn('flex items-start gap-3 py-3 pr-4 pl-4 lg:items-center lg:py-2.5', state === 'waiting' && 'bg-destructive-soft/40')}>
-      <button
-        type="button"
-        disabled={busy}
-        onClick={onToggle}
-        aria-label={done ? `Вернуть в работу: ${a.title}` : `Отметить сделанным: ${a.title}`}
-        className={cn(
-          'mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full border-2 transition-colors outline-none focus-visible:ring-[3px] focus-visible:ring-ring/30 lg:mt-0',
-          done ? 'border-success bg-success text-white' : state === 'waiting' ? 'border-destructive hover:bg-destructive-soft' : 'border-muted-foreground/35 hover:border-success hover:bg-success-soft',
-          busy && 'opacity-50'
-        )}
-      >
-        {done && <Check className="size-3.5" strokeWidth={3} />}
-      </button>
+      {readOnly ? (
+        <span
+          role="img"
+          aria-label={STATE_META[state].label}
+          className={cn(
+            'mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full border-2 lg:mt-0',
+            done ? 'border-success bg-success text-white' : state === 'waiting' ? 'border-destructive' : 'border-muted-foreground/35'
+          )}
+        >
+          {done && <Check className="size-3.5" strokeWidth={3} />}
+        </span>
+      ) : (
+        <button
+          type="button"
+          disabled={busy}
+          onClick={onToggle}
+          aria-label={done ? `Вернуть в работу: ${a.title}` : `Отметить сделанным: ${a.title}`}
+          className={cn(
+            'mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full border-2 transition-colors outline-none focus-visible:ring-[3px] focus-visible:ring-ring/30 lg:mt-0',
+            done ? 'border-success bg-success text-white' : state === 'waiting' ? 'border-destructive hover:bg-destructive-soft' : 'border-muted-foreground/35 hover:border-success hover:bg-success-soft',
+            busy && 'opacity-50'
+          )}
+        >
+          {done && <Check className="size-3.5" strokeWidth={3} />}
+        </button>
+      )}
       <button type="button" onClick={onOpen} className={cn('min-w-0 flex-1 text-left outline-none focus-visible:underline', ROW_GRID)}>
         <span className="flex min-w-0 items-start gap-2 lg:block">
           <span className="min-w-0 flex-1">
