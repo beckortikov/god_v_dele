@@ -20,6 +20,7 @@ import {
   House,
   Radar,
   Target,
+  ClipboardList,
   WalletCards,
   CircleUserRound,
   type LucideIcon,
@@ -385,6 +386,7 @@ export function AppShell({
 const PARTICIPANT_TABS: { label: string; icon: LucideIcon; page?: PageType; section?: string }[] = [
   { label: 'Сегодня', icon: House, page: 'my-today' },
   { label: 'Спринт', icon: Target, page: 'my-sprint' },
+  { label: 'План', icon: ClipboardList, page: 'my-plan' },
   { label: 'Оплаты', icon: WalletCards, page: 'my-payments' },
   { label: 'Колёса', icon: Radar, section: 'wheels' },
   { label: 'Профиль', icon: CircleUserRound, page: 'my-profile' },

@@ -189,6 +189,15 @@ describe('manager and employee', () => {
 })
 
 describe('participant', () => {
+  it('keeps their own operational plan; curators may only read one', () => {
+    expect(allowed('participant', 'GET', `/api/my-plan?participant_id=${P}`)).toBe(true)
+    expect(allowed('participant', 'POST', `/api/my-plan/actions?participant_id=${P}`)).toBe(true)
+    expect(allowed('participant', 'PATCH', '/api/my-plan/actions/x?participant_id=other')).toBe(false)
+    expect(allowed('participant', 'GET', '/api/my-plan')).toBe(false)
+    expect(allowed('wheels_manager', 'GET', `/api/my-plan?participant_id=${P}`)).toBe(true)
+    expect(allowed('wheels_manager', 'POST', `/api/my-plan/actions?participant_id=${P}`)).toBe(false)
+    expect(allowed('finance', 'GET', `/api/my-plan?participant_id=${P}`)).toBe(false)
+  })
   it('reads only their own sprint, payments and profile', () => {
     expect(allowed('participant', 'GET', `/api/my-sprint?participant_id=${P}`)).toBe(true)
     expect(allowed('participant', 'GET', '/api/my-sprint?participant_id=other')).toBe(false)

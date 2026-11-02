@@ -63,6 +63,9 @@ const RULES: Rule[] = [
   { prefix: '/api/sprints', read: ['wheels_manager', 'manager'], write: ['wheels_manager', 'manager'] },
   { prefix: '/api/my-sprint', read: ['participant'], write: NONE, scope: { kind: 'self-participant', param: 'participant_id' } },
 
+  // Operational plan: the participant keeps their own; curators may open it (read) with the participant id.
+  { prefix: '/api/my-plan', read: ['wheels_manager', 'manager', 'participant'], write: ['participant'], scope: { kind: 'self-participant', param: 'participant_id' } },
+
   // Sign-ins of people the user manages. The route itself limits employees' sign-ins to admin and participants' to the roles below.
   { prefix: '/api/access', read: ['finance', 'wheels_manager'], write: ['finance', 'wheels_manager'] },
 

@@ -39,6 +39,7 @@ const AnalyticsPage = dynamic(() => import('@/components/reports/analytics-page'
 const AuditPage = dynamic(() => import('@/components/admin/audit-page').then(m => m.AuditPage), { loading: PageSpinner })
 const MyPaymentsPage = dynamic(() => import('@/components/cabinet/my-payments-page').then(m => m.MyPaymentsPage), { loading: PageSpinner })
 const MySprintPage = dynamic(() => import('@/components/cabinet/my-sprint-page').then(m => m.MySprintPage), { loading: PageSpinner })
+const MyPlanPage = dynamic(() => import('@/components/cabinet/my-plan-page').then(m => m.MyPlanPage), { loading: PageSpinner })
 const MyProfilePage = dynamic(() => import('@/components/cabinet/my-profile-page').then(m => m.MyProfilePage), { loading: PageSpinner })
 const LessonsPage = dynamic(() => import('@/components/lessons/lessons-page').then(m => m.LessonsPage), { loading: PageSpinner })
 const MyTodayPage = dynamic(() => import('@/components/cabinet/my-today-page').then(m => m.MyTodayPage), { loading: PageSpinner })
@@ -164,6 +165,7 @@ function PageRouter({ session }: { session: SessionUser }) {
     case 'my-payments': return <MyPaymentsPage participantId={session.participantId} participantName={session.fullName} />
     case 'sprints': return <SprintsPage />
     case 'my-sprint': return <MySprintPage participantId={session.participantId} />
+    case 'my-plan': return <MyPlanPage participantId={session.participantId} />
     case 'lessons': return <LessonsPage />
     case 'my-profile': return <MyProfilePage participantId={session.participantId} />
     case 'my-today': return <MyTodayPage participantId={session.participantId} participantName={session.fullName} />

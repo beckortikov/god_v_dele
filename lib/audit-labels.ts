@@ -49,6 +49,11 @@ export const TABLE_LABELS: Record<string, string> = {
   lessons: 'Уроки',
   lesson_materials: 'Материалы уроков',
   participant_business_years: 'Бизнес участников по годам',
+  op_plans: 'Операционные планы',
+  op_directions: 'Операционный план: направления',
+  op_goals: 'Операционный план: микро-цели',
+  op_actions: 'Операционный план: действия',
+  op_action_excuses: 'Операционный план: отмазки',
 }
 
 export const tableLabel = (t: string) => TABLE_LABELS[t] ?? t

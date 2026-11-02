@@ -27,6 +27,7 @@ import {
   Sun,
   UserRound,
   CalendarRange,
+  ClipboardList,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -36,7 +37,7 @@ export type PageType =
   | 'hr-dashboard' | 'employees' | 'schedule' | 'payroll' | 'vacations' | 'timesheet'
   | 'users' | 'employee-dashboard' | 'manager-dashboard'
   | 'analytics' | 'audit' | 'my-payments'
-  | 'sprints' | 'my-sprint' | 'my-today' | 'my-profile' | 'lessons'
+  | 'sprints' | 'my-sprint' | 'my-plan' | 'my-today' | 'my-profile' | 'lessons'
 
 export type UserRole = 'admin' | 'finance' | 'employee' | 'manager' | 'wheels_manager' | 'participant'
 
@@ -84,6 +85,7 @@ export const PAGES: Record<PageType, NavPage> = {
   lessons: { id: 'lessons', label: 'Календарь', title: 'Календарь уроков', description: 'Расписание занятий потока и материалы к урокам', icon: CalendarRange },
   'my-profile': { id: 'my-profile', label: 'Мой профиль', title: 'Мой профиль', description: 'Личные данные, фото паспорта, бизнес и динамика по годам', icon: UserRound },
   'my-sprint': { id: 'my-sprint', label: 'Мой спринт', title: 'Мой спринт', description: 'Задачи спринта и отчёты куратору', icon: Flag },
+  'my-plan': { id: 'my-plan', label: 'Мой план', title: 'Операционный план', description: 'Видение, направления, микро-цели и действия со сроками и ценой слова', icon: ClipboardList },
 }
 
 const S = {
@@ -113,7 +115,7 @@ export function getSections(role: UserRole): NavSection[] {
     case 'employee':
       return [{ id: 'cabinet', label: 'Кабинет', icon: UserCircle2, pages: ['employee-dashboard'] }, S.wheels]
     case 'participant':
-      return [{ id: 'cabinet', label: 'Кабинет', icon: UserCircle2, pages: ['my-today', 'my-sprint', ...(PARTICIPANT_PAYMENTS_VISIBLE ? (['my-payments'] as PageType[]) : []), 'my-profile'] }, S.wheels]
+      return [{ id: 'cabinet', label: 'Кабинет', icon: UserCircle2, pages: ['my-today', 'my-sprint', 'my-plan', ...(PARTICIPANT_PAYMENTS_VISIBLE ? (['my-payments'] as PageType[]) : []), 'my-profile'] }, S.wheels]
   }
 }
 
@@ -146,7 +148,7 @@ export const ROLE_DESCRIPTIONS: Record<UserRole, string> = {
   finance: 'Участники, финансы, отчёты и колёса баланса. Без раздела «Персонал»',
   wheels_manager: 'Колёса баланса, участники, их профили и спринты',
   employee: 'Свой кабинет: задачи, учёт времени, заявки на отгул; колёса баланса',
-  participant: 'Свой кабинет: сегодня, спринт, оплаты, профиль и колёса баланса',
+  participant: 'Свой кабинет: сегодня, спринт, операционный план, оплаты, профиль и колёса баланса',
 }
 
 export const ROLE_LABELS: Record<UserRole, string> = {
