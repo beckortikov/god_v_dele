@@ -273,7 +273,7 @@
 .landing .nav .wrap{padding:0 24px}
 .landing .hero .stage{height:auto;min-height:0;display:flex;flex-direction:column}
 .landing .hero .hero-layer{position:static;max-width:none;width:100%;min-width:0;display:flex;flex-direction:column}
-.landing .marquee{position:relative;top:auto;margin-top:104px}
+.landing .marquee{position:relative;top:auto;margin-top:124px}
 .landing .marquee-group span{font-size:96px}
 .landing .marquee-group i{width:28px;height:28px;margin:0 26px}
 /* Narrow screens: the title line with the photo over it, then the role, the buttons and the rest */
@@ -282,9 +282,13 @@
 .landing .hero-actions{order:3}
 .landing .hero-side{order:4}
 .landing .strip{order:5}
-.landing .hero-photo{position:relative;left:auto;top:auto;transform:none;width:min(94vw,440px);height:auto;margin:-7vw auto 0;overflow:visible;-webkit-mask-image:none;mask-image:none}
+/* As on desktop: the title line runs behind the head, the role and the buttons lie over the photo at
+   elbow height. --pw is the photo width (the cutout is 1.5 times taller), --mq the title line height. */
+.landing .hero{--pw:min(94vw,440px);--mq:96px}
+.landing .hero-photo{position:relative;left:auto;top:auto;transform:none;width:var(--pw);height:auto;margin:calc(var(--mq) * -.5 - var(--pw) * .17) auto 0;overflow:visible;-webkit-mask-image:linear-gradient(180deg,#000 52%,rgb(0 0 0 / .45) 72%,transparent 96%);mask-image:linear-gradient(180deg,#000 52%,rgb(0 0 0 / .45) 72%,transparent 96%)}
 .landing .hero-photo img{height:auto;object-fit:initial}
-.landing .hero-copy{position:relative;left:auto;top:auto;padding:0 24px;margin-top:-30px;text-align:center}
+.landing .hero-copy{position:relative;left:auto;top:auto;padding:0 24px;margin-top:calc(var(--pw) * -.74);text-align:center}
+.landing .hero-copy .role{text-shadow:0 2px 18px rgb(0 0 0 / .85)}
 .landing .hero-copy .role{font-size:clamp(26px,8vw,42px)}
 .landing .hero-actions{position:relative;right:auto;top:auto;flex-direction:row;flex-wrap:wrap;justify-content:center;padding:22px 24px 28px}
 .landing .hero-side{position:relative;right:auto;top:auto;width:auto;grid-template-columns:repeat(2,1fr);gap:10px;padding:0 18px 28px}
@@ -313,7 +317,8 @@
 .landing .nav .acts .btn-accent,.landing .nav .acts .login-btn{display:none}
 /* the nav login button is hidden here, so the hero carries one above the main CTA */
 .landing .hero-login{display:inline-flex}
-.landing .marquee{margin-top:88px}
+.landing .marquee{margin-top:104px}
+.landing .hero{--mq:84px}
 .landing .marquee-group span{font-size:84px}
 .landing .hero-actions{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.7fr);gap:10px;padding:18px 18px 6px}
 .landing .hero-actions .btn{width:100%;justify-content:center;text-align:center;white-space:nowrap;padding-inline:12px}
