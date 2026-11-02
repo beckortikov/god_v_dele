@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import Image from 'next/image'
-import { ArrowUpRight, ChevronDown, Megaphone, Menu, Search, Target, Wallet, X } from 'lucide-react'
+import { ArrowUpRight, ChevronDown, Megaphone, Menu, Search, Target, UserRound, Wallet, X } from 'lucide-react'
 import { display } from './fonts'
 import './landing.css'
 
@@ -222,6 +222,10 @@ export function LandingPage({ onLogin }: { onLogin: () => void }) {
           <div className="acts">
             <button type="button" className="btn btn-ghost btn-sm login-btn" onClick={onLogin}>Войти</button>
             <a href="#contact" className="btn btn-accent btn-sm" onClick={go('contact', '')}>Консультация</a>
+            {/* Phones: the sign-in is an icon next to the burger */}
+            <button type="button" className="icon-login" aria-label="Войти в кабинет" onClick={() => { setMenuOpen(false); onLogin() }}>
+              <UserRound size={21} />
+            </button>
             <button type="button" className="burger" aria-label={menuOpen ? 'Закрыть меню' : 'Открыть меню'} aria-expanded={menuOpen} onClick={() => setMenuOpen(v => !v)}>
               {menuOpen ? <X size={22} /> : <Menu size={22} />}
             </button>
@@ -268,7 +272,7 @@ export function LandingPage({ onLogin }: { onLogin: () => void }) {
               <div className="role">Предприниматель<i>.</i></div>
             </div>
             <div className="hero-actions">
-              <button type="button" className="btn btn-ghost hero-login" onClick={onLogin}>Войти</button>
+              <a href="#contact" className="btn btn-ghost hero-consult" onClick={go('contact', 'Консультация')}>Консультация</a>
               <a href="#contact" className="btn btn-accent" onClick={go('contact', 'Бесплатный тренинг')}>Бесплатный тренинг</a>
               <a href="#program" className="link-arrow" onClick={go('program')}>Программа «Год в деле» <ArrowUpRight size={18} /></a>
             </div>
