@@ -78,24 +78,16 @@ const MENU: MenuItem[] = [
   { label: 'Обо мне', id: 'about', sub: [{ label: 'Про путь', id: 'about' }, { label: 'Мои бизнесы', id: 'projects' }, { label: 'Проекты', id: 'projects' }, { label: 'Награды', id: 'awards' }] },
   { label: 'Мои бизнесы', id: 'projects' },
   {
-    label: 'Предпринимателям',
-    id: 'entrepreneurs',
+    label: 'Услуги',
+    id: 'services',
     sub: [
       { label: 'Программа «Год в деле»', id: 'program' },
-      { label: 'Личная консультация', id: 'offer-consult' },
-      { label: 'Бизнес-разбор', id: 'offer-review' },
-      { label: 'Тур по бизнесам', id: 'offer-tour' },
-    ],
-  },
-  {
-    label: 'Компаниям',
-    id: 'companies',
-    sub: [
-      { label: 'Сопровождение', id: 'co-support' },
-      { label: 'Стратегическая сессия', id: 'co-strategy' },
-      { label: 'Разбор компании', id: 'co-review' },
-      { label: 'Обучение персонала', id: 'co-training' },
-      { label: 'Бизнес-консультация', id: 'co-consult' },
+      { label: 'Консультация', id: 'svc-consult' },
+      { label: 'Бизнес-разбор', id: 'svc-review' },
+      { label: 'Сопровождение', id: 'svc-support' },
+      { label: 'Стратегическая сессия', id: 'svc-strategy' },
+      { label: 'Обучение персонала', id: 'svc-training' },
+      { label: 'Тур по бизнесам', id: 'svc-tour' },
     ],
   },
   { label: 'Книга', id: 'book', sub: [{ label: 'О книге', id: 'book' }, { label: 'Купить', id: 'book-buy' }] },
@@ -103,21 +95,15 @@ const MENU: MenuItem[] = [
   { label: 'Контакты', id: 'contact' },
 ]
 
-/** Offers for entrepreneurs. Descriptions are short drafts: confirm the wording with the author. */
-const OFFERS = [
-  { id: 'offer-program', tag: 'Программа', title: 'Год в деле', text: 'Годовая программа наставничества и сопровождения: диагностика, системы, финансы, масштаб.', cta: 'Записаться на поток', topic: 'Программа «Год в деле»', to: 'program', main: true },
-  { id: 'offer-consult', tag: 'Один на один', title: 'Личная консультация', text: 'Индивидуальный разговор по вашему бизнесу: разбираем задачу и выходим с понятным планом действий.', cta: 'Записаться', topic: 'Личная консультация' },
-  { id: 'offer-review', tag: 'Диагностика', title: 'Бизнес-разбор', text: 'Смотрим бизнес в цифрах: финансы, продажи, команду, и находим, где теряются деньги и время.', cta: 'Заказать разбор', topic: 'Бизнес-разбор' },
-  { id: 'offer-tour', tag: 'Живой формат', title: 'Тур по бизнесам', text: 'Поездка по действующим бизнесам автора: можно увидеть изнутри, как устроены процессы и команда.', cta: 'Узнать про тур', topic: 'Тур по бизнесам' },
-]
-
-/** Offers for companies. Same: drafts to confirm. */
-const COMPANY_OFFERS = [
-  { id: 'co-support', title: 'Сопровождение', text: 'Постоянная работа рядом с командой: система управления, цели и контроль результата.', topic: 'Сопровождение компании' },
-  { id: 'co-strategy', title: 'Стратегическая сессия', text: 'Совместная работа руководителей над стратегией роста и приоритетами на год.', topic: 'Стратегическая сессия' },
-  { id: 'co-review', title: 'Разбор компании', text: 'Диагностика компании: цифры, процессы, команда и план изменений.', topic: 'Разбор компании' },
-  { id: 'co-training', title: 'Обучение персонала', text: 'Обучение сотрудников управлению, продажам и работе с цифрами.', topic: 'Обучение персонала' },
-  { id: 'co-consult', title: 'Бизнес-консультация', text: 'Консультация для руководителей по запросу компании.', topic: 'Бизнес-консультация' },
+/** Services for entrepreneurs and companies alike. Descriptions are short drafts: confirm the wording with the author. */
+const SERVICES = [
+  { id: 'svc-program', tag: 'Программа', title: 'Год в деле', text: 'Годовая программа наставничества и сопровождения: диагностика, системы, финансы, масштаб.', cta: 'Записаться на поток', topic: 'Программа «Год в деле»', main: true },
+  { id: 'svc-consult', tag: 'Один на один', title: 'Консультация', text: 'Разговор по вашему бизнесу или задаче компании: разбираем вопрос и выходим с понятным планом действий.', cta: 'Записаться', topic: 'Консультация' },
+  { id: 'svc-review', tag: 'Диагностика', title: 'Бизнес-разбор', text: 'Смотрим бизнес в цифрах: финансы, продажи, процессы и команду, и находим, где теряются деньги и время.', cta: 'Заказать разбор', topic: 'Бизнес-разбор' },
+  { id: 'svc-support', tag: 'Рядом с командой', title: 'Сопровождение', text: 'Постоянная работа с собственником и командой: система управления, цели и контроль результата.', cta: 'Обсудить', topic: 'Сопровождение' },
+  { id: 'svc-strategy', tag: 'Для руководителей', title: 'Стратегическая сессия', text: 'Совместная работа руководителей над стратегией роста и приоритетами на год.', cta: 'Заказать сессию', topic: 'Стратегическая сессия' },
+  { id: 'svc-training', tag: 'Для команды', title: 'Обучение персонала', text: 'Обучение сотрудников управлению, продажам и работе с цифрами.', cta: 'Обсудить обучение', topic: 'Обучение персонала' },
+  { id: 'svc-tour', tag: 'Живой формат', title: 'Тур по бизнесам', text: 'Поездка по действующим бизнесам автора: можно увидеть изнутри, как устроены процессы и команда.', cta: 'Узнать про тур', topic: 'Тур по бизнесам' },
 ]
 
 const BOOK_POINTS = [
@@ -133,7 +119,7 @@ const EVENT_FORMATS = [
 ]
 
 function scrollToId(id: string) {
-  document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: id.startsWith('offer-') || id.startsWith('co-') ? 'center' : 'start' })
+  document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: id.startsWith('svc-') ? 'center' : 'start' })
 }
 
 /** The author's mark: two stacked arrows pointing up. */
@@ -356,17 +342,17 @@ export function LandingPage({ onLogin }: { onLogin: () => void }) {
         </div>
       </section>
 
-      <section id="entrepreneurs">
+      <section id="services">
         <div className="wrap">
           <div className="sec-head">
             <div>
-              <div className="kick">Предпринимателям</div>
-              <h2>Как со мной работать, если у вас свой бизнес</h2>
-              <p>Выберите формат: от годовой программы до разговора один на один.</p>
+              <div className="kick">Услуги</div>
+              <h2>Как со мной работать</h2>
+              <p>Для предпринимателей и компаний: от разговора один на один до годовой программы и работы с командой.</p>
             </div>
           </div>
-          <div className="offers">
-            {OFFERS.map(o => (
+          <div className="offers services">
+            {SERVICES.map(o => (
               <div key={o.id} id={o.id} className={`offer card${o.main ? ' main' : ''}`}>
                 <div className="offer-top"><span className="chipk">{o.tag}</span></div>
                 <h3>{o.title}</h3>
@@ -374,6 +360,13 @@ export function LandingPage({ onLogin }: { onLogin: () => void }) {
                 <a href="#contact" className={o.main ? 'btn btn-accent' : 'btn btn-ghost'} onClick={go('contact', o.topic)}>{o.cta}</a>
               </div>
             ))}
+          </div>
+          <div className="focus-title">Чем я могу помочь</div>
+          <div className="focus">
+            <div className="focus-card card"><Target /><h3>Бизнес-планирование</h3><p>Цели, подробный план действий, ключевые показатели (KPI) и финансовый анализ.</p></div>
+            <div className="focus-card card"><Megaphone /><h3>Маркетинг и продажи</h3><p>Привлечение клиентов, уникальное предложение, эффективные кампании и управление брендом.</p></div>
+            <div className="focus-card card"><Wallet /><h3>Управление финансами</h3><p>Учёт, планирование и контроль: бюджетирование, оборотный капитал, стратегии финансирования.</p></div>
+            <div className="focus-card card"><Search /><h3>Маркетинговый анализ</h3><p>Конкуренты, тренды, спрос, ценовая стратегия, инновации и отличия продукта.</p></div>
           </div>
         </div>
       </section>
@@ -465,36 +458,6 @@ export function LandingPage({ onLogin }: { onLogin: () => void }) {
               </ol>
               <div className="wheel-hint">7 элементов · отмечаются ежемесячно в личном кабинете</div>
             </div>
-          </div>
-        </div>
-      </section>
-
-      <section id="companies">
-        <div className="wrap">
-          <div className="sec-head">
-            <div>
-              <div className="kick">Компаниям</div>
-              <h2>Работа с командой и руководителями компании</h2>
-              <p>Системный подход к управлению, продажам и финансам: помогаю выстроить цифры, процессы и людей.</p>
-            </div>
-            <a href="#contact" className="btn btn-accent" onClick={go('contact', 'Для компании')}>Обсудить задачу</a>
-          </div>
-          <div className="offers five">
-            {COMPANY_OFFERS.map(o => (
-              <div key={o.id} id={o.id} className="offer card">
-                <div className="offer-top"><span className="chipk">Для компаний</span></div>
-                <h3>{o.title}</h3>
-                <p>{o.text}</p>
-                <a href="#contact" className="link-arrow" onClick={go('contact', o.topic)}>Оставить заявку <ArrowUpRight size={18} /></a>
-              </div>
-            ))}
-          </div>
-          <div className="focus-title">Чем я могу помочь</div>
-          <div className="focus">
-            <div className="focus-card card"><Target /><h3>Бизнес-планирование</h3><p>Цели, подробный план действий, ключевые показатели (KPI) и финансовый анализ.</p></div>
-            <div className="focus-card card"><Megaphone /><h3>Маркетинг и продажи</h3><p>Привлечение клиентов, уникальное предложение, эффективные кампании и управление брендом.</p></div>
-            <div className="focus-card card"><Wallet /><h3>Управление финансами</h3><p>Учёт, планирование и контроль: бюджетирование, оборотный капитал, стратегии финансирования.</p></div>
-            <div className="focus-card card"><Search /><h3>Маркетинговый анализ</h3><p>Конкуренты, тренды, спрос, ценовая стратегия, инновации и отличия продукта.</p></div>
           </div>
         </div>
       </section>

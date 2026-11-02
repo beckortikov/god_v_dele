@@ -213,6 +213,8 @@
 /* offers, book, events */
 .landing .offers{display:grid;grid-template-columns:repeat(4,1fr);gap:20px}
 .landing .offers.five{grid-template-columns:repeat(3,1fr)}
+/* Services: the program card takes two cells, so seven cards fill two rows of four */
+.landing .offers.services .offer.main{grid-column:span 2}
 .landing .offer{padding:32px;display:flex;flex-direction:column;gap:16px;scroll-margin-top:120px;transition:border-color .2s}
 .landing .offer:hover{border-color:rgb(161 250 77 / .45)}
 .landing .offer.main{background:linear-gradient(180deg,rgb(161 250 77 / .13),#131413 72%);border-color:rgb(161 250 77 / .4)}
@@ -303,6 +305,7 @@
 .landing .marquee-group span{font-size:84px}
 .landing .hero-actions .btn{width:100%}
 .landing .for-list,.landing .counters,.landing .offers,.landing .offers.five,.landing .focus{grid-template-columns:1fr}
+.landing .offers.services .offer.main{grid-column:auto}
 .landing .counters.four{grid-template-columns:repeat(2,1fr)}
 .landing .mobile-menu{padding:8px 18px 24px;max-height:calc(100dvh - 68px)}
 .landing .for-row{min-height:0;padding:26px}
