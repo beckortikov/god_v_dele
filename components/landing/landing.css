@@ -276,15 +276,15 @@
 .landing .marquee{position:relative;top:auto;margin-top:104px}
 .landing .marquee-group span{font-size:96px}
 .landing .marquee-group i{width:28px;height:28px;margin:0 26px}
-/* Narrow screens read top-down: the title line, the role and the buttons first, then the photo */
-.landing .hero-copy{order:1}
-.landing .hero-actions{order:2}
-.landing .hero-photo{order:3}
+/* Narrow screens read top-down: the title line and the buttons, then the photo with the role under it */
+.landing .hero-actions{order:1}
+.landing .hero-photo{order:2}
+.landing .hero-copy{order:3}
 .landing .hero-side{order:4}
 .landing .strip{order:5}
-.landing .hero-photo{position:relative;left:auto;top:auto;transform:none;width:min(82vw,380px);height:auto;margin:4px auto 0;overflow:visible;-webkit-mask-image:none;mask-image:none}
+.landing .hero-photo{position:relative;left:auto;top:auto;transform:none;width:min(94vw,440px);height:auto;margin:8px auto 0;overflow:visible;-webkit-mask-image:none;mask-image:none}
 .landing .hero-photo img{height:auto;object-fit:initial}
-.landing .hero-copy{position:relative;left:auto;top:auto;padding:0 24px;margin-top:18px;text-align:center}
+.landing .hero-copy{position:relative;left:auto;top:auto;padding:0 24px 22px;margin-top:-30px;text-align:center}
 .landing .hero-copy .role{font-size:clamp(26px,8vw,42px)}
 .landing .hero-actions{position:relative;right:auto;top:auto;flex-direction:row;flex-wrap:wrap;justify-content:center;padding:22px 24px 28px}
 .landing .hero-side{position:relative;right:auto;top:auto;width:auto;grid-template-columns:repeat(2,1fr);gap:10px;padding:0 18px 28px}
