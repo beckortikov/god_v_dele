@@ -41,13 +41,13 @@ const STAGES = [
 ]
 
 const PROJECTS = [
-  { name: 'OBBO', text: 'Первый социально ориентированный маркетплейс Таджикистана: шоурумы в Худжанде и Душанбе, доставка по всей стране и оплата в рассрочку.', tag: 'Маркетплейс' },
-  { name: 'KreditMarket', text: 'Сеть магазинов бытовой техники и электроники по продаже в рассрочку.', tag: 'Ритейл' },
-  { name: 'MobiCenter', text: 'Сеть розничных магазинов мобильной электроники, аксессуаров и сервисного обслуживания смартфонов.', tag: 'Ритейл' },
-  { name: 'AslZar', text: 'Ювелирный дом с авторскими украшениями: изделия из золота и серебра для особых случаев.', tag: 'Ювелирный дом' },
-  { name: 'BaBolo', text: 'Региональный сервис заказа такси: быстрый заказ, онлайн-отслеживание груза и поддержка 24/7.', tag: 'Такси и логистика' },
-  { name: 'Sanduk', text: 'Сберегательное и микрокредитное обслуживание: доступные займы и финансовые услуги для населения.', tag: 'Микрофинансирование' },
-  { name: 'Manzilsoz', text: 'Поставщик строительных материалов: широкий ассортимент для частного и коммерческого строительства.', tag: 'Стройматериалы' },
+  { name: 'OBBO', logo: '/landing/logos/obbo.png', text: 'Первый социально ориентированный маркетплейс Таджикистана: шоурумы в Худжанде и Душанбе, доставка по всей стране и оплата в рассрочку.', tag: 'Маркетплейс' },
+  { name: 'KreditMarket', logo: '/landing/logos/kreditmarket.png', text: 'Сеть магазинов бытовой техники и электроники по продаже в рассрочку.', tag: 'Ритейл' },
+  { name: 'MobiCenter', logo: '/landing/logos/mobicenter.png', text: 'Сеть розничных магазинов мобильной электроники, аксессуаров и сервисного обслуживания смартфонов.', tag: 'Ритейл' },
+  { name: 'AslZar', logo: '/landing/logos/aslzar.png', text: 'Ювелирный дом с авторскими украшениями: изделия из золота и серебра для особых случаев.', tag: 'Ювелирный дом' },
+  { name: 'BaBolo', logo: '/landing/logos/babolo.png', text: 'Региональный сервис заказа такси: быстрый заказ, онлайн-отслеживание груза и поддержка 24/7.', tag: 'Такси и логистика' },
+  { name: 'Sanduk', logo: '/landing/logos/sanduk.png', text: 'Сберегательное и микрокредитное обслуживание: доступные займы и финансовые услуги для населения.', tag: 'Микрофинансирование' },
+  { name: 'Manzilsoz', logo: '/landing/logos/manzilsoz.png', text: 'Поставщик строительных материалов: широкий ассортимент для частного и коммерческого строительства.', tag: 'Стройматериалы' },
 ]
 
 const COUNTRIES = ['Таджикистан', 'Узбекистан', 'Казахстан', 'Кыргызстан', 'Россия', 'Турция', 'Германия', 'США', 'Китай', 'ОАЭ']
@@ -290,7 +290,7 @@ export function LandingPage({ onLogin }: { onLogin: () => void }) {
                     <div className="logos-group" key={g} aria-hidden={g === 1 ? true : undefined}>
                       {PROJECTS.map(p => (
                         <div className="logo-chip" role={g === 0 ? 'listitem' : undefined} key={p.name}>
-                          <i>{p.name[0]}</i>
+                          <Image src={p.logo} alt="" width={40} height={40} className="logo-img" />
                           <span><b>{p.name}</b><em>{p.tag}</em></span>
                         </div>
                       ))}
@@ -339,9 +339,9 @@ export function LandingPage({ onLogin }: { onLogin: () => void }) {
           </div>
           <div className="projects-list card">
             {PROJECTS.map(p => (
-              <div key={p.name} className="prj"><h3>{p.name}</h3><p>{p.text}</p><div className="tg">{p.tag}</div></div>
+              <div key={p.name} className="prj"><div className="prj-name"><Image src={p.logo} alt="" width={56} height={56} className="logo-img" /><h3>{p.name}</h3></div><p>{p.text}</p><div className="tg">{p.tag}</div></div>
             ))}
-            <a href="#program" className="prj main" onClick={go('program')}><h3>Год в деле</h3><p>Годовая программа наставничества и сопровождения для предпринимателей, которые хотят выстроить системный бизнес.</p><div className="tg">Бизнес-коучинг →</div></a>
+            <a href="#program" className="prj main" onClick={go('program')}><div className="prj-name"><Image src="/landing/logos/godvdele.png" alt="" width={56} height={56} className="logo-img" /><h3>Год в деле</h3></div><p>Годовая программа наставничества и сопровождения для предпринимателей, которые хотят выстроить системный бизнес.</p><div className="tg">Бизнес-коучинг →</div></a>
           </div>
         </div>
       </section>
