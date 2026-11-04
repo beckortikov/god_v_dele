@@ -2,36 +2,34 @@
 
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import Image from 'next/image'
-import { ArrowUpRight, ChevronDown, Megaphone, Menu, Search, Target, UserRound, Wallet, X } from 'lucide-react'
+import { ArrowUpRight, ChevronDown, Menu, UserRound, X } from 'lucide-react'
 import { display } from './fonts'
 import './landing.css'
 
 /** Applications are sent to this Telegram account (opens a chat with the text pre-filled). */
 const TELEGRAM_HANDLE = 'gelosl3'
 
-const CATS: { name: string; items: string[] }[] = [
-  { name: 'Ниша', items: ['Анализ ниши и поиск голубого океана', 'Анализ объёма и ёмкости рынка', 'Анализ запросов Яндекс / Google', 'Изучение потребностей клиентов', 'Доля компании в нише', 'Цель по доходу и прибыли на 12/24/36 мес.', 'Выбор бизнес-модели'] },
-  { name: 'Клиенты и рынок', items: ['Анализ конкурентов', 'Портреты-аватары целевой аудитории', 'Боли, страхи и возражения ЦА', 'Численность и география ЦА', 'План/факт по конверсиям в лида и клиента', 'SWOT-анализ', 'Удовлетворённость клиентов и отзывы'] },
-  { name: 'Продукт', items: ['Конкурентоспособность продукта', 'Плановый и фактический MVP', 'Юнит-экономика и доходность позиций', 'Стратегия роста LTV клиентов', 'Карта маршрута клиента (CJM)', 'Бизнес-модель Остервальдера и Пинье', 'Расчёт рентабельности продукта'] },
-  { name: 'Трафик и продажи', items: ['План/факт лидов и охватов', 'План/факт стоимости лида и клиента', 'Анализ каналов продвижения', 'Воронка продаж с конверсиями', 'Регламенты и скрипты продаж', 'Настроенная CRM и взращивание', 'Ежедневный план/факт продаж'] },
-  { name: 'Маркетинг и брендинг', items: ['Брендбук', 'Оффер или УТП', 'Маркетинговая стратегия', 'Сайт и аккаунты в соцсетях', 'Программа лояльности и рефералы', 'Позиционирование', '30 точек касания'] },
-  { name: 'Командообразование', items: ['Организационная структура', 'Портрет, ЦКП, KPI и ДИ сотрудника', 'Формы ежедневных, месячных и годовых отчётов', 'Найм, обучение и удержание', 'Рост для ТОПов и кадровый резерв', 'Контроль работы (CRM, Битрикс)', 'Тимбилдинг'] },
-  { name: 'Финансы', items: ['Финансовое планирование (бюджет)', 'План прибыли', 'Баланс', 'ОПиУ', 'ОДДС', 'Коэффициенты и управленческий учёт', 'Автоматизация учёта'] },
-  { name: 'Масштабирование', items: ['Цели и инструменты масштабирования', 'Безопасность в налогообложении', 'Модель масштабирования (партнёры, франшиза)', 'Юридическая безопасность соглашений', 'Стандарты и регламенты масштабирования', 'План/факт скорости и качества роста', 'Адаптация франшизы и улучшение процессов'] },
-  { name: 'Стратегия', items: ['Стратегическая сессия (от 2 раз в год)', 'Внедрение ИИ в бизнес', 'Поиск новых ниш', 'Инструменты роста капитализации', 'Аналитика для привлечения инвесторов', 'HR-платформа для обучения сотрудников', 'Опционы и партнёрство для ТОПов'] },
-  { name: 'Бизнес-процессы', items: ['Направления регламентации', 'Карта процессов', 'Регламенты, хронометраж и метрики', 'Стандарты', 'Система «Кайдзен»', 'Автоматизация процессов', 'Аудит по всем направлениям'] },
+/** The 16 modules of the programme: the segments of the wheel. */
+const MODULES = [
+  'Бизнес как система',
+  'Ниша',
+  'Клиенты и рынок',
+  'Продукт и доп. доход',
+  'Командообразование / управление',
+  'Трафик, лидогенерация',
+  'Маркетинг / брендинг / PR / реклама',
+  'Продажи',
+  'Финансовый менеджмент',
+  'Юридическая и правовая база',
+  'Бизнес-процессы / регламентация',
+  'Стратегия',
+  'Цифровизация / IT / автоматизация',
+  'Клиентский опыт и удержание',
+  'Личность',
+  'Масштабирование',
 ]
 
-const WHEEL_COLORS = [
-  'oklch(0.72 0.15 268)', 'oklch(0.76 0.14 350)', 'oklch(0.76 0.11 225)', 'oklch(0.84 0.13 85)', 'oklch(0.75 0.11 175)',
-  'oklch(0.74 0.14 25)', 'oklch(0.72 0.14 300)', 'oklch(0.8 0.14 130)', 'oklch(0.78 0.13 55)', 'oklch(0.7 0.12 250)',
-]
-
-const SITUATIONS = [
-  { title: 'Хаос в управлении', points: ['Сотрудники не выполняют задачи', 'Сложно управлять командой', 'Всё держится на вас'] },
-  { title: 'Рост упёрся в потолок', points: ['Непонятны финансовые показатели', 'Команда не готова к расширению', 'Нет системы, чтобы расти дальше'] },
-  { title: 'Проседают продажи', points: ['Планы не выполняются', 'Растут долги и просрочки', 'Клиенты приходят нестабильно'] },
-]
+const WHEEL_COLORS = MODULES.map((_, i) => `oklch(0.77 0.13 ${(268 + i * 22.5) % 360})`)
 
 const STAGES = [
   { months: 'Месяцы 1–3', title: 'Фундамент и диагностика', text: 'Диагностика финансов, процессов и команды, поиск узких мест и план изменений.' },
@@ -53,11 +51,11 @@ const PROJECTS = [
 const COUNTRIES = ['Таджикистан', 'Узбекистан', 'Казахстан', 'Кыргызстан', 'Россия', 'Турция', 'Германия', 'США', 'Китай', 'ОАЭ']
 
 // Wheel geometry (viewBox 0 0 500 500)
-const CX = 250, CY = 250, R_OUT = 238, R_IN = 112, GAP = 1.6
+const CX = 250, CY = 250, R_OUT = 238, R_IN = 112, GAP = 1.2
 const pt = (rad: number, a: number) => [CX + rad * Math.cos(a), CY + rad * Math.sin(a)]
 
-const SEGMENTS = CATS.map((_, i) => {
-  const n = CATS.length
+const SEGMENTS = MODULES.map((_, i) => {
+  const n = MODULES.length
   const a0 = (i / n) * 2 * Math.PI - Math.PI / 2 + (GAP / 180) * Math.PI
   const a1 = ((i + 1) / n) * 2 * Math.PI - Math.PI / 2 - (GAP / 180) * Math.PI
   const [x0, y0] = pt(R_OUT, a0), [x1, y1] = pt(R_OUT, a1), [x2, y2] = pt(R_IN, a1), [x3, y3] = pt(R_IN, a0)
@@ -97,7 +95,7 @@ const MENU: MenuItem[] = [
 
 /** Services for entrepreneurs and companies alike. Descriptions are short drafts: confirm the wording with the author. */
 const SERVICES = [
-  { id: 'svc-program', tag: 'Программа', title: 'Год в деле', text: 'Годовая программа наставничества и сопровождения: диагностика, системы, финансы, масштаб.', cta: 'Записаться на поток', topic: 'Программа «Год в деле»', main: true },
+  { id: 'svc-program', tag: 'Бизнес-программа', title: '«Год в деле»', text: 'Годовая программа и мастермайнд-проект, созданные для перехода бизнеса от хаоса к системе и роста выручки.', cta: 'Записаться на поток', topic: 'Программа «Год в деле»', main: true },
   { id: 'svc-consult', tag: 'Один на один', title: 'Консультация', text: 'Разговор по вашему бизнесу или задаче компании: разбираем вопрос и выходим с понятным планом действий.', cta: 'Записаться', topic: 'Консультация' },
   { id: 'svc-review', tag: 'Диагностика', title: 'Бизнес-разбор', text: 'Смотрим бизнес в цифрах: финансы, продажи, процессы и команду, и находим, где теряются деньги и время.', cta: 'Заказать разбор', topic: 'Бизнес-разбор' },
   { id: 'svc-support', tag: 'Рядом с командой', title: 'Сопровождение', text: 'Постоянная работа с собственником и командой: система управления, цели и контроль результата.', cta: 'Обсудить', topic: 'Сопровождение' },
@@ -136,7 +134,7 @@ export function LandingPage({ onLogin }: { onLogin: () => void }) {
   const [scrolled, setScrolled] = useState(false)
   const [showSticky, setShowSticky] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
-  const [sphere, setSphere] = useState(6)
+  const [sphere, setSphere] = useState(0)
   const heroRef = useRef<HTMLElement>(null)
   const contactRef = useRef<HTMLElement>(null)
 
@@ -196,8 +194,6 @@ export function LandingPage({ onLogin }: { onLogin: () => void }) {
     scrollToId(id)
   }
 
-  const active = CATS[sphere]
-
   return (
     <div className={`landing ${display.variable}`}>
       <header className={`nav${scrolled || menuOpen ? ' scrolled' : ''}`}>
@@ -235,7 +231,7 @@ export function LandingPage({ onLogin }: { onLogin: () => void }) {
           <div className="mobile-menu">
             {MENU.map(m => (
               <div key={m.label} className="mm-group">
-                <a href={`#${m.id}`} className="mm-top" onClick={go(m.id)}>{m.label}</a>
+                <a href={`#${m.id}`} className={`mm-top${m.sub ? ' accent' : ''}`} onClick={go(m.id)}>{m.label}</a>
                 {m.sub && (
                   <div className="mm-sub">
                     {m.sub.map(s => <a key={s.label} href={`#${s.id}`} onClick={go(s.id, s.id === 'book-buy' ? 'Книга «Бизнес в диалоге»' : undefined)}>{s.label}</a>)}
@@ -341,7 +337,6 @@ export function LandingPage({ onLogin }: { onLogin: () => void }) {
             {PROJECTS.map(p => (
               <div key={p.name} className="prj"><div className="prj-name"><Image src={p.logo} alt="" width={56} height={56} className="logo-img" /><h3>{p.name}</h3></div><p>{p.text}</p><div className="tg">{p.tag}</div></div>
             ))}
-            <a href="#program" className="prj main" onClick={go('program')}><div className="prj-name"><Image src="/landing/logos/godvdele.png" alt="" width={56} height={56} className="logo-img" /><h3>Год в деле</h3></div><p>Годовая программа наставничества и сопровождения для предпринимателей, которые хотят выстроить системный бизнес.</p><div className="tg">Бизнес-коучинг →</div></a>
           </div>
         </div>
       </section>
@@ -365,43 +360,16 @@ export function LandingPage({ onLogin }: { onLogin: () => void }) {
               </div>
             ))}
           </div>
-          <div className="focus-title">Чем я могу помочь</div>
-          <div className="focus">
-            <div className="focus-card card"><Target /><h3>Бизнес-планирование</h3><p>Цели, подробный план действий, ключевые показатели (KPI) и финансовый анализ.</p></div>
-            <div className="focus-card card"><Megaphone /><h3>Маркетинг и продажи</h3><p>Привлечение клиентов, уникальное предложение, эффективные кампании и управление брендом.</p></div>
-            <div className="focus-card card"><Wallet /><h3>Управление финансами</h3><p>Учёт, планирование и контроль: бюджетирование, оборотный капитал, стратегии финансирования.</p></div>
-            <div className="focus-card card"><Search /><h3>Маркетинговый анализ</h3><p>Конкуренты, тренды, спрос, ценовая стратегия, инновации и отличия продукта.</p></div>
-          </div>
         </div>
       </section>
 
-      <section id="for" className="alt">
+      <section className="alt" id="program" style={{ overflow: 'hidden' }}>
+        <div className="glow" style={{ left: -260, bottom: -120, width: 700, height: 700, opacity: 0.5 }} />
         <div className="wrap">
           <div className="sec-head">
             <div>
-              <div className="kick">Программа «Год в деле»</div>
-              <h2>Узнаёте свой бизнес в одной из трёх ситуаций?</h2>
-            </div>
-            <a href="#contact" className="btn btn-accent" onClick={go('contact', 'Программа «Год в деле»')}>Оставить заявку</a>
-          </div>
-          <div className="for-list">
-            {SITUATIONS.map(s => (
-              <div key={s.title} className="for-row card">
-                <div><div className="lab">Ситуация</div><h3>{s.title}</h3></div>
-                <ul>{s.points.map(p => <li key={p}>{p}</li>)}</ul>
-                <a href="#contact" className="go" aria-label={`Обсудить: ${s.title}`} onClick={go('contact', 'Программа «Год в деле»')}><ArrowUpRight size={22} /></a>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <section id="program">
-        <div className="wrap">
-          <div className="sec-head">
-            <div>
-              <div className="kick">Что вы получите</div>
-              <h2>Четыре этапа. Двенадцать месяцев.</h2>
+              <div className="kick">Бизнес-программа «Год в деле»</div>
+              <h2>12 месяцев. 16 модулей. Практика и обмен опытом.</h2>
               <p>Каждый квартал — отдельный результат: от диагностики до выхода на новые рынки.</p>
             </div>
           </div>
@@ -417,22 +385,9 @@ export function LandingPage({ onLogin }: { onLogin: () => void }) {
               </div>
             ))}
           </div>
-        </div>
-      </section>
-
-      <section className="alt" id="wheel" style={{ overflow: 'hidden' }}>
-        <div className="glow" style={{ left: -260, top: '20%', width: 700, height: 700, opacity: 0.5 }} />
-        <div className="wrap">
-          <div className="sec-head">
-            <div>
-              <div className="kick">Колесо бизнеса</div>
-              <h2>10 сфер, 70 элементов. Ни одного белого пятна.</h2>
-              <p>Каждый месяц вы отмечаете, что внедрено в бизнесе, и видите, какая сфера проседает. Нажмите на сегмент, чтобы увидеть темы.</p>
-            </div>
-          </div>
-          <div className="wheel-grid">
+          <div className="wheel-grid" id="wheel">
             <div className="wheel-box">
-              <svg viewBox="0 0 500 500" role="group" aria-label="Колесо бизнеса: 10 сфер">
+              <svg viewBox="0 0 500 500" role="group" aria-label="Колесо программы: 16 модулей">
                 {SEGMENTS.map((g, i) => (
                   <g
                     key={i}
@@ -440,7 +395,7 @@ export function LandingPage({ onLogin }: { onLogin: () => void }) {
                     style={{ '--c': WHEEL_COLORS[i] } as React.CSSProperties}
                     tabIndex={0}
                     role="button"
-                    aria-label={`Сфера ${i + 1}: ${CATS[i].name}`}
+                    aria-label={`Модуль ${i + 1}: ${MODULES[i]}`}
                     aria-pressed={i === sphere}
                     onClick={() => setSphere(i)}
                     onMouseEnter={() => setSphere(i)}
@@ -452,21 +407,25 @@ export function LandingPage({ onLogin }: { onLogin: () => void }) {
                   </g>
                 ))}
               </svg>
-              <div className="hub"><div><b>{sphere + 1}</b><span>{active.name}</span></div></div>
+              <div className="hub"><div><b>{sphere + 1}</b><span>{MODULES[sphere]}</span></div></div>
             </div>
-            <div className="wheel-panel card" aria-live="polite">
-              <div className="num">Сфера {sphere + 1} из 10</div>
-              <h3>{active.name}</h3>
+            <div className="wheel-panel card">
+              <div className="num">16 модулей программы</div>
               <ol>
-                {active.items.map((t, k) => <li key={t}><span>{sphere + 1}.{k + 1}</span>{t}</li>)}
+                {MODULES.map((m, i) => (
+                  <li key={m}>
+                    <button type="button" className={i === sphere ? 'on' : undefined} aria-pressed={i === sphere} onClick={() => setSphere(i)} onMouseEnter={() => setSphere(i)}>
+                      <span>{i + 1}</span>{m}
+                    </button>
+                  </li>
+                ))}
               </ol>
-              <div className="wheel-hint">7 элементов · отмечаются ежемесячно в личном кабинете</div>
             </div>
           </div>
         </div>
       </section>
 
-      <section className="alt" id="book">
+      <section id="book">
         <div className="wrap">
           <div className="sec-head">
             <div>
@@ -476,19 +435,22 @@ export function LandingPage({ onLogin }: { onLogin: () => void }) {
             </div>
             <a href="#contact" id="book-buy" className="btn btn-accent" onClick={go('contact', 'Книга «Бизнес в диалоге»')}>Заказать книгу</a>
           </div>
-          <div className="book-grid">
-            {BOOK_POINTS.map((b, i) => (
-              <div key={b.title} className="book-card card">
-                <div className="num">0{i + 1}</div>
-                <h3>{b.title}</h3>
-                <p>{b.text}</p>
-              </div>
-            ))}
+          <div className="book-layout">
+            <Image src="/landing/book-cover.jpeg" alt="Обложка книги «Бизнес в диалоге», автор Анвар Халиков" width={968} height={1280} className="book-cover" sizes="(max-width: 960px) 300px, 360px" />
+            <div className="book-grid">
+              {BOOK_POINTS.map((b, i) => (
+                <div key={b.title} className="book-card card">
+                  <div className="num">0{i + 1}</div>
+                  <h3>{b.title}</h3>
+                  <p>{b.text}</p>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </section>
 
-      <section id="events">
+      <section className="alt" id="events">
         <div className="wrap">
           <div className="sec-head">
             <div>
@@ -508,7 +470,7 @@ export function LandingPage({ onLogin }: { onLogin: () => void }) {
         </div>
       </section>
 
-      <section className="contact alt" id="contact" ref={contactRef}>
+      <section className="contact" id="contact" ref={contactRef}>
         <div className="glow" />
         <div className="wrap contact-grid">
           <div>
