@@ -10,6 +10,7 @@ import { ErrorBoundary } from '@/components/erp/error-boundary'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { clearLocalSession, installAuthGuard } from '@/lib/client-actor'
 import { hideNativeSplash, isIosApp } from '@/lib/native-app'
+import { NativeReminders } from '@/components/cabinet/native-reminders'
 
 // Every screen is its own chunk: a participant opening the cabinet must not download the admin pages,
 // charts and the PDF/Excel exporters (one 3.4 MB bundle before this).
@@ -119,6 +120,7 @@ function AuthedApp({ session, onLogout }: { session: SessionUser; onLogout: () =
             <PageBoundary>
               <PageRouter session={session} />
             </PageBoundary>
+            {session.role === 'participant' && session.participantId && <NativeReminders participantId={session.participantId} />}
           </AppShell>
         </ConfirmProvider>
       </TooltipProvider>
