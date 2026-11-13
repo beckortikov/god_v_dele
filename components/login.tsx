@@ -5,7 +5,7 @@ import Image from 'next/image'
 import { AlertCircle, ArrowLeft, Eye, EyeOff, Loader2, Send } from 'lucide-react'
 import { display } from '@/components/landing/fonts'
 import '@/components/landing/landing.css'
-import { isIosApp } from '@/lib/native-app'
+import { hideNativeSplash, isIosApp } from '@/lib/native-app'
 
 interface SignedInUser {
   role: string
@@ -128,6 +128,8 @@ function TelegramSignIn({ onSignedIn }: { onSignedIn: (user: SignedInUser) => vo
 }
 
 export function LoginPage({ onLoginSuccess, onBack }: { onLoginSuccess: () => void; onBack?: () => void }) {
+  // iOS app: the splash goes once this screen is drawn (lib/native-app.ts)
+  useEffect(() => hideNativeSplash(), [])
   const [login, setLogin] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)

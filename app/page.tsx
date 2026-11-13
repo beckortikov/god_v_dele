@@ -89,7 +89,6 @@ export default function Home() {
     setSession(readSession())
     if (new URLSearchParams(window.location.search).has('login') || isIosApp()) setLoginRequested(true)
     setIsLoading(false)
-    hideNativeSplash()
   }, [showLogin])
 
   const handleLogout = () => {
@@ -112,6 +111,8 @@ export default function Home() {
 
 function AuthedApp({ session, onLogout }: { session: SessionUser; onLogout: () => void }) {
   const allowedPages = useMemo(() => getAllowedPages(session.role), [session.role])
+  // iOS app: the splash goes once the cabinet shell is on screen, not before (no blank loader in between)
+  useEffect(() => hideNativeSplash(), [])
   return (
     <NavProvider allowedPages={allowedPages} defaultPage={getDefaultPage(session.role)}>
       <TooltipProvider>
