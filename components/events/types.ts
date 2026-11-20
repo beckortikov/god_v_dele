@@ -1,3 +1,5 @@
+import type { FunnelStage } from '@/lib/event-funnel'
+
 export type EventStatus = 'planned' | 'completed' | 'cancelled'
 
 export interface OfflineEvent {
@@ -21,6 +23,8 @@ export interface Attendee {
   attendee_type: 'participant' | 'guest'
   participant_id?: string
   participant_name?: string
+  participant_phone?: string | null
+  participant_email?: string | null
   guest_name?: string
   guest_email?: string
   guest_phone?: string
@@ -31,6 +35,11 @@ export interface Attendee {
   currency?: string
   original_amount?: number
   exchange_rate?: number
+  /** Invitation funnel (migration 025); missing before it is applied. */
+  funnel_stage?: FunnelStage
+  next_contact_on?: string | null
+  last_comment?: { body: string; author_name: string | null; created_at: string } | null
+  comments_count?: number
 }
 
 export interface EventExpense {
@@ -94,6 +103,17 @@ export const categoryLabel = (v?: string) => EXPENSE_CATEGORIES.find(c => c.valu
 
 export const attendeeName = (a: Attendee) =>
   (a.attendee_type === 'participant' ? a.participant_name : a.guest_name) || (a.attendee_type === 'guest' ? 'Гость' : 'Участник')
+
+/** Phone (or, failing that, email) to reach the person: a guest's own, or the participant's card. */
+export const attendeeContact = (a: Attendee) =>
+  (a.attendee_type === 'guest' ? a.guest_phone || a.guest_email : a.participant_phone || a.participant_email) || ''
+
+/** Digits and a leading + for a tel: link, or null when the contact is not a phone number. */
+export function telHref(contact: string) {
+  if (!contact || contact.includes('@')) return null
+  const digits = contact.replace(/[^\d+]/g, '')
+  return digits.replace(/\D/g, '').length >= 5 ? `tel:${digits}` : null
+}
 
 /** Postgres numerics may arrive as strings. */
 export const num = (v: unknown) => Number(v) || 0

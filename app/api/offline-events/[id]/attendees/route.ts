@@ -3,6 +3,12 @@ import { db } from '@/lib/db'
 import { logAudit } from '@/lib/audit'
 import { rowMoney, roundMoneyFields } from '@/lib/audit-labels'
 import { eventName, participantNames } from '@/app/api/audit/_server'
+import { isFunnelStage, parseContactDate, stageAfterPayment, summarizeComments, type FunnelStage } from '@/lib/event-funnel'
+
+/** Stage for a new row: the one sent, or «Оплатил» when it comes with a payment. */
+function initialStage(a: any): FunnelStage {
+    return stageAfterPayment(isFunnelStage(a.funnel_stage) ? a.funnel_stage : 'new', Number(a.payment_received) || 0)
+}
 
 export async function GET(
     req: Request,
@@ -11,24 +17,33 @@ export async function GET(
     try {
         const { id } = await params // event_id
 
-        // Fetch attendees with joined participant info
-        // note: nested select needs proper relationship setup or multiple queries.
-        // simpler: select * from event_attendees where event_id = id
-        // then manually fetch participant names if needed, or use Supabase join syntax:
-        // select(..., participant:participants(name))
-
         const { data, error } = await db
             .from('event_attendees')
-            .select('*, participant:participants(name)')
+            .select('*, participant:participants(name, phone, email)')
             .eq('event_id', id)
             .order('created_at', { ascending: false })
 
         if (error) throw error
 
-        // Flatten participant name if present
-        const formattedData = data.map((item: any) => ({
+        // Newest call comment and the count for each person (table from migration 025;
+        // without it the list still loads, just with no comments)
+        const ids = data.map((a: any) => a.id)
+        let comments = new Map<string, any>()
+        if (ids.length) {
+            const res = await db
+                .from('event_attendee_comments')
+                .select('attendee_id, body, author_name, created_at')
+                .in('attendee_id', ids)
+            if (!res.error) comments = summarizeComments(res.data as any[])
+        }
+
+        const formattedData = data.map(({ participant, ...item }: any) => ({
             ...item,
-            participant_name: item.participant?.name || null
+            participant_name: participant?.name || null,
+            participant_phone: participant?.phone || null,
+            participant_email: participant?.email || null,
+            last_comment: comments.get(item.id)?.last ?? null,
+            comments_count: comments.get(item.id)?.count ?? 0,
         }))
 
         return NextResponse.json({ data: formattedData }, { status: 200 })
@@ -62,7 +77,8 @@ export async function POST(
                 original_amount: attendee.original_amount,
                 exchange_rate: attendee.exchange_rate || 1,
                 attendance_status: attendee.attendance_status || 'registered',
-                payment_notes: attendee.payment_notes || null
+                payment_notes: attendee.payment_notes || null,
+                funnel_stage: initialStage(attendee),
             }))
 
             const res = await db
@@ -86,7 +102,9 @@ export async function POST(
                 original_amount: body.original_amount,
                 exchange_rate: body.exchange_rate || 1,
                 attendance_status: body.attendance_status || 'registered',
-                payment_notes: body.payment_notes || null
+                payment_notes: body.payment_notes || null,
+                funnel_stage: initialStage(body),
+                ...(parseContactDate(body.next_contact_on) ? { next_contact_on: parseContactDate(body.next_contact_on) } : {}),
             }
 
             const res = await db

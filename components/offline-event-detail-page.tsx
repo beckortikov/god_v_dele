@@ -8,7 +8,9 @@ import {
   ChevronDown,
   FileSpreadsheet,
   MapPin,
+  MessageSquare,
   MoreHorizontal,
+  Phone,
   Pencil,
   Receipt,
   SearchX,
@@ -19,7 +21,7 @@ import {
 } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
-import { formatDate, formatMoney, formatNumber, plural } from '@/lib/format'
+import { formatDate, formatMoney, formatNumber, plural, todayISO } from '@/lib/format'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -46,11 +48,16 @@ import { AddAttendeesSheet, EditAttendeeSheet } from '@/components/events/attend
 import { EventExpenseSheet } from '@/components/events/event-expense-sheet'
 import { exportEventToExcel } from '@/components/events/event-export'
 import { Initials } from '@/components/events/parts'
+import { FunnelStrip, funnelDot, type StageFilter } from '@/components/events/funnel-strip'
+import { commentTime } from '@/components/events/attendee-comments'
+import { FUNNEL, FUNNEL_STAGES, contactDue, funnelOf, type FunnelStage } from '@/lib/event-funnel'
 import {
   ATTENDANCE,
   EVENT_STATUS,
   attendanceOf,
+  attendeeContact,
   attendeeName,
+  telHref,
   categoryLabel,
   fmtPct,
   num,
@@ -175,24 +182,31 @@ export function EventDetailPage({ eventId, onBack }: EventDetailPageProps) {
     }
   }
 
-  /** Quick attendance mark right from the table. */
-  const handleAttendanceChange = async (a: Attendee, status: string) => {
-    if (status === a.attendance_status) return
+  /** Quick change right from the table (attendance mark, funnel stage), shown at once and rolled back on error. */
+  const patchAttendee = async (a: Attendee, patch: Partial<Attendee>, failText: string) => {
     const prev = attendees
-    setAttendees(list => list.map(x => (x.id === a.id ? { ...x, attendance_status: status } : x)))
+    setAttendees(list => list.map(x => (x.id === a.id ? { ...x, ...patch } : x)))
     try {
       const res = await fetch(`/api/offline-events/${eventId}/attendees/${a.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ attendance_status: status }),
+        body: JSON.stringify(patch),
       })
       const result = await res.json()
       if (result.error) throw new Error(result.error)
       fetchData()
     } catch (err: any) {
       setAttendees(prev)
-      toast.error('Не удалось изменить статус', { description: err.message })
+      toast.error(failText, { description: err.message })
     }
+  }
+  const handleAttendanceChange = (a: Attendee, status: string) => {
+    if (status !== a.attendance_status) patchAttendee(a, { attendance_status: status }, 'Не удалось изменить статус')
+  }
+  const handleStageChange = (a: Attendee, stage: FunnelStage) => {
+    if (stage === (a.funnel_stage || 'new')) return
+    const done = stage === 'paid' || stage === 'declined'
+    patchAttendee(a, { funnel_stage: stage, ...(done && a.next_contact_on ? { next_contact_on: null } : {}) }, 'Не удалось изменить этап')
   }
 
   const handleDeleteEvent = async () => {
@@ -395,6 +409,7 @@ export function EventDetailPage({ eventId, onBack }: EventDetailPageProps) {
           onEdit={openAttendee}
           onDelete={handleDeleteAttendee}
           onAttendance={handleAttendanceChange}
+          onStage={handleStageChange}
         />
       ) : tab === 'expenses' ? (
         <ExpensesPanel eventId={eventId} onChanged={fetchData} expenses={expenses} onAdd={() => openExpense(null)} onEdit={openExpense} onDelete={handleDeleteExpense} />
@@ -466,6 +481,7 @@ function AttendeesPanel({
   onEdit,
   onDelete,
   onAttendance,
+  onStage,
 }: {
   attendees: Attendee[]
   query: string
@@ -476,22 +492,38 @@ function AttendeesPanel({
   onEdit: (a: Attendee) => void
   onDelete: (a: Attendee) => void
   onAttendance: (a: Attendee, status: string) => void
+  onStage: (a: Attendee, stage: FunnelStage) => void
   eventId: string
   onChanged: () => void
 }) {
   const confirm = useConfirm()
+  const [stageFilter, setStageFilter] = React.useState<StageFilter>('all')
+  const today = todayISO()
+  const isDue = (a: Attendee) => {
+    const d = contactDue(a.next_contact_on, today)
+    return d === 'overdue' || d === 'today'
+  }
   const q = query.trim().toLowerCase()
-  const visible = attendees.filter(a => {
-    if (typeFilter !== 'all' && a.attendee_type !== typeFilter) return false
-    if (!q) return true
-    return [attendeeName(a), a.guest_phone, a.guest_email, a.payment_notes].some(v => v?.toLowerCase().includes(q))
-  })
+  const qDigits = q.replace(/\D/g, '')
+  const ofType = attendees.filter(a => typeFilter === 'all' || a.attendee_type === typeFilter)
+  const stageCounts = Object.fromEntries(FUNNEL_STAGES.map(st => [st, ofType.filter(a => (a.funnel_stage || 'new') === st).length])) as Record<FunnelStage, number>
+  const dueCount = ofType.filter(isDue).length
+  const visible = ofType
+    .filter(a => {
+      if (stageFilter === 'due' ? !isDue(a) : stageFilter !== 'all' && (a.funnel_stage || 'new') !== stageFilter) return false
+      if (!q) return true
+      const contact = attendeeContact(a)
+      if (qDigits.length >= 3 && contact.replace(/\D/g, '').includes(qDigits)) return true
+      return [attendeeName(a), contact, a.payment_notes, a.last_comment?.body].some(v => v?.toLowerCase().includes(q))
+    })
+    // «Перезвонить» shows the longest-waiting first
+    .sort((x, y) => (stageFilter === 'due' ? (x.next_contact_on || '').localeCompare(y.next_contact_on || '') : 0))
   const paid = visible.reduce((s, a) => s + num(a.payment_received), 0)
   const participantsCount = attendees.filter(a => a.attendee_type === 'participant').length
 
   // ----- Selection and bulk attendance -----
   const visibleIds = visible.map(a => a.id)
-  const selection = useRowSelection(visibleIds, `${typeFilter}|${query}`)
+  const selection = useRowSelection(visibleIds, `${typeFilter}|${stageFilter}|${query}`)
   const bulk = useBulkRunner()
 
   const bulkAttendance = async (status: string) => {
@@ -526,12 +558,48 @@ function AttendeesPanel({
     onChanged()
   }
 
+  const bulkStage = async (stage: FunnelStage) => {
+    const chosen = visible.filter(a => selection.isSelected(a.id))
+    const targets = chosen.filter(a => (a.funnel_stage || 'new') !== stage)
+    const label = funnelOf(stage).label
+    if (!targets.length) {
+      toast.info(`У всех выбранных уже этап «${label}»`)
+      return
+    }
+    const n = targets.length
+    const ok = await confirm({
+      title: `Перевести на этап «${label}»?`,
+      description:
+        `Этап изменится у ${formatNumber(n)} ${plural(n, ['человека', 'человек', 'человек'])}` +
+        (chosen.length > n ? ` (ещё ${formatNumber(chosen.length - n)} уже на этом этапе)` : '') +
+        '. Оплаты не изменятся.',
+      confirmText: 'Перевести',
+    })
+    if (!ok) return
+    const done = stage === 'paid' || stage === 'declined'
+    await bulk.run(
+      targets,
+      a =>
+        requestOk(`/api/offline-events/${eventId}/attendees/${a.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ funnel_stage: stage, ...(done ? { next_contact_on: null } : {}) }),
+        }),
+      { done: `Этап «${label}»`, noun: ['человек', 'человека', 'человек'], label: attendeeName }
+    )
+    selection.clear()
+    onChanged()
+  }
+
   return (
     <>
+      {attendees.length > 0 && (
+        <FunnelStrip counts={stageCounts} due={dueCount} total={ofType.length} value={stageFilter} onChange={setStageFilter} />
+      )}
       <Panel>
         {attendees.length > 0 && (
           <PanelToolbar>
-            <SearchInput value={query} onChange={setQuery} placeholder="Имя, контакт или комментарий" className="sm:w-72" />
+            <SearchInput value={query} onChange={setQuery} placeholder="Имя, телефон или комментарий" className="sm:w-72" />
             <Segmented
               size="sm"
               aria-label="Тип"
@@ -549,13 +617,17 @@ function AttendeesPanel({
           <EmptyState
             icon={Users}
             title={attendees.length ? 'Никого не найдено' : 'Список пока пуст'}
-            description={attendees.length ? 'Измените поиск или фильтр' : 'Добавьте участников программ или гостей, чтобы учитывать оплаты и присутствие'}
+            description={attendees.length ? 'Измените поиск или фильтр' : 'Добавьте участников программ или гостей, чтобы вести приглашение, оплаты и присутствие'}
             action={
-              !attendees.length && (
+              !attendees.length ? (
                 <Button size="sm" onClick={onAdd}>
                   <UserPlus /> Добавить участников
                 </Button>
-              )
+              ) : stageFilter !== 'all' ? (
+                <Button size="sm" variant="outline" onClick={() => setStageFilter('all')}>
+                  Показать все этапы
+                </Button>
+              ) : undefined
             }
           />
         ) : (
@@ -565,8 +637,9 @@ function AttendeesPanel({
                 <TableRow className="hover:bg-transparent">
                   <SelectHeadCell selection={selection} label="Выбрать всех" />
                   <TableHead>Имя</TableHead>
-                  <TableHead className="max-md:hidden">Тип</TableHead>
-                  <TableHead>Присутствие</TableHead>
+                  <TableHead>Этап</TableHead>
+                  <TableHead className="max-md:hidden">Перезвонить</TableHead>
+                  <TableHead className="max-lg:hidden">Присутствие</TableHead>
                   <TableHead className="text-right">Оплата</TableHead>
                   <TableHead className="w-20" />
                 </TableRow>
@@ -575,8 +648,11 @@ function AttendeesPanel({
                 {visible.map(a => {
                   const name = attendeeName(a)
                   const isGuest = a.attendee_type === 'guest'
-                  const contact = a.guest_phone || a.guest_email
+                  const contact = attendeeContact(a)
+                  const tel = telHref(contact)
                   const att = attendanceOf(a.attendance_status)
+                  const stage = funnelOf(a.funnel_stage)
+                  const due = contactDue(a.next_contact_on, today)
                   const amount = num(a.payment_received)
                   return (
                     <TableRow
@@ -586,21 +662,74 @@ function AttendeesPanel({
                       onClick={() => onEdit(a)}
                     >
                       <SelectCell selection={selection} id={a.id} label={`Выбрать: ${name}`} />
-                      <TableCell className="max-w-80 whitespace-normal">
-                        <div className="flex items-center gap-2.5">
+                      <TableCell className="max-w-96 whitespace-normal">
+                        <div className="flex items-start gap-2.5">
                           <Initials name={name} guest={isGuest} />
                           <div className="min-w-0">
-                            <div className="truncate font-medium">{name}</div>
-                            {(contact || a.payment_notes) && (
-                              <div className="truncate text-xs text-muted-foreground">{[isGuest ? contact : null, a.payment_notes].filter(Boolean).join(' · ')}</div>
+                            <div className="flex items-center gap-1.5">
+                              <span className="truncate font-medium">{name}</span>
+                              {isGuest && <Badge variant="info" className="shrink-0 px-1 py-0 text-[11px]">гость</Badge>}
+                            </div>
+                            {contact && (
+                              <div className="truncate text-xs text-muted-foreground">
+                                {tel ? (
+                                  <a href={tel} onClick={e => e.stopPropagation()} className="num inline-flex items-center gap-1 hover:text-foreground hover:underline">
+                                    <Phone className="size-3" />
+                                    {contact}
+                                  </a>
+                                ) : (
+                                  <span className="num">{contact}</span>
+                                )}
+                              </div>
+                            )}
+                            {a.last_comment && (
+                              <div className="mt-0.5 flex items-start gap-1 text-xs text-foreground/75" title={`${commentTime(a.last_comment.created_at)}: ${a.last_comment.body}`}>
+                                <MessageSquare className="mt-0.5 size-3 shrink-0 text-muted-foreground" />
+                                <span className="line-clamp-2">
+                                  {a.last_comment.body}
+                                  {(a.comments_count ?? 0) > 1 && <span className="text-muted-foreground"> · ещё {formatNumber((a.comments_count ?? 1) - 1)}</span>}
+                                </span>
+                              </div>
                             )}
                           </div>
                         </div>
                       </TableCell>
-                      <TableCell className="max-md:hidden">
-                        <Badge variant={isGuest ? 'info' : 'secondary'}>{isGuest ? 'Гость' : 'Участник'}</Badge>
-                      </TableCell>
                       <TableCell onClick={e => e.stopPropagation()}>
+                        <Select value={stage.value} onValueChange={v => onStage(a, v as FunnelStage)}>
+                          <SelectTrigger
+                            size="sm"
+                            aria-label={`Этап: ${name}`}
+                            className="-ml-2 h-7 gap-1 border-transparent bg-transparent px-2 shadow-none hover:border-input dark:bg-transparent [&>svg]:opacity-0 group-hover:[&>svg]:opacity-60"
+                          >
+                            <Badge variant={stage.variant}>{stage.label}</Badge>
+                          </SelectTrigger>
+                          <SelectContent>
+                            {FUNNEL.map(o => (
+                              <SelectItem key={o.value} value={o.value}>
+                                <span className={cn('size-2 rounded-full', funnelDot[o.variant])} />
+                                {o.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </TableCell>
+                      <TableCell className="max-md:hidden">
+                        {a.next_contact_on ? (
+                          <span
+                            className={cn(
+                              'num text-sm',
+                              due === 'overdue' && 'font-medium text-destructive',
+                              due === 'today' && 'font-medium text-[color-mix(in_oklch,var(--warning)_75%,var(--foreground))]',
+                              due === 'later' && 'text-muted-foreground'
+                            )}
+                          >
+                            {due === 'today' ? 'Сегодня' : formatDate(a.next_contact_on)}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground/70">—</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="max-lg:hidden" onClick={e => e.stopPropagation()}>
                         <Select value={a.attendance_status} onValueChange={v => onAttendance(a, v)}>
                           <SelectTrigger
                             size="sm"
@@ -652,7 +781,22 @@ function AttendeesPanel({
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button size="sm" variant="outline">
-              Отметить присутствие <ChevronDown />
+              Этап <ChevronDown />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="center" side="top">
+            <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">Этап приглашения</DropdownMenuLabel>
+            {FUNNEL.map(o => (
+              <DropdownMenuItem key={o.value} onSelect={() => bulkStage(o.value)}>
+                <Badge variant={o.variant}>{o.label}</Badge>
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button size="sm" variant="outline">
+              Присутствие <ChevronDown />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="center" side="top">

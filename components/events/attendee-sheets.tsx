@@ -2,7 +2,7 @@
 
 import * as React from 'react'
 import { toast } from 'sonner'
-import { Users } from 'lucide-react'
+import { Phone, Users } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatMoney, formatNumber, plural } from '@/lib/format'
 import { Sheet, SheetBody, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet'
@@ -17,11 +17,15 @@ import { MoneyInput, type Currency } from '@/components/finance/money-input'
 import { todayISO } from '@/lib/format'
 import { readPref, writePref } from '@/components/finance/types'
 import { ChipGroup, CheckMark } from '@/components/events/parts'
+import { AttendeeComments, postComment } from '@/components/events/attendee-comments'
+import { FUNNEL, stageAfterPayment, type FunnelStage } from '@/lib/event-funnel'
 import {
   ATTENDANCE,
   EVENT_DEFAULT_RATE,
   LAST_RATE,
+  attendeeContact,
   attendeeName,
+  telHref,
   num,
   type Attendee,
   type EventParticipant,
@@ -30,6 +34,13 @@ import {
 const PARTICIPANT_STATUS: Record<string, string> = { completed: 'завершил', archived: 'в архиве', paused: 'на паузе', inactive: 'неактивен' }
 
 const statusOptions = ATTENDANCE.map(a => ({ value: a.value, label: a.label }))
+const funnelOptions = FUNNEL.map(f => ({ value: f.value, label: f.label }))
+
+function addDaysISO(iso: string, days: number) {
+  const d = new Date(`${iso}T00:00:00Z`)
+  d.setUTCDate(d.getUTCDate() + days)
+  return d.toISOString().slice(0, 10)
+}
 
 /** Same conversion the page always used: TJS amounts are stored in USD at the given rate. */
 function convert(amount: string, currency: Currency, rateStr: string) {
@@ -426,10 +437,15 @@ export function EditAttendeeSheet({
   const [notes, setNotes] = React.useState('')
   const [guestName, setGuestName] = React.useState('')
   const [guestContact, setGuestContact] = React.useState('')
+  const [stage, setStage] = React.useState<FunnelStage>('new')
+  const [nextContact, setNextContact] = React.useState('')
+  const [commentDraft, setCommentDraft] = React.useState('')
   const [errors, setErrors] = React.useState<Record<string, string>>({})
   const [saving, setSaving] = React.useState(false)
 
   const isGuest = attendee?.attendee_type === 'guest'
+  const contact = attendee ? attendeeContact(attendee) : ''
+  const tel = telHref(contact)
 
   React.useEffect(() => {
     if (!open || !attendee) return
@@ -442,6 +458,9 @@ export function EditAttendeeSheet({
     setNotes(attendee.payment_notes || '')
     setGuestName(attendee.guest_name || '')
     setGuestContact(attendee.guest_phone || attendee.guest_email || '')
+    setStage(attendee.funnel_stage || 'new')
+    setNextContact(attendee.next_contact_on?.slice(0, 10) || '')
+    setCommentDraft('')
     setErrors({})
   }, [open, attendee])
 
@@ -456,7 +475,11 @@ export function EditAttendeeSheet({
 
     setSaving(true)
     try {
+      const finalStage = stageAfterPayment(stage, money.finalAmountUSD)
       const body: Record<string, unknown> = {
+        funnel_stage: finalStage,
+        // nothing left to chase once the person has paid or declined
+        next_contact_on: finalStage === 'paid' || finalStage === 'declined' ? null : nextContact || null,
         payment_received: money.finalAmountUSD,
         original_amount: money.originalAmount,
         currency,
@@ -475,6 +498,7 @@ export function EditAttendeeSheet({
       })
       const result = await res.json()
       if (result.error) throw new Error(result.error)
+      if (commentDraft.trim()) await postComment(eventId, attendee.id, commentDraft.trim())
       if (currency === 'TJS') writePref(LAST_RATE, rate)
       toast.success('Изменения сохранены', { description: isGuest ? guestName.trim() : attendeeName(attendee) })
       onSaved()
@@ -498,11 +522,62 @@ export function EditAttendeeSheet({
           onKeyDown={submitOnModEnter(submit)}
         >
           <SheetHeader>
-            <SheetTitle>{attendee ? (isGuest ? 'Гость' : attendeeName(attendee)) : 'Участник'}</SheetTitle>
-            <SheetDescription>{isGuest ? 'Данные гостя, оплата и присутствие' : 'Участник программы · оплата и присутствие'}</SheetDescription>
+            <SheetTitle>{attendee ? (isGuest ? guestName.trim() || 'Гость' : attendeeName(attendee)) : 'Участник'}</SheetTitle>
+            <SheetDescription className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+              <span>{isGuest ? 'Гость' : 'Участник программы'}</span>
+              {contact && (
+                <>
+                  <span aria-hidden>·</span>
+                  {tel ? (
+                    <a href={tel} className="num inline-flex items-center gap-1 font-medium text-foreground underline-offset-4 hover:underline">
+                      <Phone className="size-3.5" />
+                      {contact}
+                    </a>
+                  ) : (
+                    <span className="num">{contact}</span>
+                  )}
+                </>
+              )}
+            </SheetDescription>
           </SheetHeader>
           <SheetBody>
             <FieldGroup>
+              <Field label="Этап приглашения">
+                <ChipGroup aria-label="Этап приглашения" value={stage} onChange={setStage} options={funnelOptions} />
+              </Field>
+              {stage !== 'paid' && stage !== 'declined' && (
+                <Field
+                  label="Перезвонить"
+                  htmlFor="edit-att-next"
+                  aside={
+                    nextContact && (
+                      <button type="button" className="text-xs text-muted-foreground hover:text-foreground" onClick={() => setNextContact('')}>
+                        Убрать
+                      </button>
+                    )
+                  }
+                >
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <Input id="edit-att-next" type="date" value={nextContact} onChange={e => setNextContact(e.target.value)} className="w-40" />
+                    {[
+                      { label: 'Завтра', days: 1 },
+                      { label: 'Через 3 дня', days: 3 },
+                      { label: 'Через неделю', days: 7 },
+                    ].map(o => (
+                      <Button key={o.days} type="button" size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => setNextContact(addDaysISO(todayISO(), o.days))}>
+                        {o.label}
+                      </Button>
+                    ))}
+                  </div>
+                </Field>
+              )}
+              <Field label="Комментарии по звонкам" htmlFor="att-comment">
+                {attendee && open && (
+                  <AttendeeComments eventId={eventId} attendeeId={attendee.id} draft={commentDraft} setDraft={setCommentDraft} onChanged={onSaved} />
+                )}
+              </Field>
+
+              <div className="mt-1 border-t pt-4 text-[13px] font-semibold">Оплата и присутствие</div>
               {isGuest && (
                 <>
                   <Field label="Имя гостя" htmlFor="edit-guest-name" required hint={errors.guestName && <span className="text-destructive">{errors.guestName}</span>}>
@@ -518,12 +593,18 @@ export function EditAttendeeSheet({
                   </Field>
                 </>
               )}
-              <Field label="Статус">
-                <ChipGroup aria-label="Статус присутствия" value={status} onChange={setStatus} options={statusOptions} />
-              </Field>
-              <Field label="Оплата" htmlFor="edit-att-amount" hint={errors.amount && <span className="text-destructive">{errors.amount}</span>}>
+              <Field
+                label="Оплата"
+                htmlFor="edit-att-amount"
+                hint={
+                  errors.amount ? (
+                    <span className="text-destructive">{errors.amount}</span>
+                  ) : stageAfterPayment(stage, Number(amount) || 0) !== stage ? (
+                    'При сохранении этап станет «Оплатил»'
+                  ) : undefined
+                }
+              >
                 <MoneyInput
-                  autoFocus
                   id="edit-att-amount"
                   amount={amount}
                   onAmountChange={setAmount}
@@ -538,6 +619,9 @@ export function EditAttendeeSheet({
               </Field>
               <Field label="Комментарий к платежу" htmlFor="edit-att-notes">
                 <Input id="edit-att-notes" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Например: наличные, перевод" />
+              </Field>
+              <Field label="Присутствие на мероприятии">
+                <ChipGroup aria-label="Статус присутствия" value={status} onChange={setStatus} options={statusOptions} />
               </Field>
             </FieldGroup>
           </SheetBody>

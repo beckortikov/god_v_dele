@@ -3,6 +3,14 @@ import { db } from '@/lib/db'
 import { fetchRow, logAudit } from '@/lib/audit'
 import { changeSuffix, rowMoney, roundMoneyFields } from '@/lib/audit-labels'
 import { eventName, participantName } from '@/app/api/audit/_server'
+import { isFunnelStage, parseContactDate } from '@/lib/event-funnel'
+
+/** Fields the client may change; anything else in the body is ignored. */
+const EDITABLE = [
+    'payment_received', 'original_amount', 'currency', 'exchange_rate', 'payment_date', 'payment_method',
+    'payment_notes', 'attendance_status', 'notes', 'guest_name', 'guest_email', 'guest_phone',
+    'funnel_stage', 'next_contact_on',
+] as const
 
 async function attendeeLabel(row: any) {
     const [who, ev] = await Promise.all([
@@ -17,14 +25,26 @@ export async function PUT(
     { params }: { params: Promise<{ id: string; attendeeId: string }> }
 ) {
     try {
-        const { attendeeId } = await params
-        const body = roundMoneyFields(await req.json())
+        const { id, attendeeId } = await params
+        const raw = await req.json()
+        const body: Record<string, unknown> = {}
+        for (const k of EDITABLE) if (k in raw) body[k] = raw[k]
+        if ('funnel_stage' in body && !isFunnelStage(body.funnel_stage)) {
+            return NextResponse.json({ error: 'Неизвестный этап воронки' }, { status: 400 })
+        }
+        if ('next_contact_on' in body) {
+            const d = parseContactDate(body.next_contact_on)
+            if (d === undefined) return NextResponse.json({ error: 'Дата «перезвонить» в формате ГГГГ-ММ-ДД' }, { status: 400 })
+            body.next_contact_on = d
+        }
+        if (!Object.keys(body).length) return NextResponse.json({ error: 'Нечего сохранять' }, { status: 400 })
         const before = await fetchRow('event_attendees', attendeeId)
 
         const { data, error } = await db
             .from('event_attendees')
-            .update(body)
+            .update(roundMoneyFields(body))
             .eq('id', attendeeId)
+            .eq('event_id', id)
             .select()
 
         if (error) throw error

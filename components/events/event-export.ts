@@ -2,9 +2,11 @@
 
 import * as XLSX from 'xlsx'
 import { formatDate } from '@/lib/format'
+import { funnelOf } from '@/lib/event-funnel'
 import {
   EVENT_STATUS,
   attendanceOf,
+  attendeeContact,
   attendeeName,
   categoryLabel,
   num,
@@ -35,11 +37,14 @@ export function exportEventToExcel(event: OfflineEvent, attendees: Attendee[], e
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(summaryRows), 'Итоги')
 
   const attendeeRows: (string | number)[][] = [
-    ['Имя', 'Тип', 'Контакт', 'Статус', 'Оплата, USD', 'Оплата в валюте', 'Валюта', 'Комментарий'],
+    ['Имя', 'Тип', 'Контакт', 'Этап', 'Перезвонить', 'Последний комментарий', 'Присутствие', 'Оплата, USD', 'Оплата в валюте', 'Валюта', 'Комментарий к платежу'],
     ...attendees.map(a => [
       attendeeName(a),
       a.attendee_type === 'guest' ? 'Гость' : 'Участник',
-      a.guest_phone || a.guest_email || '',
+      attendeeContact(a),
+      funnelOf(a.funnel_stage).label,
+      a.next_contact_on ? formatDate(a.next_contact_on) : '',
+      a.last_comment ? `${formatDate(a.last_comment.created_at)}: ${a.last_comment.body}` : '',
       attendanceOf(a.attendance_status).label,
       Math.round(num(a.payment_received) * 100) / 100,
       num(a.original_amount),
