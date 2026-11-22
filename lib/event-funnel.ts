@@ -70,7 +70,7 @@ export interface AttendeeComment {
   can_delete?: boolean
 }
 
-type HistoryRow = Pick<AttendeeComment, 'attendee_id' | 'body' | 'author_name' | 'created_at'> & { kind?: HistoryKind | null }
+type HistoryRow = Pick<AttendeeComment, 'attendee_id' | 'body' | 'author_name' | 'created_at'> & { kind?: HistoryKind | null; author_id?: string | null }
 
 export interface Mark {
   kind: HistoryKind
@@ -123,13 +123,16 @@ export interface TeamRow {
   last_at: string
 }
 
-/** Who did the calling: per author, notes, stage changes and outcomes. Busiest first. */
+/**
+ * Who did the calling: per author, notes, stage changes and outcomes. Busiest first.
+ * Lines with no author account (author_id null, e.g. an import from a spreadsheet) are not a person's work.
+ */
 export function teamSummary(rows: HistoryRow[]): TeamRow[] {
   type Acc = { notes: number; marks: number; going: Set<string>; paid: Set<string>; declined: Set<string>; people: Set<string>; last_at: string }
   const by = new Map<string, Acc>()
   for (const r of rows) {
     const kind = kindOf(r)
-    if (kind === 'payment') continue
+    if (kind === 'payment' || r.author_id === null) continue
     const name = r.author_name?.trim() || 'Без имени'
     const t: Acc = by.get(name) ?? { notes: 0, marks: 0, going: new Set(), paid: new Set(), declined: new Set(), people: new Set(), last_at: '' }
     t.people.add(r.attendee_id)

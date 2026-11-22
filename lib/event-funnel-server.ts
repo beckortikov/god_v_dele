@@ -77,7 +77,7 @@ export async function loadFunnel(req: Request, eventId: string, opts: { withMone
   const ids = (data as Row[]).map(a => a.id)
   let history: Row[] = []
   if (ids.length) {
-    const res = await db.from(HISTORY).select('attendee_id, kind, body, author_name, created_at').in('attendee_id', ids)
+    const res = await db.from(HISTORY).select('attendee_id, kind, body, author_id, author_name, created_at').in('attendee_id', ids)
     if (!res.error) history = res.data as Row[]
     else if (!funnelMissing(res.error)) throw res.error
   }

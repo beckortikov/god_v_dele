@@ -78,7 +78,9 @@ describe('funnel helpers', () => {
       { attendee_id: 'a', kind: 'note', body: 'едет', author_name: 'Анвар', created_at: '2026-11-04T10:01:00Z' },
       { attendee_id: 'b', kind: 'stage', body: 'new>declined', author_name: 'Мадина', created_at: '2026-11-02T10:00:00Z' },
       { attendee_id: 'b', kind: 'payment', body: '0>100', author_name: 'Мадина', created_at: '2026-11-02T10:00:00Z' },
+      { attendee_id: 'c', kind: 'note', body: 'Из таблицы опроса', author_id: null, author_name: 'Импорт из таблицы', created_at: '2026-11-05T10:00:00Z' },
     ])
+    expect(t.map(r => r.name)).toEqual(['Анвар', 'Мадина'])
     expect(t[0]).toMatchObject({ name: 'Анвар', marks: 4, notes: 1, going: 1, paid: 0, people: 1, last_at: '2026-11-04T10:01:00Z' })
     expect(t[1]).toMatchObject({ name: 'Мадина', marks: 1, declined: 1 })
   })
