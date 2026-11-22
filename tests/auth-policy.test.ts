@@ -273,3 +273,14 @@ describe('notifications and search are built for the caller', () => {
     expect(allowed('finance', 'GET', '/api/search?q=ab&role=admin')).toBe(false)
   })
 })
+
+describe('/api/calls («Обзвон»)', () => {
+  it('is open to staff who call people, not to participants; the event budget stays finance-only', () => {
+    for (const role of ['finance', 'manager', 'employee', 'wheels_manager'] as Role[]) {
+      expect(allowed(role, 'GET', '/api/calls/ev1')).toBe(true)
+      expect(allowed(role, 'PATCH', '/api/calls/ev1/attendees/a1')).toBe(true)
+    }
+    expect(allowed('participant', 'GET', '/api/calls')).toBe(false)
+    expect(allowed('wheels_manager', 'GET', '/api/offline-events/ev1/attendees')).toBe(false)
+  })
+})

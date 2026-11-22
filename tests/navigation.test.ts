@@ -45,7 +45,7 @@ describe('getSections', () => {
     const people = (r: UserRole) => getSections(r).find(s => s.id === 'people')?.pages
     expect(people('admin')).toEqual(['participants', 'programs', 'sprints', 'plans', 'lessons', 'calls'])
     expect(people('finance')).toEqual(['participants', 'programs', 'calls'])
-    expect(people('wheels_manager')).toEqual(['participants', 'sprints', 'plans', 'lessons'])
+    expect(people('wheels_manager')).toEqual(['participants', 'sprints', 'plans', 'lessons', 'calls'])
     expect(people('manager')).toEqual(['sprints', 'plans', 'lessons'])
   })
 

@@ -108,7 +108,7 @@ export function getSections(role: UserRole): NavSection[] {
     case 'finance':
       return [S.home, { ...S.people, pages: ['participants', 'programs', 'calls'] }, S.finance, S.reports, S.wheels]
     case 'wheels_manager':
-      return [S.wheels, { ...S.people, pages: ['participants', 'sprints', 'plans', 'lessons'] }]
+      return [S.wheels, { ...S.people, pages: ['participants', 'sprints', 'plans', 'lessons', 'calls'] }]
     case 'manager':
       return [
         { id: 'cabinet', label: 'Кабинет', icon: UserCircle2, pages: ['employee-dashboard', 'manager-dashboard', 'calls'] },
@@ -149,7 +149,7 @@ export const ROLE_DESCRIPTIONS: Record<UserRole, string> = {
   admin: 'Полный доступ: финансы, участники, персонал и пользователи',
   manager: 'Свой кабинет, задачи сотрудников, обзвон участников, спринты и планы участников, заявки на отгул, колёса баланса',
   finance: 'Участники, финансы, отчёты и колёса баланса. Без раздела «Персонал»',
-  wheels_manager: 'Колёса баланса, участники, их профили, спринты и планы',
+  wheels_manager: 'Колёса баланса, участники, их профили, спринты, планы и обзвон',
   employee: 'Свой кабинет: задачи, учёт времени, заявки на отгул, обзвон участников; колёса баланса',
   participant: 'Свой кабинет: сегодня, спринт, операционный план, оплаты, профиль и колёса баланса',
 }
