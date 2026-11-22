@@ -113,6 +113,8 @@ const RULES: Rule[] = [
   financeOnly('/api/analytics'),
   financeOnly('/api/exchange-rate'),
   financeOnly('/api/offline-events'),
+  // «Обзвон»: people invited to an event, their stage and call notes, without the event's money
+  { prefix: '/api/calls', read: ['finance', 'manager', 'employee'], write: ['finance', 'manager', 'employee'] },
 
   { prefix: '/api/search', read: ['finance', 'wheels_manager'], write: NONE, scope: { kind: 'own-role' } },
   { prefix: '/api/notifications', read: ALL, write: NONE, scope: { kind: 'own-role' } },

@@ -8,9 +8,7 @@ import {
   ChevronDown,
   FileSpreadsheet,
   MapPin,
-  MessageSquare,
   MoreHorizontal,
-  Phone,
   Pencil,
   Receipt,
   SearchX,
@@ -47,17 +45,15 @@ import { EventSheet } from '@/components/events/event-sheet'
 import { AddAttendeesSheet, EditAttendeeSheet } from '@/components/events/attendee-sheets'
 import { EventExpenseSheet } from '@/components/events/event-expense-sheet'
 import { exportEventToExcel } from '@/components/events/event-export'
-import { Initials } from '@/components/events/parts'
-import { FunnelStrip, funnelDot, type StageFilter } from '@/components/events/funnel-strip'
-import { commentTime } from '@/components/events/attendee-comments'
-import { FUNNEL, FUNNEL_STAGES, contactDue, funnelOf, type FunnelStage } from '@/lib/event-funnel'
+import { FunnelStrip, type StageFilter } from '@/components/events/funnel-strip'
+import { CallbackCell, PersonCell, StageCell, TeamPanel } from '@/components/events/funnel-parts'
+import { FUNNEL, FUNNEL_STAGES, contactDue, funnelOf, type FunnelStage, type TeamRow } from '@/lib/event-funnel'
 import {
   ATTENDANCE,
   EVENT_STATUS,
   attendanceOf,
   attendeeContact,
   attendeeName,
-  telHref,
   categoryLabel,
   fmtPct,
   num,
@@ -85,6 +81,7 @@ export function EventDetailPage({ eventId, onBack }: EventDetailPageProps) {
   const [summary, setSummary] = React.useState<FinancialSummary | null>(null)
   const [loading, setLoading] = React.useState(true)
   const [participantsList, setParticipantsList] = React.useState<EventParticipant[]>([])
+  const [team, setTeam] = React.useState<TeamRow[] | undefined>(undefined)
 
   const [tab, setTab] = React.useState<Tab>('attendees')
   const [query, setQuery] = React.useState('')
@@ -111,6 +108,7 @@ export function EventDetailPage({ eventId, onBack }: EventDetailPageProps) {
 
       if (eventRes.data) setEvent(eventRes.data)
       if (attendeesRes.data) setAttendees(attendeesRes.data)
+      setTeam(attendeesRes.team)
       if (expensesRes.data) setExpenses(expensesRes.data)
       if (summaryRes.data) setSummary(summaryRes.data)
       if (participantsRes.data) setParticipantsList(participantsRes.data)
@@ -410,6 +408,7 @@ export function EventDetailPage({ eventId, onBack }: EventDetailPageProps) {
           onDelete={handleDeleteAttendee}
           onAttendance={handleAttendanceChange}
           onStage={handleStageChange}
+          team={team}
         />
       ) : tab === 'expenses' ? (
         <ExpensesPanel eventId={eventId} onChanged={fetchData} expenses={expenses} onAdd={() => openExpense(null)} onEdit={openExpense} onDelete={handleDeleteExpense} />
@@ -482,6 +481,7 @@ function AttendeesPanel({
   onDelete,
   onAttendance,
   onStage,
+  team,
 }: {
   attendees: Attendee[]
   query: string
@@ -493,6 +493,7 @@ function AttendeesPanel({
   onDelete: (a: Attendee) => void
   onAttendance: (a: Attendee, status: string) => void
   onStage: (a: Attendee, stage: FunnelStage) => void
+  team: TeamRow[] | undefined
   eventId: string
   onChanged: () => void
 }) {
@@ -647,12 +648,7 @@ function AttendeesPanel({
               <TableBody>
                 {visible.map(a => {
                   const name = attendeeName(a)
-                  const isGuest = a.attendee_type === 'guest'
-                  const contact = attendeeContact(a)
-                  const tel = telHref(contact)
                   const att = attendanceOf(a.attendance_status)
-                  const stage = funnelOf(a.funnel_stage)
-                  const due = contactDue(a.next_contact_on, today)
                   const amount = num(a.payment_received)
                   return (
                     <TableRow
@@ -663,71 +659,13 @@ function AttendeesPanel({
                     >
                       <SelectCell selection={selection} id={a.id} label={`Выбрать: ${name}`} />
                       <TableCell className="max-w-96 whitespace-normal">
-                        <div className="flex items-start gap-2.5">
-                          <Initials name={name} guest={isGuest} />
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-1.5">
-                              <span className="truncate font-medium">{name}</span>
-                              {isGuest && <Badge variant="info" className="shrink-0 px-1 py-0 text-[11px]">гость</Badge>}
-                            </div>
-                            {contact && (
-                              <div className="truncate text-xs text-muted-foreground">
-                                {tel ? (
-                                  <a href={tel} onClick={e => e.stopPropagation()} className="num inline-flex items-center gap-1 hover:text-foreground hover:underline">
-                                    <Phone className="size-3" />
-                                    {contact}
-                                  </a>
-                                ) : (
-                                  <span className="num">{contact}</span>
-                                )}
-                              </div>
-                            )}
-                            {a.last_comment && (
-                              <div className="mt-0.5 flex items-start gap-1 text-xs text-foreground/75" title={`${commentTime(a.last_comment.created_at)}: ${a.last_comment.body}`}>
-                                <MessageSquare className="mt-0.5 size-3 shrink-0 text-muted-foreground" />
-                                <span className="line-clamp-2">
-                                  {a.last_comment.body}
-                                  {(a.comments_count ?? 0) > 1 && <span className="text-muted-foreground"> · ещё {formatNumber((a.comments_count ?? 1) - 1)}</span>}
-                                </span>
-                              </div>
-                            )}
-                          </div>
-                        </div>
+                        <PersonCell a={a} />
                       </TableCell>
                       <TableCell onClick={e => e.stopPropagation()}>
-                        <Select value={stage.value} onValueChange={v => onStage(a, v as FunnelStage)}>
-                          <SelectTrigger
-                            size="sm"
-                            aria-label={`Этап: ${name}`}
-                            className="-ml-2 h-7 gap-1 border-transparent bg-transparent px-2 shadow-none hover:border-input dark:bg-transparent [&>svg]:opacity-0 group-hover:[&>svg]:opacity-60"
-                          >
-                            <Badge variant={stage.variant}>{stage.label}</Badge>
-                          </SelectTrigger>
-                          <SelectContent>
-                            {FUNNEL.map(o => (
-                              <SelectItem key={o.value} value={o.value}>
-                                <span className={cn('size-2 rounded-full', funnelDot[o.variant])} />
-                                {o.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                        <StageCell a={a} onStage={onStage} />
                       </TableCell>
                       <TableCell className="max-md:hidden">
-                        {a.next_contact_on ? (
-                          <span
-                            className={cn(
-                              'num text-sm',
-                              due === 'overdue' && 'font-medium text-destructive',
-                              due === 'today' && 'font-medium text-[color-mix(in_oklch,var(--warning)_75%,var(--foreground))]',
-                              due === 'later' && 'text-muted-foreground'
-                            )}
-                          >
-                            {due === 'today' ? 'Сегодня' : formatDate(a.next_contact_on)}
-                          </span>
-                        ) : (
-                          <span className="text-muted-foreground/70">—</span>
-                        )}
+                        <CallbackCell a={a} today={today} />
                       </TableCell>
                       <TableCell className="max-lg:hidden" onClick={e => e.stopPropagation()}>
                         <Select value={a.attendance_status} onValueChange={v => onAttendance(a, v)}>
@@ -777,6 +715,7 @@ function AttendeesPanel({
           </>
         )}
       </Panel>
+      <TeamPanel team={team} />
       <BulkBar count={selection.count} onClear={selection.clear} progress={bulk.progress}>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>

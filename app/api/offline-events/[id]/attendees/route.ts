@@ -3,7 +3,8 @@ import { db } from '@/lib/db'
 import { logAudit } from '@/lib/audit'
 import { rowMoney, roundMoneyFields } from '@/lib/audit-labels'
 import { eventName, participantNames } from '@/app/api/audit/_server'
-import { isFunnelStage, parseContactDate, stageAfterPayment, summarizeComments, type FunnelStage } from '@/lib/event-funnel'
+import { isFunnelStage, parseContactDate, stageAfterPayment, type FunnelStage } from '@/lib/event-funnel'
+import { guarded, loadFunnel, recordHistory } from '@/lib/event-funnel-server'
 
 /** Stage for a new row: the one sent, or «Оплатил» when it comes with a payment. */
 function initialStage(a: any): FunnelStage {
@@ -14,43 +15,11 @@ export async function GET(
     req: Request,
     { params }: { params: Promise<{ id: string }> }
 ) {
-    try {
-        const { id } = await params // event_id
-
-        const { data, error } = await db
-            .from('event_attendees')
-            .select('*, participant:participants(name, phone, email)')
-            .eq('event_id', id)
-            .order('created_at', { ascending: false })
-
-        if (error) throw error
-
-        // Newest call comment and the count for each person (table from migration 025;
-        // without it the list still loads, just with no comments)
-        const ids = data.map((a: any) => a.id)
-        let comments = new Map<string, any>()
-        if (ids.length) {
-            const res = await db
-                .from('event_attendee_comments')
-                .select('attendee_id, body, author_name, created_at')
-                .in('attendee_id', ids)
-            if (!res.error) comments = summarizeComments(res.data as any[])
-        }
-
-        const formattedData = data.map(({ participant, ...item }: any) => ({
-            ...item,
-            participant_name: participant?.name || null,
-            participant_phone: participant?.phone || null,
-            participant_email: participant?.email || null,
-            last_comment: comments.get(item.id)?.last ?? null,
-            comments_count: comments.get(item.id)?.count ?? 0,
-        }))
-
-        return NextResponse.json({ data: formattedData }, { status: 200 })
-    } catch (error: any) {
-        console.error('Error fetching attendees:', error)
-        return NextResponse.json({ error: error.message }, { status: 500 })
-    }
+    const { id } = await params
+    return guarded('fetching attendees', async () => {
+        const { rows, team } = await loadFunnel(req, id, { withMoney: true })
+        return NextResponse.json({ data: rows, team }, { status: 200 })
+    })
 }
 
 export async function POST(
@@ -119,6 +88,7 @@ export async function POST(
         if (error) throw error
 
         if (data?.length) {
+            await recordHistory(req, data.map((a: any) => ({ attendee_id: a.id, kind: 'added' as const, body: a.funnel_stage || 'new' })))
             const [evName, names] = await Promise.all([
                 eventName(id),
                 participantNames(data.map((a: any) => a.participant_id)),

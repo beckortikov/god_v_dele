@@ -43,16 +43,16 @@ describe('getSections', () => {
 
   it('people section depends on the role', () => {
     const people = (r: UserRole) => getSections(r).find(s => s.id === 'people')?.pages
-    expect(people('admin')).toEqual(['participants', 'programs', 'sprints', 'plans', 'lessons'])
-    expect(people('finance')).toEqual(['participants', 'programs'])
+    expect(people('admin')).toEqual(['participants', 'programs', 'sprints', 'plans', 'lessons', 'calls'])
+    expect(people('finance')).toEqual(['participants', 'programs', 'calls'])
     expect(people('wheels_manager')).toEqual(['participants', 'sprints', 'plans', 'lessons'])
     expect(people('manager')).toEqual(['sprints', 'plans', 'lessons'])
   })
 
   it('cabinet section depends on the role', () => {
     const cabinet = (r: UserRole) => getSections(r).find(s => s.id === 'cabinet')?.pages
-    expect(cabinet('manager')).toEqual(['employee-dashboard', 'manager-dashboard'])
-    expect(cabinet('employee')).toEqual(['employee-dashboard'])
+    expect(cabinet('manager')).toEqual(['employee-dashboard', 'manager-dashboard', 'calls'])
+    expect(cabinet('employee')).toEqual(['employee-dashboard', 'calls'])
     expect(cabinet('participant')).toEqual(['my-today', 'my-sprint', 'my-plan', ...(PARTICIPANT_PAYMENTS_VISIBLE ? ['my-payments'] : []), 'my-profile'])
   })
 })

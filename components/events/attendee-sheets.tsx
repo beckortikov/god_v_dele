@@ -498,7 +498,7 @@ export function EditAttendeeSheet({
       })
       const result = await res.json()
       if (result.error) throw new Error(result.error)
-      if (commentDraft.trim()) await postComment(eventId, attendee.id, commentDraft.trim())
+      if (commentDraft.trim()) await postComment(`/api/offline-events/${eventId}/attendees/${attendee.id}`, commentDraft.trim())
       if (currency === 'TJS') writePref(LAST_RATE, rate)
       toast.success('Изменения сохранены', { description: isGuest ? guestName.trim() : attendeeName(attendee) })
       onSaved()
@@ -571,9 +571,9 @@ export function EditAttendeeSheet({
                   </div>
                 </Field>
               )}
-              <Field label="Комментарии по звонкам" htmlFor="att-comment">
+              <Field label="История и комментарии" htmlFor="att-comment">
                 {attendee && open && (
-                  <AttendeeComments eventId={eventId} attendeeId={attendee.id} draft={commentDraft} setDraft={setCommentDraft} onChanged={onSaved} />
+                  <AttendeeComments base={`/api/offline-events/${eventId}/attendees/${attendee.id}`} draft={commentDraft} setDraft={setCommentDraft} onChanged={onSaved} />
                 )}
               </Field>
 

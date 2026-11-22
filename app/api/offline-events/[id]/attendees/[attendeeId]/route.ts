@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { fetchRow, logAudit } from '@/lib/audit'
-import { changeSuffix, rowMoney, roundMoneyFields } from '@/lib/audit-labels'
+import { rowMoney } from '@/lib/audit-labels'
 import { eventName, participantName } from '@/app/api/audit/_server'
-import { isFunnelStage, parseContactDate } from '@/lib/event-funnel'
+import { guarded, updateAttendee } from '@/lib/event-funnel-server'
 
 /** Fields the client may change; anything else in the body is ignored. */
 const EDITABLE = [
@@ -24,47 +24,8 @@ export async function PUT(
     req: Request,
     { params }: { params: Promise<{ id: string; attendeeId: string }> }
 ) {
-    try {
-        const { id, attendeeId } = await params
-        const raw = await req.json()
-        const body: Record<string, unknown> = {}
-        for (const k of EDITABLE) if (k in raw) body[k] = raw[k]
-        if ('funnel_stage' in body && !isFunnelStage(body.funnel_stage)) {
-            return NextResponse.json({ error: 'Неизвестный этап воронки' }, { status: 400 })
-        }
-        if ('next_contact_on' in body) {
-            const d = parseContactDate(body.next_contact_on)
-            if (d === undefined) return NextResponse.json({ error: 'Дата «перезвонить» в формате ГГГГ-ММ-ДД' }, { status: 400 })
-            body.next_contact_on = d
-        }
-        if (!Object.keys(body).length) return NextResponse.json({ error: 'Нечего сохранять' }, { status: 400 })
-        const before = await fetchRow('event_attendees', attendeeId)
-
-        const { data, error } = await db
-            .from('event_attendees')
-            .update(roundMoneyFields(body))
-            .eq('id', attendeeId)
-            .eq('event_id', id)
-            .select()
-
-        if (error) throw error
-
-        if (data?.[0]) {
-            await logAudit(req, {
-                table: 'event_attendees',
-                recordId: attendeeId,
-                action: 'update',
-                summary: `${await attendeeLabel(data[0])}${changeSuffix(before, data[0])}`,
-                before,
-                after: data[0],
-            })
-        }
-
-        return NextResponse.json({ data }, { status: 200 })
-    } catch (error: any) {
-        console.error('Error updating attendee:', error)
-        return NextResponse.json({ error: error.message }, { status: 500 })
-    }
+    const { id, attendeeId } = await params
+    return guarded('updating attendee', async () => updateAttendee(req, id, attendeeId, await req.json(), EDITABLE))
 }
 
 export async function DELETE(

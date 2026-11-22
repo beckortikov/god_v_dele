@@ -6,16 +6,24 @@ process.env.SUPABASE_SERVICE_ROLE_KEY ||= 'service-key-for-tests'
 import { GET as listComments, POST as addComment } from '@/app/api/offline-events/[id]/attendees/[attendeeId]/comments/route'
 import { DELETE as delComment } from '@/app/api/offline-events/[id]/attendees/[attendeeId]/comments/[commentId]/route'
 import { PUT as editAttendee } from '@/app/api/offline-events/[id]/attendees/[attendeeId]/route'
-import { contactDue, parseCommentBody, parseContactDate, stageAfterPayment, summarizeComments } from '@/lib/event-funnel'
+import { contactDue, describeMark, parseCommentBody, parseContactDate, stageAfterPayment, summarizeHistory, teamSummary } from '@/lib/event-funnel'
 import { attendeeContact, telHref, type Attendee } from '@/components/events/types'
+import { PATCH as callPatch } from '@/app/api/calls/[id]/attendees/[attendeeId]/route'
+import { GET as callList } from '@/app/api/calls/[id]/route'
+import { SESSION_COOKIE, createSessionToken } from '@/lib/session'
 import { fake } from './helpers/fake-db'
 
 const EV = 'e1111111-1111-4111-8111-111111111111'
 const OTHER_EV = 'e2222222-2222-4222-8222-222222222222'
 const ALI = 'a1111111-1111-4111-8111-111111111111'
 
-const req = (method: string, url: string, body?: unknown) =>
-  new Request(`http://test${url}`, { method, headers: { 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) })
+const who = (role: string, name: string) => `${SESSION_COOKIE}=${createSessionToken({ id: `u-${name}`, role, full_name: name })}`
+const req = (method: string, url: string, body?: unknown, as: [string, string] = ['admin', 'Админ']) =>
+  new Request(`http://test${url}`, {
+    method,
+    headers: { 'Content-Type': 'application/json', cookie: who(as[0], as[1]) },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  })
 const ctx = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) })
 const json = async (res: Response) => ({ status: res.status, body: await res.json() })
 
@@ -46,14 +54,40 @@ describe('funnel helpers', () => {
     expect(contactDue(null, '2026-11-20')).toBeNull()
   })
 
-  it('keeps the newest comment and the count per person', () => {
-    const m = summarizeComments([
-      { attendee_id: 'a', body: 'old', author_name: null, created_at: '2026-11-01T10:00:00Z' },
-      { attendee_id: 'a', body: 'new', author_name: 'Анвар', created_at: '2026-11-02T10:00:00Z' },
+  it('keeps the newest note, the note count and who set the current stage', () => {
+    const m = summarizeHistory([
+      { attendee_id: 'a', kind: 'note', body: 'old', author_name: null, created_at: '2026-11-01T10:00:00Z' },
+      { attendee_id: 'a', kind: 'note', body: 'new', author_name: 'Анвар', created_at: '2026-11-02T10:00:00Z' },
+      { attendee_id: 'a', kind: 'added', body: 'new', author_name: 'Финансист', created_at: '2026-10-30T10:00:00Z' },
+      { attendee_id: 'a', kind: 'stage', body: 'new>going', author_name: 'Мадина', created_at: '2026-11-03T10:00:00Z' },
+      { attendee_id: 'a', kind: 'payment', body: '0>300', author_name: 'Финансист', created_at: '2026-11-04T10:00:00Z' },
       { attendee_id: 'b', body: 'only', author_name: null, created_at: '2026-11-01T10:00:00Z' },
     ])
-    expect(m.get('a')).toEqual({ last: { body: 'new', author_name: 'Анвар', created_at: '2026-11-02T10:00:00Z' }, count: 2 })
-    expect(m.get('b')?.count).toBe(1)
+    expect(m.get('a')?.last_comment).toMatchObject({ body: 'new', author_name: 'Анвар' })
+    expect(m.get('a')?.comments_count).toBe(2)
+    expect(m.get('a')?.last_mark).toMatchObject({ kind: 'stage', author_name: 'Мадина' })
+    expect(m.get('b')).toMatchObject({ comments_count: 1, last_mark: null })
+  })
+
+  it('sums up who did the calling, counting each person once per outcome', () => {
+    const t = teamSummary([
+      { attendee_id: 'a', kind: 'stage', body: 'new>thinking', author_name: 'Анвар', created_at: '2026-11-01T10:00:00Z' },
+      { attendee_id: 'a', kind: 'stage', body: 'thinking>going', author_name: 'Анвар', created_at: '2026-11-02T10:00:00Z' },
+      { attendee_id: 'a', kind: 'stage', body: 'going>thinking', author_name: 'Анвар', created_at: '2026-11-03T10:00:00Z' },
+      { attendee_id: 'a', kind: 'stage', body: 'thinking>going', author_name: 'Анвар', created_at: '2026-11-04T10:00:00Z' },
+      { attendee_id: 'a', kind: 'note', body: 'едет', author_name: 'Анвар', created_at: '2026-11-04T10:01:00Z' },
+      { attendee_id: 'b', kind: 'stage', body: 'new>declined', author_name: 'Мадина', created_at: '2026-11-02T10:00:00Z' },
+      { attendee_id: 'b', kind: 'payment', body: '0>100', author_name: 'Мадина', created_at: '2026-11-02T10:00:00Z' },
+    ])
+    expect(t[0]).toMatchObject({ name: 'Анвар', marks: 4, notes: 1, going: 1, paid: 0, people: 1, last_at: '2026-11-04T10:01:00Z' })
+    expect(t[1]).toMatchObject({ name: 'Мадина', marks: 1, declined: 1 })
+  })
+
+  it('describes actions in words', () => {
+    expect(describeMark({ kind: 'stage', body: 'thinking>going' })).toBe('Думает → Поедет')
+    expect(describeMark({ kind: 'added', body: 'new' })).toBe('Добавил в список · Не звонили')
+    expect(describeMark({ kind: 'payment', body: '0>300' })).toBe('Оплата $0 → $300')
+    expect(describeMark({ kind: 'note', body: 'привет' })).toBe('привет')
   })
 
   it('finds a phone for guests and participants and makes a tel: link only for phones', () => {
@@ -85,6 +119,16 @@ describe('/api/offline-events/[id]/attendees/[attendeeId]', () => {
     expect(fake.rows('event_attendees')[0].funnel_stage).toBe('new')
   })
 
+  it('records who changed the stage and the payment', async () => {
+    await editAttendee(req('PUT', '/x', { funnel_stage: 'going', payment_received: 300 }, ['finance', 'Финансист']), ctx({ id: EV, attendeeId: ALI }))
+    expect(fake.rows('event_attendee_comments').map(r => [r.kind, r.body, r.author_name])).toEqual([
+      ['stage', 'new>going', 'Финансист'],
+      ['payment', '0>300', 'Финансист'],
+    ])
+    await editAttendee(req('PUT', '/x', { funnel_stage: 'going' }), ctx({ id: EV, attendeeId: ALI }))
+    expect(fake.rows('event_attendee_comments')).toHaveLength(2)
+  })
+
   it('does not touch a person through another event', async () => {
     await editAttendee(req('PUT', '/x', { funnel_stage: 'declined' }), ctx({ id: OTHER_EV, attendeeId: ALI }))
     expect(fake.rows('event_attendees')[0].funnel_stage).toBe('new')
@@ -113,9 +157,55 @@ describe('/api/offline-events/[id]/attendees/[attendeeId]/comments', () => {
     expect(fake.rows('event_attendee_comments')).toHaveLength(1)
   })
 
+  it('lets an employee delete only their own notes, never the marks', async () => {
+    const p = ctx({ id: EV, attendeeId: ALI })
+    const mine = (await json(await addComment(req('POST', '/x', { body: 'моё' }, ['employee', 'Анвар']), p))).body.data
+    const theirs = (await json(await addComment(req('POST', '/x', { body: 'чужое' }, ['employee', 'Мадина']), p))).body.data
+    fake.rows('event_attendee_comments').push({ id: 'mark-1', attendee_id: ALI, kind: 'stage', body: 'new>going', author_id: 'u-Анвар', author_name: 'Анвар', created_at: '2026-11-20T10:00:00Z' })
+
+    const seen = (await json(await listComments(req('GET', '/x', undefined, ['employee', 'Анвар']), p))).body.data
+    expect(Object.fromEntries(seen.map((c: { id: string; can_delete: boolean }) => [c.id, c.can_delete]))).toEqual({ [mine.id]: true, [theirs.id]: false, 'mark-1': false })
+    expect(seen.some((c: Record<string, unknown>) => 'author_id' in c)).toBe(false)
+
+    const del = (id: string, as: [string, string]) => delComment(req('DELETE', '/x', undefined, as), ctx({ id: EV, attendeeId: ALI, commentId: id }))
+    expect((await del(theirs.id, ['employee', 'Анвар'])).status).toBe(403)
+    expect((await del('mark-1', ['admin', 'Админ'])).status).toBe(403)
+    expect((await del(mine.id, ['employee', 'Анвар'])).status).toBe(200)
+    expect((await del(theirs.id, ['admin', 'Админ'])).status).toBe(200)
+    expect(fake.rows('event_attendee_comments').map(r => r.id)).toEqual(['mark-1'])
+  })
+
   it('refuses an empty comment and a person from another event', async () => {
     expect((await addComment(req('POST', '/x', { body: '  ' }), ctx({ id: EV, attendeeId: ALI }))).status).toBe(400)
     expect((await addComment(req('POST', '/x', { body: 'привет' }), ctx({ id: OTHER_EV, attendeeId: ALI }))).status).toBe(404)
     expect(fake.rows('event_attendee_comments')).toHaveLength(0)
+  })
+})
+
+describe('/api/calls (employees, no money)', () => {
+  beforeEach(() => {
+    fake.reset()
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    fake.rows('offline_events').push({ id: EV, name: 'Мастермайнд', event_date: '2026-12-12', status: 'planned' })
+    fake.rows('event_attendees').push({ id: ALI, event_id: EV, attendee_type: 'guest', guest_name: 'Гость', guest_phone: '+992900000000', payment_received: 500, payment_notes: 'наличные', funnel_stage: 'new', created_at: '2026-11-01T00:00:00Z' })
+  })
+
+  it('changes only the stage and the callback date, and records who did it', async () => {
+    const res = await callPatch(req('PATCH', '/x', { funnel_stage: 'thinking', next_contact_on: '2026-11-25', payment_received: 0 }, ['employee', 'Анвар']), ctx({ id: EV, attendeeId: ALI }))
+    expect(res.status).toBe(200)
+    expect(fake.rows('event_attendees')[0]).toMatchObject({ funnel_stage: 'thinking', next_contact_on: '2026-11-25', payment_received: 500 })
+    expect(fake.rows('event_attendee_comments')).toEqual([expect.objectContaining({ kind: 'stage', body: 'new>thinking', author_name: 'Анвар' })])
+    expect((await callPatch(req('PATCH', '/x', { payment_received: 0 }, ['employee', 'Анвар']), ctx({ id: EV, attendeeId: ALI }))).status).toBe(400)
+  })
+
+  it('shows people without money; the team summary only to admin and finance', async () => {
+    fake.rows('event_attendee_comments').push({ id: 'c1', attendee_id: ALI, kind: 'stage', body: 'new>going', author_name: 'Анвар', created_at: '2026-11-20T10:00:00Z' })
+    const asEmployee = (await json(await callList(req('GET', '/x', undefined, ['employee', 'Анвар']), ctx({ id: EV })))).body
+    expect(asEmployee.data[0]).toMatchObject({ guest_name: 'Гость', guest_phone: '+992900000000', funnel_stage: 'new', last_mark: { author_name: 'Анвар' } })
+    expect(asEmployee.data[0]).not.toHaveProperty('payment_received')
+    expect(asEmployee.data[0]).not.toHaveProperty('payment_notes')
+    expect(asEmployee.team).toBeUndefined()
+    const asFinance = (await json(await callList(req('GET', '/x', undefined, ['finance', 'Финансист']), ctx({ id: EV })))).body
+    expect(asFinance.team).toEqual([expect.objectContaining({ name: 'Анвар', marks: 1, going: 1 })])
   })
 })

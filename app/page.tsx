@@ -18,6 +18,7 @@ const Dashboard = dynamic(() => import('@/components/dashboard').then(m => m.Das
 const ParticipantsPage = dynamic(() => import('@/components/participants-page').then(m => m.ParticipantsPage), { loading: PageSpinner })
 const IncomeExpensesPage = dynamic(() => import('@/components/income-expenses-page').then(m => m.IncomeExpensesPage), { loading: PageSpinner })
 const PlanFactPage = dynamic(() => import('@/components/plan-fact-page').then(m => m.PlanFactPage), { loading: PageSpinner })
+const CallsPage = dynamic(() => import('@/components/calls/calls-page').then(m => m.CallsPage), { loading: PageSpinner })
 const OfflineEventsPage = dynamic(() => import('@/components/offline-events-page').then(m => m.OfflineEventsPage), { loading: PageSpinner })
 const BalanceForecastPage = dynamic(() => import('@/components/balance-forecast-page').then(m => m.BalanceForecastPage), { loading: PageSpinner })
 const ProgramsPage = dynamic(() => import('@/components/programs-page').then(m => m.ProgramsPage), { loading: PageSpinner })
@@ -151,6 +152,7 @@ function PageRouter({ session }: { session: SessionUser }) {
     case 'income': return <IncomeExpensesPage />
     case 'plan-fact': return <PlanFactPage />
     case 'offline': return <OfflineEventsPage />
+    case 'calls': return <CallsPage />
     case 'balance': return <BalanceForecastPage />
     case 'life-wheel': return <LifeWheelPage {...selfView} />
     case 'life-balance': return <LifeBalancePage {...selfView} />

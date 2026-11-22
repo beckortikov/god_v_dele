@@ -1,4 +1,4 @@
-import type { FunnelStage } from '@/lib/event-funnel'
+import type { FunnelStage, Mark } from '@/lib/event-funnel'
 
 export type EventStatus = 'planned' | 'completed' | 'cancelled'
 
@@ -38,8 +38,10 @@ export interface Attendee {
   /** Invitation funnel (migration 025); missing before it is applied. */
   funnel_stage?: FunnelStage
   next_contact_on?: string | null
-  last_comment?: { body: string; author_name: string | null; created_at: string } | null
+  last_comment?: Mark | null
   comments_count?: number
+  /** Who put the person on their current stage, and when (migration 026). */
+  last_mark?: Mark | null
 }
 
 export interface EventExpense {
