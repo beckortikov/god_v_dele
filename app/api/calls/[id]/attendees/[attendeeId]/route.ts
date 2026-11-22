@@ -1,7 +1,7 @@
 import { guarded, updateAttendee } from '@/lib/event-funnel-server'
 
-/** On the «Обзвон» page only the stage and the callback date can change. */
-const CALL_EDITABLE = ['funnel_stage', 'next_contact_on'] as const
+/** On the «Обзвон» page only the stage, the callback date and the hunter can change. */
+const CALL_EDITABLE = ['funnel_stage', 'next_contact_on', 'hunter_id'] as const
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string; attendeeId: string }> }) {
     const { id, attendeeId } = await params

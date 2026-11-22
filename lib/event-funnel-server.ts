@@ -58,10 +58,35 @@ export async function recordHistory(req: Request, rows: { attendee_id: string; k
   }
 }
 
+/** Accounts that can be a hunter (call people): staff, not participants. */
+const STAFF_ROLES = ['admin', 'finance', 'manager', 'employee', 'wheels_manager']
+
+export interface Staff {
+  id: string
+  name: string
+}
+
+export async function loadStaff(): Promise<Staff[]> {
+  const { data, error } = await db.from('app_users').select('id, full_name, username, role').in('role', STAFF_ROLES)
+  if (error) throw error
+  return (data as Row[])
+    .map(u => ({ id: u.id as string, name: (u.full_name || u.username || 'Без имени') as string }))
+    .sort((a, b) => a.name.localeCompare(b.name, 'ru'))
+}
+
+/** The caller's account id, or null. */
+export function callerId(req: Request): string | null {
+  try {
+    return getSession(req)?.uid ?? null
+  } catch {
+    return null
+  }
+}
+
 /** Fields the «Обзвон» page gets: who, how to reach them, where they are in the funnel. No money. */
 const CALL_FIELDS = [
   'id', 'event_id', 'attendee_type', 'participant_id', 'participant_name', 'participant_phone', 'participant_email',
-  'guest_name', 'guest_phone', 'guest_email', 'funnel_stage', 'next_contact_on', 'created_at',
+  'guest_name', 'guest_phone', 'guest_email', 'funnel_stage', 'next_contact_on', 'created_at', 'hunter_id', 'hunter_name',
   'last_comment', 'comments_count', 'last_mark',
 ] as const
 
@@ -82,6 +107,8 @@ export async function loadFunnel(req: Request, eventId: string, opts: { withMone
     else if (!funnelMissing(res.error)) throw res.error
   }
   const summary = summarizeHistory(history as any)
+  const staff = await loadStaff()
+  const staffName = new Map(staff.map(s => [s.id, s.name]))
 
   const rows = (data as Row[]).map(({ participant, ...item }) => {
     const s = summary.get(item.id)
@@ -93,11 +120,13 @@ export async function loadFunnel(req: Request, eventId: string, opts: { withMone
       last_comment: s?.last_comment ?? null,
       comments_count: s?.comments_count ?? 0,
       last_mark: s?.last_mark ?? null,
+      hunter_id: item.hunter_id ?? null,
+      hunter_name: item.hunter_id ? staffName.get(item.hunter_id) ?? null : null,
     }
     return opts.withMoney ? full : Object.fromEntries(CALL_FIELDS.map(k => [k, full[k] ?? null]))
   })
 
-  return { rows, team: seesTeam(req) ? teamSummary(history as any) : undefined }
+  return { rows, staff, team: seesTeam(req) ? teamSummary(history as any) : undefined }
 }
 
 /**
@@ -112,6 +141,14 @@ export async function updateAttendee(req: Request, eventId: string, attendeeId: 
     const d = parseContactDate(body.next_contact_on)
     if (d === undefined) return json({ error: 'Дата «перезвонить» в формате ГГГГ-ММ-ДД' }, 400)
     body.next_contact_on = d
+  }
+  let staff: Staff[] | null = null
+  if ('hunter_id' in body) {
+    if (body.hunter_id === '' ) body.hunter_id = null
+    if (body.hunter_id !== null) {
+      staff = await loadStaff()
+      if (typeof body.hunter_id !== 'string' || !staff.some(s => s.id === body.hunter_id)) return json({ error: 'Хантером может быть только сотрудник' }, 400)
+    }
   }
   if (!Object.keys(body).length) return json({ error: 'Нечего сохранять' }, 400)
 
@@ -130,6 +167,12 @@ export async function updateAttendee(req: Request, eventId: string, attendeeId: 
     const oldPaid = Math.round((Number((before as Row).payment_received) || 0) * 100) / 100
     const newPaid = Math.round((Number(after.payment_received) || 0) * 100) / 100
     if (newPaid !== oldPaid) lines.push({ attendee_id: attendeeId, kind: 'payment', body: `${oldPaid}>${newPaid}` })
+    const oldHunter = (before as Row).hunter_id ?? null
+    if ('hunter_id' in body && (after.hunter_id ?? null) !== oldHunter) {
+      staff ??= await loadStaff()
+      const nameOf = (id: string | null) => (id ? staff!.find(s => s.id === id)?.name ?? '' : '').replace(/>/g, ' ')
+      lines.push({ attendee_id: attendeeId, kind: 'hunter', body: `${nameOf(oldHunter)}>${nameOf(after.hunter_id ?? null)}` })
+    }
     await recordHistory(req, lines)
 
     const [who, ev] = await Promise.all([after.participant_id ? participantName(after.participant_id) : Promise.resolve(''), eventName(eventId)])

@@ -9,7 +9,7 @@ import { guarded, updateAttendee } from '@/lib/event-funnel-server'
 const EDITABLE = [
     'payment_received', 'original_amount', 'currency', 'exchange_rate', 'payment_date', 'payment_method',
     'payment_notes', 'attendance_status', 'notes', 'guest_name', 'guest_email', 'guest_phone',
-    'funnel_stage', 'next_contact_on',
+    'funnel_stage', 'next_contact_on', 'hunter_id',
 ] as const
 
 async function attendeeLabel(row: any) {

@@ -90,6 +90,9 @@ describe('funnel helpers', () => {
     expect(describeMark({ kind: 'added', body: 'new' })).toBe('Добавил в список · Не звонили')
     expect(describeMark({ kind: 'payment', body: '0>300' })).toBe('Оплата $0 → $300')
     expect(describeMark({ kind: 'note', body: 'привет' })).toBe('привет')
+    expect(describeMark({ kind: 'hunter', body: '>Насиба' })).toBe('Назначил хантера: Насиба')
+    expect(describeMark({ kind: 'hunter', body: 'Насиба>Шабо' })).toBe('Хантер: Насиба → Шабо')
+    expect(describeMark({ kind: 'hunter', body: 'Насиба>' })).toBe('Убрал хантера (Насиба)')
   })
 
   it('finds a phone for guests and participants and makes a tel: link only for phones', () => {
@@ -209,5 +212,30 @@ describe('/api/calls (employees, no money)', () => {
     expect(asEmployee.team).toBeUndefined()
     const asFinance = (await json(await callList(req('GET', '/x', undefined, ['finance', 'Финансист']), ctx({ id: EV })))).body
     expect(asFinance.team).toEqual([expect.objectContaining({ name: 'Анвар', marks: 1, going: 1 })])
+  })
+
+  it('sets a hunter from the staff only and records the change', async () => {
+    fake.rows('app_users').push(
+      { id: 'u-nasiba', full_name: 'Насиба', role: 'wheels_manager' },
+      { id: 'u-shabo', full_name: 'Шабо', role: 'employee' },
+      { id: 'u-part', full_name: 'Участник', role: 'participant' }
+    )
+    const p = ctx({ id: EV, attendeeId: ALI })
+    expect((await callPatch(req('PATCH', '/x', { hunter_id: 'u-part' }, ['employee', 'Анвар']), p)).status).toBe(400)
+    expect((await callPatch(req('PATCH', '/x', { hunter_id: 'u-nasiba' }, ['employee', 'Анвар']), p)).status).toBe(200)
+    await callPatch(req('PATCH', '/x', { hunter_id: 'u-shabo' }, ['employee', 'Анвар']), p)
+    await callPatch(req('PATCH', '/x', { hunter_id: null }, ['employee', 'Анвар']), p)
+    expect(fake.rows('event_attendees')[0].hunter_id).toBeNull()
+    expect(fake.rows('event_attendee_comments').map(r => [r.kind, r.body])).toEqual([
+      ['hunter', '>Насиба'],
+      ['hunter', 'Насиба>Шабо'],
+      ['hunter', 'Шабо>'],
+    ])
+
+    await callPatch(req('PATCH', '/x', { hunter_id: 'u-nasiba' }, ['employee', 'Анвар']), p)
+    const list = (await json(await callList(req('GET', '/x', undefined, ['employee', 'Анвар']), ctx({ id: EV })))).body
+    expect(list.data[0]).toMatchObject({ hunter_id: 'u-nasiba', hunter_name: 'Насиба' })
+    expect(list.staff.map((s: { name: string }) => s.name)).toEqual(['Насиба', 'Шабо'])
+    expect(list.me).toBe('u-Анвар')
   })
 })

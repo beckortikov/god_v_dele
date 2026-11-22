@@ -48,6 +48,7 @@ export function PersonCell({ a }: { a: Attendee }) {
             )}
           </div>
         )}
+        {a.hunter_name && <div className="truncate text-xs text-muted-foreground">Хантер: {a.hunter_name}</div>}
         {a.last_comment && (
           <div
             className="mt-0.5 flex items-start gap-1 text-xs text-foreground/75"

@@ -2,7 +2,7 @@
 
 import * as React from 'react'
 import { toast } from 'sonner'
-import { ArrowRightLeft, Trash2, UserPlus, Wallet } from 'lucide-react'
+import { ArrowRightLeft, Trash2, UserCheck, UserPlus, Wallet } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
@@ -31,7 +31,7 @@ export async function postComment(base: string, body: string): Promise<AttendeeC
   return result.data
 }
 
-const ACTION_ICON = { stage: ArrowRightLeft, payment: Wallet, added: UserPlus } as const
+const ACTION_ICON = { stage: ArrowRightLeft, payment: Wallet, added: UserPlus, hunter: UserCheck } as const
 
 /**
  * One person's feed: call notes and who did what (stage changes, payments, adding to the list),
@@ -40,14 +40,20 @@ const ACTION_ICON = { stage: ArrowRightLeft, payment: Wallet, added: UserPlus } 
  */
 export function AttendeeComments({
   base,
-  draft,
-  setDraft,
+  draft = '',
+  setDraft = () => {},
   onChanged,
+  composer = true,
+  reloadKey = 0,
 }: {
   base: string
-  draft: string
-  setDraft: (v: string) => void
+  draft?: string
+  setDraft?: (v: string) => void
   onChanged: () => void
+  /** false: only the feed (the call card has its own comment box). */
+  composer?: boolean
+  /** Bump to load the feed again (after a note was added elsewhere). */
+  reloadKey?: number
 }) {
   const confirm = useConfirm()
   const [items, setItems] = React.useState<AttendeeComment[] | null>(null)
@@ -71,7 +77,7 @@ export function AttendeeComments({
     return () => {
       alive = false
     }
-  }, [base])
+  }, [base, reloadKey])
 
   const add = async () => {
     const text = draft.trim()
@@ -107,7 +113,7 @@ export function AttendeeComments({
 
   return (
     <div className="flex flex-col gap-2">
-      <div className="flex flex-col gap-2">
+      <div className={cn('flex flex-col gap-2', !composer && 'hidden')}>
         <Textarea
           id="att-comment"
           value={draft}

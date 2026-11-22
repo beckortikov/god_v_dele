@@ -17,8 +17,8 @@ export async function GET(
 ) {
     const { id } = await params
     return guarded('fetching attendees', async () => {
-        const { rows, team } = await loadFunnel(req, id, { withMoney: true })
-        return NextResponse.json({ data: rows, team }, { status: 200 })
+        const { rows, team, staff } = await loadFunnel(req, id, { withMoney: true })
+        return NextResponse.json({ data: rows, team, staff }, { status: 200 })
     })
 }
 

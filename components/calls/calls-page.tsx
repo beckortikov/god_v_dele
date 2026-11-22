@@ -2,25 +2,34 @@
 
 import * as React from 'react'
 import { toast } from 'sonner'
-import { CalendarDays, Phone, PhoneCall, SearchX } from 'lucide-react'
+import { CalendarDays, Columns3, List, Phone, PhoneCall, SearchX } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import { formatDate, formatNumber, plural, todayISO } from '@/lib/format'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Sheet, SheetBody, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { PageContainer, PageHeader, Panel, PanelToolbar } from '@/components/erp/page-header'
+import { PageContainer, PageHeader, Panel } from '@/components/erp/page-header'
 import { SearchInput } from '@/components/erp/search-input'
+import { Segmented } from '@/components/erp/segmented'
 import { EmptyState } from '@/components/erp/empty-state'
-import { TableSkeleton, TotalsBar } from '@/components/erp/table-parts'
+import { TableSkeleton } from '@/components/erp/table-parts'
 import { Field, FieldGroup } from '@/components/erp/field'
 import { readPref, writePref } from '@/components/finance/types'
-import { ChipGroup } from '@/components/events/parts'
-import { FunnelStrip, type StageFilter } from '@/components/events/funnel-strip'
-import { CallbackCell, PersonCell, StageCell, TeamPanel } from '@/components/events/funnel-parts'
+import { FunnelStrip, funnelDot, type StageFilter } from '@/components/events/funnel-strip'
+import { TeamPanel } from '@/components/events/funnel-parts'
 import { AttendeeComments, postComment } from '@/components/events/attendee-comments'
 import { attendeeContact, attendeeName, telHref, type Attendee } from '@/components/events/types'
 import { FUNNEL, FUNNEL_STAGES, contactDue, type FunnelStage, type TeamRow } from '@/lib/event-funnel'
+import {
+  BoardCard,
+  CallCard,
+  CallbackPicker,
+  HunterPicker,
+  StageStepper,
+  addDaysISO,
+  type AttendeePatch,
+  type StaffMember,
+} from '@/components/calls/call-parts'
 
 interface CallEvent {
   id: string
@@ -32,9 +41,15 @@ interface CallEvent {
   counts: Record<FunnelStage, number>
 }
 
+type HunterFilter = 'all' | 'mine' | 'none' | string
+type View = 'list' | 'board'
+
 const LAST_EVENT = 'calls-event'
+const VIEW_PREF = 'calls-view'
+const HUNTER_PREF = 'calls-hunter'
 
 const attendeeUrl = (eventId: string, attendeeId: string) => `/api/calls/${eventId}/attendees/${attendeeId}`
+const stageOf = (a: Attendee) => (a.funnel_stage || 'new') as FunnelStage
 
 /** The nearest upcoming event, else the latest one. */
 function pickDefault(events: CallEvent[]) {
@@ -52,21 +67,47 @@ async function getJson(url: string) {
   return body
 }
 
+/** Work order: callbacks that are due, then by stage (new first), then by name. */
+function workOrder(today: string) {
+  const rank = (a: Attendee) => {
+    const d = contactDue(a.next_contact_on, today)
+    return d === 'overdue' ? 0 : d === 'today' ? 1 : 2
+  }
+  return (x: Attendee, y: Attendee) =>
+    rank(x) - rank(y) ||
+    (rank(x) < 2 ? (x.next_contact_on || '').localeCompare(y.next_contact_on || '') : 0) ||
+    FUNNEL_STAGES.indexOf(stageOf(x)) - FUNNEL_STAGES.indexOf(stageOf(y)) ||
+    attendeeName(x).localeCompare(attendeeName(y), 'ru')
+}
+
 /**
- * «Обзвон»: the people invited to an event, their phones, funnel stage, callback date and notes.
- * For employees and managers who make the calls (from their own phones); no event money here.
- * Every mark is saved with who made it, so the administrator sees who did what.
+ * «Обзвон»: the people invited to an event for the staff who call them (from their own phones).
+ * Filter «Мои» / by hunter, the funnel as steps on every card, a comment box right under each
+ * person, history unfolding in place, and a board with a column per stage. No event money here.
  */
 export function CallsPage() {
   const [events, setEvents] = React.useState<CallEvent[] | null>(null)
   const [eventId, setEventId] = React.useState<string | null>(null)
   const [rows, setRows] = React.useState<Attendee[] | null>(null)
   const [team, setTeam] = React.useState<TeamRow[] | undefined>(undefined)
+  const [staff, setStaff] = React.useState<StaffMember[]>([])
+  const [me, setMe] = React.useState<string | null>(null)
   const [error, setError] = React.useState<string | null>(null)
   const [query, setQuery] = React.useState('')
   const [stageFilter, setStageFilter] = React.useState<StageFilter>('all')
-  const [open, setOpen] = React.useState<Attendee | null>(null)
+  const [hunter, setHunterState] = React.useState<HunterFilter | null>(null)
+  const [view, setViewState] = React.useState<View>(() => (readPref(VIEW_PREF) === 'board' ? 'board' : 'list'))
+  const [sheetFor, setSheetFor] = React.useState<Attendee | null>(null)
   const [sheetOpen, setSheetOpen] = React.useState(false)
+
+  const setView = (v: View) => {
+    writePref(VIEW_PREF, v)
+    setViewState(v)
+  }
+  const setHunter = (h: HunterFilter) => {
+    writePref(HUNTER_PREF, h)
+    setHunterState(h)
+  }
 
   React.useEffect(() => {
     getJson('/api/calls')
@@ -85,6 +126,9 @@ export function CallsPage() {
       const b = await getJson(`/api/calls/${id}`)
       setRows(b.data ?? [])
       setTeam(b.team)
+      setStaff(b.staff ?? [])
+      setMe(b.me ?? null)
+      setError(null)
     } catch (e: any) {
       setError(e.message)
       setRows([])
@@ -104,49 +148,77 @@ export function CallsPage() {
     setEventId(id)
   }
 
-  const changeStage = async (a: Attendee, stage: FunnelStage) => {
-    if (!eventId || stage === (a.funnel_stage || 'new')) return
-    const done = stage === 'paid' || stage === 'declined'
-    const patch = { funnel_stage: stage, ...(done && a.next_contact_on ? { next_contact_on: null } : {}) }
+  /** Applied at once, saved in the background, rolled back on error. */
+  const patch = async (a: Attendee, p: AttendeePatch) => {
+    if (!eventId) return
     const prev = rows
-    setRows(list => (list ?? []).map(x => (x.id === a.id ? { ...x, ...patch } : x)))
+    const hunterName = 'hunter_id' in p ? (p.hunter_id ? staff.find(s => s.id === p.hunter_id)?.name ?? null : null) : a.hunter_name
+    setRows(list => (list ?? []).map(x => (x.id === a.id ? { ...x, ...p, hunter_name: hunterName } : x)))
+    setSheetFor(s => (s?.id === a.id ? { ...s, ...p, hunter_name: hunterName } : s))
     try {
-      const res = await fetch(attendeeUrl(eventId, a.id), { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch) })
+      const res = await fetch(attendeeUrl(eventId, a.id), { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(p) })
       const result = await res.json().catch(() => ({}))
       if (!res.ok || result.error) throw new Error(result.error || `Ошибка ${res.status}`)
+      if (p.funnel_stage === 'no_answer' && p.next_contact_on) toast.info(`${attendeeName(a)}: перезвонить завтра`)
       load(eventId)
     } catch (err: any) {
       setRows(prev)
-      toast.error('Не удалось изменить этап', { description: err.message })
+      toast.error('Не удалось сохранить', { description: err.message })
     }
   }
 
   const today = todayISO()
-  const list = rows ?? []
+  const all = rows ?? []
+  const mineCount = me ? all.filter(a => a.hunter_id === me).length : 0
+  // «Мои» by default when the caller has people; otherwise everyone
+  const hunterFilter: HunterFilter = hunter ?? (() => {
+    const saved = readPref(HUNTER_PREF)
+    if (saved && (saved === 'all' || saved === 'none' || saved === 'mine' || staff.some(s => s.id === saved))) return saved === 'mine' && !mineCount ? 'all' : saved
+    return mineCount ? 'mine' : 'all'
+  })()
+
+  const hunterCounts = new Map<string, number>()
+  for (const a of all) if (a.hunter_id) hunterCounts.set(a.hunter_id, (hunterCounts.get(a.hunter_id) ?? 0) + 1)
+  const noHunter = all.filter(a => !a.hunter_id).length
+  const hunterOptions: { value: HunterFilter; label: React.ReactNode; count?: number }[] = [
+    ...(me && mineCount ? [{ value: 'mine', label: 'Мои', count: mineCount }] : []),
+    { value: 'all', label: 'Все', count: all.length },
+    ...staff.filter(s => hunterCounts.has(s.id) && s.id !== me).map(s => ({ value: s.id, label: s.name.split(' ')[0], count: hunterCounts.get(s.id) })),
+    ...(noHunter ? [{ value: 'none', label: 'Без хантера', count: noHunter }] : []),
+  ]
+
+  const ofHunter = all.filter(a =>
+    hunterFilter === 'all' ? true : hunterFilter === 'mine' ? a.hunter_id === me : hunterFilter === 'none' ? !a.hunter_id : a.hunter_id === hunterFilter
+  )
   const isDue = (a: Attendee) => {
     const d = contactDue(a.next_contact_on, today)
     return d === 'overdue' || d === 'today'
   }
-  const counts = Object.fromEntries(FUNNEL_STAGES.map(st => [st, list.filter(a => (a.funnel_stage || 'new') === st).length])) as Record<FunnelStage, number>
+  const counts = Object.fromEntries(FUNNEL_STAGES.map(st => [st, ofHunter.filter(a => stageOf(a) === st).length])) as Record<FunnelStage, number>
   const q = query.trim().toLowerCase()
   const qDigits = q.replace(/\D/g, '')
-  const visible = list
-    .filter(a => {
-      if (stageFilter === 'due' ? !isDue(a) : stageFilter !== 'all' && (a.funnel_stage || 'new') !== stageFilter) return false
-      if (!q) return true
-      const contact = attendeeContact(a)
-      if (qDigits.length >= 3 && contact.replace(/\D/g, '').includes(qDigits)) return true
-      return [attendeeName(a), contact, a.last_comment?.body].some(v => v?.toLowerCase().includes(q))
-    })
-    .sort((x, y) => (stageFilter === 'due' ? (x.next_contact_on || '').localeCompare(y.next_contact_on || '') : attendeeName(x).localeCompare(attendeeName(y), 'ru')))
+  const matches = (a: Attendee) => {
+    if (!q) return true
+    const contact = attendeeContact(a)
+    if (qDigits.length >= 3 && contact.replace(/\D/g, '').includes(qDigits)) return true
+    return [attendeeName(a), contact, a.hunter_name, a.last_comment?.body].some(v => v?.toLowerCase().includes(q))
+  }
+  const searched = ofHunter.filter(matches)
+  const visible = searched
+    .filter(a => (stageFilter === 'due' ? isDue(a) : stageFilter === 'all' || stageOf(a) === stageFilter))
+    .sort(workOrder(today))
 
   const current = events?.find(e => e.id === eventId)
+  const openSheet = (a: Attendee) => {
+    setSheetFor(a)
+    setSheetOpen(true)
+  }
 
   return (
     <PageContainer>
       <PageHeader
         title="Обзвон"
-        description="Кого приглашаем на мероприятие: этап, когда перезвонить и что сказал. Каждая отметка сохраняется с именем того, кто её сделал."
+        description="Отмечайте этап одним нажатием и пишите, что сказал человек. Каждая отметка сохраняется с вашим именем."
         actions={
           events && events.length > 0 && (
             <Select value={eventId ?? undefined} onValueChange={chooseEvent}>
@@ -176,87 +248,84 @@ export function CallsPage() {
           </span>
           {current.location && <span>{current.location}</span>}
           <span>
-            {formatNumber(current.total)} {plural(current.total, ['человек', 'человека', 'человек'])} в списке
+            {formatNumber(all.length)} {plural(all.length, ['человек', 'человека', 'человек'])} в списке
           </span>
         </div>
       )}
 
       {events === null || (eventId && rows === null) ? (
         <TableSkeleton rows={6} />
-      ) : error && !list.length ? (
+      ) : error && !all.length ? (
         <Panel>
           <EmptyState icon={SearchX} title="Не удалось загрузить" description={error} />
         </Panel>
-      ) : !events.length ? (
+      ) : !events.length || !all.length ? (
         <Panel>
           <EmptyState
             icon={PhoneCall}
-            title="Мероприятий пока нет"
-            description="Когда финансист заведёт мероприятие и добавит в него людей, здесь появится список для обзвона"
+            title={events.length ? 'В списке пока никого' : 'Мероприятий пока нет'}
+            description="Людей в мероприятие добавляет финансист или администратор на странице «Оффлайн-события»"
           />
         </Panel>
       ) : (
         <>
-          {list.length > 0 && <FunnelStrip counts={counts} due={list.filter(isDue).length} total={list.length} value={stageFilter} onChange={setStageFilter} />}
-          <Panel>
-            {list.length > 0 && (
-              <PanelToolbar>
-                <SearchInput value={query} onChange={setQuery} placeholder="Имя, телефон или комментарий" className="sm:w-72" />
-              </PanelToolbar>
-            )}
-            {visible.length === 0 ? (
-              <EmptyState
-                icon={PhoneCall}
-                title={list.length ? 'Никого не найдено' : 'В списке пока никого'}
-                description={list.length ? 'Измените поиск или этап' : 'Людей в мероприятие добавляет финансист или администратор'}
-                action={
-                  list.length > 0 && stageFilter !== 'all' ? (
-                    <Button size="sm" variant="outline" onClick={() => setStageFilter('all')}>
-                      Показать все этапы
-                    </Button>
-                  ) : undefined
-                }
-              />
-            ) : (
-              <>
-                <Table>
-                  <TableHeader>
-                    <TableRow className="hover:bg-transparent">
-                      <TableHead>Имя</TableHead>
-                      <TableHead>Этап</TableHead>
-                      <TableHead className="max-md:hidden">Перезвонить</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {visible.map(a => (
-                      <TableRow
-                        key={a.id}
-                        className="group cursor-pointer"
-                        onClick={() => {
-                          setOpen(a)
-                          setSheetOpen(true)
-                        }}
-                      >
-                        <TableCell className="max-w-96 whitespace-normal">
-                          <PersonCell a={a} />
-                        </TableCell>
-                        <TableCell onClick={e => e.stopPropagation()}>
-                          <StageCell a={a} onStage={changeStage} />
-                        </TableCell>
-                        <TableCell className="max-md:hidden">
-                          <CallbackCell a={a} today={today} />
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-                <TotalsBar
-                  label={`${formatNumber(visible.length)} ${plural(visible.length, ['человек', 'человека', 'человек'])}`}
-                  value={`оплатили ${formatNumber(visible.filter(a => a.funnel_stage === 'paid').length)}`}
+          {/* Whose people: mine, a hunter, nobody's */}
+          <div className="-mx-3 mb-3 overflow-x-auto px-3 scrollbar-none sm:mx-0 sm:px-0">
+            <Segmented aria-label="Хантер" value={hunterFilter} onChange={setHunter} options={hunterOptions} />
+          </div>
+
+          <FunnelStrip counts={counts} due={ofHunter.filter(isDue).length} total={ofHunter.length} value={stageFilter} onChange={setStageFilter} />
+
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <SearchInput value={query} onChange={setQuery} placeholder="Имя, телефон, хантер или комментарий" className="min-w-0 flex-1 sm:max-w-80" />
+            <Segmented
+              size="sm"
+              aria-label="Вид"
+              value={view}
+              onChange={setView}
+              options={[
+                { value: 'list', label: (<><List className="size-3.5" />Список</>) },
+                { value: 'board', label: (<><Columns3 className="size-3.5" />Доска</>) },
+              ]}
+            />
+          </div>
+
+          {view === 'list' ? (
+            visible.length === 0 ? (
+              <Panel>
+                <EmptyState
+                  icon={PhoneCall}
+                  title="Никого не найдено"
+                  description="Измените поиск, этап или хантера"
+                  action={
+                    stageFilter !== 'all' ? (
+                      <Button size="sm" variant="outline" onClick={() => setStageFilter('all')}>
+                        Показать все этапы
+                      </Button>
+                    ) : undefined
+                  }
                 />
-              </>
-            )}
-          </Panel>
+              </Panel>
+            ) : (
+              <div className="grid gap-2.5 xl:grid-cols-2">
+                {visible.map(a => (
+                  <CallCard
+                    key={a.id}
+                    a={a}
+                    base={attendeeUrl(eventId!, a.id)}
+                    staff={staff}
+                    me={me}
+                    today={today}
+                    onPatch={patch}
+                    onNoted={() => eventId && load(eventId)}
+                  />
+                ))}
+              </div>
+            )
+          ) : (
+            <Board rows={searched} staff={staff} me={me} today={today} onPatch={patch} onOpen={openSheet} />
+          )}
+
           <TeamPanel team={team} />
         </>
       )}
@@ -265,159 +334,186 @@ export function CallsPage() {
         <CallSheet
           open={sheetOpen}
           onOpenChange={setSheetOpen}
-          eventId={eventId}
-          attendee={open}
-          onSaved={() => load(eventId)}
+          base={sheetFor ? attendeeUrl(eventId, sheetFor.id) : ''}
+          attendee={sheetFor}
+          staff={staff}
+          me={me}
+          today={today}
+          onPatch={patch}
+          onNoted={() => load(eventId)}
         />
       )}
     </PageContainer>
   )
 }
 
-function addDaysISO(iso: string, days: number) {
-  const d = new Date(`${iso}T00:00:00Z`)
-  d.setUTCDate(d.getUTCDate() + days)
-  return d.toISOString().slice(0, 10)
+/** A column per stage; drag a card to another column to move the person. */
+function Board({
+  rows,
+  staff,
+  me,
+  today,
+  onPatch,
+  onOpen,
+}: {
+  rows: Attendee[]
+  staff: StaffMember[]
+  me: string | null
+  today: string
+  onPatch: (a: Attendee, p: AttendeePatch) => void
+  onOpen: (a: Attendee) => void
+}) {
+  const [over, setOver] = React.useState<FunnelStage | null>(null)
+  const sorted = [...rows].sort(workOrder(today))
+  return (
+    <div className="-mx-3 overflow-x-auto px-3 pb-2 sm:mx-0 sm:px-0">
+      <div className="grid min-w-max auto-cols-[16rem] grid-flow-col gap-2.5 xl:min-w-0 xl:auto-cols-auto xl:grid-flow-row xl:grid-cols-6">
+        {FUNNEL.map(s => {
+          const items = sorted.filter(a => stageOf(a) === s.value)
+          return (
+            <section
+              key={s.value}
+              aria-label={s.label}
+              onDragOver={e => {
+                e.preventDefault()
+                setOver(s.value)
+              }}
+              onDragLeave={() => setOver(o => (o === s.value ? null : o))}
+              onDrop={e => {
+                e.preventDefault()
+                setOver(null)
+                const id = e.dataTransfer.getData('text/attendee')
+                const a = rows.find(x => x.id === id)
+                if (!a || stageOf(a) === s.value) return
+                const p: AttendeePatch = { funnel_stage: s.value }
+                if ((s.value === 'paid' || s.value === 'declined') && a.next_contact_on) p.next_contact_on = null
+                if (s.value === 'no_answer' && !a.next_contact_on) p.next_contact_on = addDaysISO(today, 1)
+                onPatch(a, p)
+              }}
+              className={cn('flex min-h-40 flex-col rounded-xl border bg-muted/40 p-2 transition-colors', over === s.value && 'border-primary bg-primary-soft/40')}
+            >
+              <header className="mb-2 flex items-center gap-1.5 px-1 text-xs font-medium">
+                <span className={cn('size-2 rounded-full', funnelDot[s.variant])} />
+                {s.label}
+                <span className="num ml-auto text-muted-foreground">{formatNumber(items.length)}</span>
+              </header>
+              <div className="flex flex-col gap-1.5">
+                {items.map(a => (
+                  <BoardCard key={a.id} a={a} staff={staff} me={me} today={today} onOpen={onOpen} onPatch={onPatch} />
+                ))}
+                {items.length === 0 && <p className="px-1 py-4 text-center text-xs text-muted-foreground/70">Перетащите сюда</p>}
+              </div>
+            </section>
+          )
+        })}
+      </div>
+    </div>
+  )
 }
 
-const funnelOptions = FUNNEL.map(f => ({ value: f.value, label: f.label }))
-
-/** One person: stage, when to call back, and the history of notes and marks. */
+/** Board card opened: the same controls as a list card, in a side sheet. */
 function CallSheet({
   open,
   onOpenChange,
-  eventId,
+  base,
   attendee,
-  onSaved,
+  staff,
+  me,
+  today,
+  onPatch,
+  onNoted,
 }: {
   open: boolean
   onOpenChange: (o: boolean) => void
-  eventId: string
+  base: string
   attendee: Attendee | null
-  onSaved: () => void
+  staff: StaffMember[]
+  me: string | null
+  today: string
+  onPatch: (a: Attendee, p: AttendeePatch) => Promise<void>
+  onNoted: () => void
 }) {
-  const [stage, setStage] = React.useState<FunnelStage>('new')
-  const [nextContact, setNextContact] = React.useState('')
   const [draft, setDraft] = React.useState('')
-  const [saving, setSaving] = React.useState(false)
-
+  const [reloadKey, setReloadKey] = React.useState(0)
   React.useEffect(() => {
-    if (!open || !attendee) return
-    setStage(attendee.funnel_stage || 'new')
-    setNextContact(attendee.next_contact_on?.slice(0, 10) || '')
-    setDraft('')
-  }, [open, attendee])
-
+    if (open) setDraft('')
+  }, [open, attendee?.id])
   if (!attendee) return null
-  const base = attendeeUrl(eventId, attendee.id)
   const contact = attendeeContact(attendee)
   const tel = telHref(contact)
-  const closing = stage === 'paid' || stage === 'declined'
+  const stage = stageOf(attendee)
 
-  const submit = async () => {
-    setSaving(true)
-    try {
-      const patch: Record<string, unknown> = {}
-      if (stage !== (attendee.funnel_stage || 'new')) patch.funnel_stage = stage
-      const nc = closing ? null : nextContact || null
-      if (nc !== (attendee.next_contact_on?.slice(0, 10) || null)) patch.next_contact_on = nc
-      if (Object.keys(patch).length) {
-        const res = await fetch(base, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch) })
-        const result = await res.json().catch(() => ({}))
-        if (!res.ok || result.error) throw new Error(result.error || `Ошибка ${res.status}`)
+  const changeStage = async (s: FunnelStage) => {
+    const p: AttendeePatch = { funnel_stage: s }
+    if ((s === 'paid' || s === 'declined') && attendee.next_contact_on) p.next_contact_on = null
+    if (s === 'no_answer' && !attendee.next_contact_on) p.next_contact_on = addDaysISO(today, 1)
+    await onPatch(attendee, p)
+    setReloadKey(k => k + 1)
+  }
+
+  const close = async () => {
+    if (draft.trim()) {
+      try {
+        await postComment(base, draft.trim())
+        onNoted()
+      } catch (err: any) {
+        toast.error('Комментарий не сохранён', { description: err.message })
+        return
       }
-      if (draft.trim()) await postComment(base, draft.trim())
-      toast.success('Сохранено', { description: attendeeName(attendee) })
-      onSaved()
-      onOpenChange(false)
-    } catch (err: any) {
-      toast.error('Не удалось сохранить', { description: err.message })
-    } finally {
-      setSaving(false)
     }
+    onOpenChange(false)
   }
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
+    <Sheet open={open} onOpenChange={o => (o ? onOpenChange(true) : close())}>
       <SheetContent>
-        <form
-          className="flex h-full flex-col"
-          onSubmit={e => {
-            e.preventDefault()
-            submit()
-          }}
-          onKeyDown={e => {
-            if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
-              e.preventDefault()
-              submit()
-            }
-          }}
-        >
-          <SheetHeader>
-            <SheetTitle>{attendeeName(attendee)}</SheetTitle>
-            <SheetDescription className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-              <span>{attendee.attendee_type === 'guest' ? 'Гость' : 'Участник программы'}</span>
-              {contact && (
-                <>
-                  <span aria-hidden>·</span>
-                  {tel ? (
-                    <a href={tel} className="num inline-flex items-center gap-1 font-medium text-foreground underline-offset-4 hover:underline">
-                      <Phone className="size-3.5" />
-                      {contact}
-                    </a>
-                  ) : (
-                    <span className="num">{contact}</span>
-                  )}
-                </>
-              )}
-            </SheetDescription>
-          </SheetHeader>
-          <SheetBody>
-            <FieldGroup>
-              <Field label="Этап приглашения">
-                <ChipGroup aria-label="Этап приглашения" value={stage} onChange={setStage} options={funnelOptions} />
+        <SheetHeader>
+          <SheetTitle>{attendeeName(attendee)}</SheetTitle>
+          <SheetDescription className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+            <span>{attendee.attendee_type === 'guest' ? 'Гость' : 'Участник программы'}</span>
+            {contact && (
+              <>
+                <span aria-hidden>·</span>
+                {tel ? (
+                  <a href={tel} className="num inline-flex items-center gap-1 font-medium text-foreground underline-offset-4 hover:underline">
+                    <Phone className="size-3.5" />
+                    {contact}
+                  </a>
+                ) : (
+                  <span className="num">{contact}</span>
+                )}
+              </>
+            )}
+          </SheetDescription>
+        </SheetHeader>
+        <SheetBody>
+          <FieldGroup>
+            <Field label="Хантер">
+              <div>
+                <HunterPicker value={attendee.hunter_id} staff={staff} me={me} onChange={id => onPatch(attendee, { hunter_id: id })} />
+              </div>
+            </Field>
+            <Field label="Этап">
+              <StageStepper value={stage} onChange={changeStage} name={attendeeName(attendee)} />
+            </Field>
+            {stage !== 'paid' && stage !== 'declined' && (
+              <Field label="Когда перезвонить">
+                <div>
+                  <CallbackPicker value={attendee.next_contact_on} today={today} onChange={d => onPatch(attendee, { next_contact_on: d })} />
+                </div>
               </Field>
-              {!closing && (
-                <Field
-                  label="Перезвонить"
-                  htmlFor="call-next"
-                  aside={
-                    nextContact && (
-                      <button type="button" className="text-xs text-muted-foreground hover:text-foreground" onClick={() => setNextContact('')}>
-                        Убрать
-                      </button>
-                    )
-                  }
-                >
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <Input id="call-next" type="date" value={nextContact} onChange={e => setNextContact(e.target.value)} className="w-40" />
-                    {[
-                      { label: 'Завтра', days: 1 },
-                      { label: 'Через 3 дня', days: 3 },
-                      { label: 'Через неделю', days: 7 },
-                    ].map(o => (
-                      <Button key={o.days} type="button" size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => setNextContact(addDaysISO(todayISO(), o.days))}>
-                        {o.label}
-                      </Button>
-                    ))}
-                  </div>
-                </Field>
-              )}
-              <Field label="История и комментарии" htmlFor="att-comment">
-                {open && <AttendeeComments base={base} draft={draft} setDraft={setDraft} onChanged={onSaved} />}
-              </Field>
-            </FieldGroup>
-          </SheetBody>
-          <SheetFooter>
-            <Button type="submit" disabled={saving}>
-              {saving ? 'Сохранение…' : 'Сохранить'}
-            </Button>
-            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)} disabled={saving}>
-              Отмена
-            </Button>
-            <span className="ml-auto hidden text-xs text-muted-foreground sm:inline">⌘/Ctrl + Enter</span>
-          </SheetFooter>
-        </form>
+            )}
+            <Field label="История и комментарии" htmlFor="att-comment">
+              <AttendeeComments base={base} draft={draft} setDraft={setDraft} onChanged={onNoted} reloadKey={reloadKey} />
+            </Field>
+          </FieldGroup>
+        </SheetBody>
+        <SheetFooter>
+          <Button type="button" onClick={close}>
+            Готово
+          </Button>
+          <span className="ml-auto text-xs text-muted-foreground">Этап и хантер сохраняются сразу</span>
+        </SheetFooter>
       </SheetContent>
     </Sheet>
   )

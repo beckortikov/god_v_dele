@@ -52,11 +52,12 @@ export function contactDue(date: string | null | undefined, today: string): 'ove
   return d < today ? 'overdue' : d === today ? 'today' : 'later'
 }
 
-export type HistoryKind = 'note' | 'stage' | 'payment' | 'added'
+export type HistoryKind = 'note' | 'stage' | 'payment' | 'added' | 'hunter'
 
 /**
  * One line of a person's feed (migration 026): a call note, or an action someone took —
- * stage change ('old>new' codes), payment change ('old>new' USD) or adding to the list (stage code).
+ * stage change ('old>new' codes), payment change ('old>new' USD), adding to the list (stage code)
+ * or a new hunter ('old name>new name', either side may be empty).
  */
 export interface AttendeeComment {
   id: string
@@ -132,7 +133,7 @@ export function teamSummary(rows: HistoryRow[]): TeamRow[] {
   const by = new Map<string, Acc>()
   for (const r of rows) {
     const kind = kindOf(r)
-    if (kind === 'payment' || r.author_id === null) continue
+    if (kind === 'payment' || kind === 'hunter' || r.author_id === null) continue
     const name = r.author_name?.trim() || 'Без имени'
     const t: Acc = by.get(name) ?? { notes: 0, marks: 0, going: new Set(), paid: new Set(), declined: new Set(), people: new Set(), last_at: '' }
     t.people.add(r.attendee_id)
@@ -161,5 +162,6 @@ export function describeMark(m: { kind?: HistoryKind | null; body: string }): st
   const { from, to } = splitChange(m.body)
   if (kind === 'stage') return `${from ? funnelOf(from).label : '—'} → ${funnelOf(to).label}`
   if (kind === 'payment') return `Оплата ${usd(from ?? '0')} → ${usd(to)}`
+  if (kind === 'hunter') return to ? (from ? `Хантер: ${from} → ${to}` : `Назначил хантера: ${to}`) : `Убрал хантера${from ? ` (${from})` : ''}`
   return `Добавил в список · ${funnelOf(to).label}`
 }

@@ -42,6 +42,9 @@ export interface Attendee {
   comments_count?: number
   /** Who put the person on their current stage, and when (migration 026). */
   last_mark?: Mark | null
+  /** The employee who calls this person (migration 027). */
+  hunter_id?: string | null
+  hunter_name?: string | null
 }
 
 export interface EventExpense {
