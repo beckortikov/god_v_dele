@@ -14,5 +14,5 @@ SET crm_access = true
 WHERE role IN ('finance', 'manager', 'employee', 'wheels_manager')
   AND (
     id IN (SELECT hunter_id FROM event_attendees WHERE hunter_id IS NOT NULL)
-    OR id IN (SELECT author_id FROM event_attendee_comments WHERE author_id IS NOT NULL)
+    OR id::text IN (SELECT author_id::text FROM event_attendee_comments WHERE author_id IS NOT NULL)
   );
