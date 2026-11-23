@@ -118,10 +118,13 @@ export function AppShell({
   role,
   userName,
   participantId = null,
+  crm = false,
   onLogout,
   children,
 }: {
   role: UserRole
+  /** «Доступ к CRM»: shows the CRM section. */
+  crm?: boolean
   userName: string | null
   /** The participant's id: for the numbers on the tab bar (participants only). */
   participantId?: string | null
@@ -130,7 +133,7 @@ export function AppShell({
 }) {
   const { page, navigate } = useNav()
   const badges = useTabBadges(role === 'participant' ? participantId : null, page)
-  const sections = React.useMemo(() => getSections(role), [role])
+  const sections = React.useMemo(() => getSections(role, crm), [role, crm])
   const current = findSection(sections, page) ?? sections[0]
   const { last, remember } = useLastPages()
   const [drawerOpen, setDrawerOpen] = React.useState(false)
@@ -303,7 +306,7 @@ export function AppShell({
               </DropdownMenu>
             )}
 
-            <NotificationsBell role={role} />
+            <NotificationsBell role={role} crm={crm} />
             <UserMenu name={displayName} role={role} onLogout={onLogout} ptTheme={ptTheme} onPtTheme={changePtTheme} />
           </div>
         </div>

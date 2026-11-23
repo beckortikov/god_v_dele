@@ -2,7 +2,7 @@
 
 let installed = false
 
-const SESSION_KEYS = ['isAuthenticated', 'userRole', 'userName', 'user']
+const SESSION_KEYS = ['isAuthenticated', 'userRole', 'userName', 'user', 'crmAccess']
 
 /** Forgets the user kept in the browser (the server session is ended by /api/auth/logout). */
 export function clearLocalSession() {

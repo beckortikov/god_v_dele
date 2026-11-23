@@ -240,6 +240,8 @@ interface AccountInfo {
   username: string
   role: UserRole
   last_login_at?: string | null
+  /** Migration 028; missing before it is applied. */
+  crm_access?: boolean
 }
 
 type Kind = 'employee' | 'participant'
@@ -295,6 +297,22 @@ export function AccessCard({
     setDraft(newAccessDraft(roles?.[0] ?? 'participant'))
     setNewPassword(generatePassword())
     setMode(m)
+  }
+
+  const [crmBusy, setCrmBusy] = React.useState(false)
+  const toggleCrm = async (on: boolean) => {
+    if (!account) return
+    setCrmBusy(true)
+    setAccount({ ...account, crm_access: on })
+    try {
+      await call(`/api/access`, { method: 'PATCH', body: JSON.stringify({ [`${kind}_id`]: id, crm_access: on }) })
+      toast.success(on ? `${name}: доступ к CRM выдан` : `${name}: доступ к CRM снят`)
+    } catch (e) {
+      setAccount({ ...account, crm_access: !on })
+      toast.error('Не удалось сохранить доступ к CRM', { description: (e as Error).message })
+    } finally {
+      setCrmBusy(false)
+    }
   }
 
   const submit = async () => {
@@ -355,6 +373,22 @@ export function AccessCard({
           <dt className="text-muted-foreground">Последний вход</dt>
           <dd>{account.last_login_at ? formatDate(account.last_login_at, 'long') : 'ещё не входил'}</dd>
         </dl>
+      )}
+      {account && kind === 'employee' && (
+        <label className="mt-3 flex cursor-pointer items-start justify-between gap-3 rounded-md border px-3 py-2.5">
+          <span>
+            <span className="text-sm font-medium">Доступ к CRM</span>
+            <span className="mt-0.5 block text-xs text-muted-foreground">
+              {account.role === 'admin' ? 'Администратору CRM открыта всегда' : 'Обзвон, воронка и Instagram. Действует сразу, без повторного входа'}
+            </span>
+          </span>
+          <Switch
+            checked={account.role === 'admin' || !!account.crm_access}
+            disabled={account.role === 'admin' || crmBusy}
+            onCheckedChange={toggleCrm}
+            aria-label="Доступ к CRM"
+          />
+        </label>
       )}
 
       <Dialog open={mode !== null} onOpenChange={o => !o && !busy && setMode(null)}>

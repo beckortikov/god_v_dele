@@ -284,3 +284,13 @@ describe('/api/calls («Обзвон»)', () => {
     expect(allowed('wheels_manager', 'GET', '/api/offline-events/ev1/attendees')).toBe(false)
   })
 })
+
+describe('/api/crm', () => {
+  it('lets staff read (each route then checks «Доступ к CRM»), not participants; nothing to write yet', () => {
+    for (const role of ['finance', 'manager', 'employee', 'wheels_manager'] as Role[]) {
+      expect(allowed(role, 'GET', '/api/crm/funnel')).toBe(true)
+      expect(allowed(role, 'POST', '/api/crm/funnel')).toBe(false)
+    }
+    expect(allowed('participant', 'GET', '/api/crm/access')).toBe(false)
+  })
+})

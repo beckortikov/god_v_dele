@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getActor, logAudit } from '@/lib/audit'
 import { getSession } from '@/lib/session'
+import { crmColumnMissing } from '@/lib/crm-access'
 import { changeSuffix, rowMoney, roundMoneyFields } from '@/lib/audit-labels'
 import { eventName, participantName } from '@/app/api/audit/_server'
 import {
@@ -66,10 +67,17 @@ export interface Staff {
   name: string
 }
 
+/** Staff who can be a hunter: admin, and others with «Доступ к CRM» (all staff before migration 028). */
 export async function loadStaff(): Promise<Staff[]> {
-  const { data, error } = await db.from('app_users').select('id, full_name, username, role').in('role', STAFF_ROLES)
-  if (error) throw error
-  return (data as Row[])
+  let res = await db.from('app_users').select('id, full_name, username, role, crm_access').in('role', STAFF_ROLES)
+  let withAccess = true
+  if (crmColumnMissing(res.error)) {
+    res = await db.from('app_users').select('id, full_name, username, role').in('role', STAFF_ROLES)
+    withAccess = false
+  }
+  if (res.error) throw res.error
+  return (res.data as Row[])
+    .filter(u => !withAccess || u.role === 'admin' || u.crm_access === true)
     .map(u => ({ id: u.id as string, name: (u.full_name || u.username || 'Без имени') as string }))
     .sort((a, b) => a.name.localeCompare(b.name, 'ru'))
 }

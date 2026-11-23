@@ -1,3 +1,4 @@
+import { crmGuard } from '@/lib/crm-access'
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { FUNNEL_STAGES, type FunnelStage } from '@/lib/event-funnel'
@@ -7,7 +8,9 @@ import { guarded } from '@/lib/event-funnel-server'
  * Events to call people for («Обзвон»): name, date, place and how many people are on each
  * funnel stage. No money: employees and managers use this page, not the event budget.
  */
-export async function GET() {
+export async function GET(req: Request) {
+    const denied = await crmGuard(req)
+    if (denied) return denied
     return guarded('loading call events', async () => {
         const { data: events, error } = await db
             .from('offline_events')

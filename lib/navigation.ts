@@ -29,6 +29,8 @@ import {
   CalendarRange,
   ClipboardList,
   PhoneCall,
+  Filter,
+  Headset,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -38,7 +40,7 @@ export type PageType =
   | 'hr-dashboard' | 'employees' | 'schedule' | 'payroll' | 'vacations' | 'timesheet'
   | 'users' | 'employee-dashboard' | 'manager-dashboard'
   | 'analytics' | 'audit' | 'my-payments'
-  | 'sprints' | 'plans' | 'my-sprint' | 'my-plan' | 'my-today' | 'my-profile' | 'lessons' | 'calls'
+  | 'sprints' | 'plans' | 'my-sprint' | 'my-plan' | 'my-today' | 'my-profile' | 'lessons' | 'calls' | 'funnel'
 
 export type UserRole = 'admin' | 'finance' | 'employee' | 'manager' | 'wheels_manager' | 'participant'
 
@@ -88,12 +90,14 @@ export const PAGES: Record<PageType, NavPage> = {
   'my-profile': { id: 'my-profile', label: 'Мой профиль', title: 'Мой профиль', description: 'Личные данные, фото паспорта, бизнес и динамика по годам', icon: UserRound },
   'my-sprint': { id: 'my-sprint', label: 'Мой спринт', title: 'Мой спринт', description: 'Задачи спринта и отчёты куратору', icon: Flag },
   calls: { id: 'calls', label: 'Обзвон', title: 'Обзвон', description: 'Кого пригласить на мероприятие: этапы, комментарии и кто что отметил', icon: PhoneCall },
+  funnel: { id: 'funnel', label: 'Воронка', title: 'Воронка', description: 'Сколько людей дошло до каждого этапа: по мероприятиям и хантерам', icon: Filter },
   'my-plan': { id: 'my-plan', label: 'Мой план', title: 'Операционный план', description: 'Видение, направления, микро-цели и действия со сроками и ценой слова', icon: ClipboardList },
 }
 
 const S = {
   home: { id: 'home', label: 'Главное', icon: LayoutDashboard, pages: ['dashboard'] },
-  people: { id: 'people', label: 'Участники', icon: Users, pages: ['participants', 'programs', 'sprints', 'plans', 'lessons', 'calls'] },
+  people: { id: 'people', label: 'Участники', icon: Users, pages: ['participants', 'programs', 'sprints', 'plans', 'lessons'] },
+  crm: { id: 'crm', label: 'CRM', icon: Headset, pages: ['calls', 'funnel'] },
   finance: { id: 'finance', label: 'Финансы', icon: ArrowLeftRight, pages: ['income', 'plan-fact', 'balance', 'offline'] },
   reports: { id: 'reports', label: 'Отчёты', icon: FileSpreadsheet, pages: ['opiu-reports', 'analytics'] },
   wheels: { id: 'wheels', label: 'Колёса баланса', icon: Compass, pages: ['life-wheel', 'life-balance', 'business-wheel'] },
@@ -101,22 +105,24 @@ const S = {
   admin: { id: 'admin', label: 'Администрирование', icon: ShieldCheck, pages: ['users', 'audit'] },
 } satisfies Record<string, NavSection>
 
-export function getSections(role: UserRole): NavSection[] {
+/** `crm`: the user has «Доступ к CRM» (admin always does). */
+export function getSections(role: UserRole, crm = false): NavSection[] {
+  const withCrm = (sections: NavSection[]) => (crm || role === 'admin' ? [...sections, S.crm] : sections)
   switch (role) {
     case 'admin':
-      return [S.home, S.people, S.finance, S.reports, S.wheels, S.hr, S.admin]
+      return [S.home, S.people, S.crm, S.finance, S.reports, S.wheels, S.hr, S.admin]
     case 'finance':
-      return [S.home, { ...S.people, pages: ['participants', 'programs', 'calls'] }, S.finance, S.reports, S.wheels]
+      return withCrm([S.home, { ...S.people, pages: ['participants', 'programs'] }, S.finance, S.reports, S.wheels])
     case 'wheels_manager':
-      return [S.wheels, { ...S.people, pages: ['participants', 'sprints', 'plans', 'lessons', 'calls'] }]
+      return withCrm([S.wheels, { ...S.people, pages: ['participants', 'sprints', 'plans', 'lessons'] }])
     case 'manager':
-      return [
-        { id: 'cabinet', label: 'Кабинет', icon: UserCircle2, pages: ['employee-dashboard', 'manager-dashboard', 'calls'] },
+      return withCrm([
+        { id: 'cabinet', label: 'Кабинет', icon: UserCircle2, pages: ['employee-dashboard', 'manager-dashboard'] },
         { ...S.people, pages: ['sprints', 'plans', 'lessons'] },
         S.wheels,
-      ]
+      ])
     case 'employee':
-      return [{ id: 'cabinet', label: 'Кабинет', icon: UserCircle2, pages: ['employee-dashboard', 'calls'] }, S.wheels]
+      return withCrm([{ id: 'cabinet', label: 'Кабинет', icon: UserCircle2, pages: ['employee-dashboard'] }, S.wheels])
     case 'participant':
       return [{ id: 'cabinet', label: 'Кабинет', icon: UserCircle2, pages: ['my-today', 'my-sprint', 'my-plan', ...(PARTICIPANT_PAYMENTS_VISIBLE ? (['my-payments'] as PageType[]) : []), 'my-profile'] }, S.wheels]
   }
@@ -136,8 +142,8 @@ export function getDefaultPage(role: UserRole): PageType {
   }
 }
 
-export function getAllowedPages(role: UserRole): PageType[] {
-  return getSections(role).flatMap(s => s.pages)
+export function getAllowedPages(role: UserRole, crm = false): PageType[] {
+  return getSections(role, crm).flatMap(s => s.pages)
 }
 
 export function findSection(sections: NavSection[], page: PageType) {
@@ -146,11 +152,11 @@ export function findSection(sections: NavSection[], page: PageType) {
 
 /** What each role can reach; shown wherever an administrator picks a role. */
 export const ROLE_DESCRIPTIONS: Record<UserRole, string> = {
-  admin: 'Полный доступ: финансы, участники, персонал и пользователи',
-  manager: 'Свой кабинет, задачи сотрудников, обзвон участников, спринты и планы участников, заявки на отгул, колёса баланса',
+  admin: 'Полный доступ: финансы, участники, CRM, персонал и пользователи',
+  manager: 'Свой кабинет, задачи сотрудников, спринты и планы участников, заявки на отгул, колёса баланса',
   finance: 'Участники, финансы, отчёты и колёса баланса. Без раздела «Персонал»',
-  wheels_manager: 'Колёса баланса, участники, их профили, спринты, планы и обзвон',
-  employee: 'Свой кабинет: задачи, учёт времени, заявки на отгул, обзвон участников; колёса баланса',
+  wheels_manager: 'Колёса баланса, участники, их профили, спринты и планы',
+  employee: 'Свой кабинет: задачи, учёт времени, заявки на отгул; колёса баланса',
   participant: 'Свой кабинет: сегодня, спринт, операционный план, оплаты, профиль и колёса баланса',
 }
 

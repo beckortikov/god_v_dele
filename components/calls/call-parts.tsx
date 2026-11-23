@@ -1,8 +1,7 @@
 'use client'
 
 import * as React from 'react'
-import { toast } from 'sonner'
-import { CalendarClock, Check, ChevronDown, ChevronUp, MessageSquare, Phone, SendHorizontal, UserCheck, UserPlus } from 'lucide-react'
+import { CalendarClock, Check, Phone, UserCheck, UserPlus } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatDate } from '@/lib/format'
 import { Badge } from '@/components/ui/badge'
@@ -10,11 +9,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger } from '@/components/ui/select'
-import { Initials } from '@/components/events/parts'
-import { MarkedBy } from '@/components/events/funnel-parts'
-import { AttendeeComments, commentTime, postComment } from '@/components/events/attendee-comments'
 import { attendeeContact, attendeeName, telHref, type Attendee } from '@/components/events/types'
-import { COMMENT_MAX, FUNNEL, contactDue, type FunnelStage, type FunnelVariant } from '@/lib/event-funnel'
+import { FUNNEL, contactDue, type FunnelStage, type FunnelVariant } from '@/lib/event-funnel'
 
 export interface StaffMember {
   id: string
@@ -204,144 +200,6 @@ export function PhoneLink({ a, className }: { a: Attendee; className?: string })
     </a>
   ) : (
     <span className={cn('num text-sm text-muted-foreground', className)}>{contact}</span>
-  )
-}
-
-/**
- * One person in the call list: how to call them, who is their hunter, the funnel as steps,
- * when to call back, the newest note, a comment box right there (Enter saves) and the full
- * history unfolding in place.
- */
-export function CallCard({
-  a,
-  base,
-  staff,
-  me,
-  today,
-  onPatch,
-  onNoted,
-}: {
-  a: Attendee
-  base: string
-  staff: StaffMember[]
-  me: string | null
-  today: string
-  onPatch: (a: Attendee, patch: AttendeePatch) => void
-  onNoted: () => void
-}) {
-  const name = attendeeName(a)
-  const stage = (a.funnel_stage || 'new') as FunnelStage
-  const [text, setText] = React.useState('')
-  const [sending, setSending] = React.useState(false)
-  const [open, setOpen] = React.useState(false)
-  const [reloadKey, setReloadKey] = React.useState(0)
-  const count = a.comments_count ?? 0
-
-  const send = async () => {
-    const t = text.trim()
-    if (!t || sending) return
-    setSending(true)
-    try {
-      await postComment(base, t)
-      setText('')
-      setReloadKey(k => k + 1)
-      onNoted()
-    } catch (err: any) {
-      toast.error('Не удалось сохранить комментарий', { description: err.message })
-    } finally {
-      setSending(false)
-    }
-  }
-
-  const changeStage = (s: FunnelStage) => {
-    const patch: AttendeePatch = { funnel_stage: s }
-    // nothing to chase after «Оплатил» / «Не поедет»; no answer → try again tomorrow
-    if ((s === 'paid' || s === 'declined') && a.next_contact_on) patch.next_contact_on = null
-    if (s === 'no_answer' && !a.next_contact_on) patch.next_contact_on = addDaysISO(today, 1)
-    onPatch(a, patch)
-  }
-
-  return (
-    <article className="rounded-xl border bg-card px-3 py-3 sm:px-4">
-      <div className="flex items-start gap-3">
-        <Initials name={name} guest={a.attendee_type === 'guest'} />
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-x-2">
-            <h3 className="truncate font-medium">{name}</h3>
-            {a.attendee_type === 'guest' && (
-              <Badge variant="info" className="px-1 py-0 text-[11px]">
-                гость
-              </Badge>
-            )}
-          </div>
-          <PhoneLink a={a} />
-        </div>
-        <HunterPicker value={a.hunter_id} staff={staff} me={me} onChange={id => onPatch(a, { hunter_id: id })} compact />
-      </div>
-
-      <div className="mt-2">
-        <StageStepper value={stage} onChange={changeStage} name={name} />
-      </div>
-      <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
-        {stage !== 'paid' && stage !== 'declined' && (
-          <CallbackPicker value={a.next_contact_on} today={today} onChange={d => onPatch(a, { next_contact_on: d })} />
-        )}
-        <MarkedBy a={a} className="text-xs" />
-        <Button
-          type="button"
-          size="sm"
-          variant="ghost"
-          className="ml-auto h-7 px-2 text-xs text-muted-foreground"
-          onClick={() => setOpen(o => !o)}
-          aria-expanded={open}
-        >
-          История{count > 0 && <span className="num">&nbsp;{count}</span>}
-          {open ? <ChevronUp /> : <ChevronDown />}
-        </Button>
-      </div>
-
-      {a.last_comment && !open && (
-        <button
-          type="button"
-          onClick={() => setOpen(true)}
-          className="mt-2 block w-full rounded-md bg-muted/60 px-2.5 py-1.5 text-left transition-colors hover:bg-muted"
-        >
-          <p className="line-clamp-3 text-sm whitespace-pre-line text-foreground/90">{a.last_comment.body}</p>
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            {a.last_comment.author_name || 'Без имени'} · <span className="num">{commentTime(a.last_comment.created_at)}</span>
-          </p>
-        </button>
-      )}
-
-      <form
-        className="mt-2 flex items-center gap-1.5"
-        onSubmit={e => {
-          e.preventDefault()
-          send()
-        }}
-      >
-        <div className="relative min-w-0 flex-1">
-          <MessageSquare className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={text}
-            onChange={e => setText(e.target.value)}
-            maxLength={COMMENT_MAX}
-            placeholder="Что сказал… Enter — сохранить"
-            aria-label={`Комментарий: ${name}`}
-            className="h-9 pl-8"
-          />
-        </div>
-        <Button type="submit" size="icon" variant={text.trim() ? 'default' : 'outline'} disabled={!text.trim() || sending} aria-label="Сохранить комментарий" className="size-9 shrink-0">
-          <SendHorizontal />
-        </Button>
-      </form>
-
-      {open && (
-        <div className="mt-2 border-t pt-2">
-          <AttendeeComments base={base} composer={false} reloadKey={reloadKey} onChanged={onNoted} />
-        </div>
-      )}
-    </article>
   )
 }
 

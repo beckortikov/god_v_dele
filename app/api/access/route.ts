@@ -86,6 +86,35 @@ export async function POST(req: Request) {
   }
 }
 
+/** PATCH { employee_id, crm_access } → the «Доступ к CRM» tick on an employee's sign-in. Admin only (see target). */
+export async function PATCH(req: Request) {
+  try {
+    const body = await req.json()
+    const t = target(req, body)
+    if (t.kind !== 'employee') throw new AccountError('Доступ к CRM выдаётся только сотрудникам')
+    if (typeof body.crm_access !== 'boolean') throw new AccountError('crm_access: true или false')
+    const account = await accountOf(t.kind, t.id)
+    if (!account) throw new AccountError('Сначала создайте сотруднику вход', 404)
+    const before = await fetchRow('app_users', account.id)
+    const { error } = await db.from('app_users').update({ crm_access: body.crm_access }).eq('id', account.id)
+    if (error) {
+      if (error.code === '42703' || /crm_access/.test(error.message)) throw new AccountError('Сначала примените миграцию migrations/028_crm_access.sql', 409)
+      throw new Error(error.message)
+    }
+    await logAudit(req, {
+      table: 'app_users',
+      recordId: account.id,
+      action: 'update',
+      summary: `Пользователь «${account.username}»: доступ к CRM ${body.crm_access ? 'выдан' : 'снят'}`,
+      before: stripSecrets(before),
+      after: stripSecrets({ ...before, crm_access: body.crm_access }),
+    })
+    return NextResponse.json({ data: { id: account.id, crm_access: body.crm_access } })
+  } catch (e) {
+    return fail(e)
+  }
+}
+
 /** PUT { employee_id | participant_id, password } → a new password for the existing sign-in. */
 export async function PUT(req: Request) {
   try {

@@ -14,7 +14,7 @@ import {
 const ROLES: UserRole[] = ['admin', 'finance', 'employee', 'manager', 'wheels_manager', 'participant']
 
 const EXPECTED_SECTIONS: Record<UserRole, string[]> = {
-  admin: ['home', 'people', 'finance', 'reports', 'wheels', 'hr', 'admin'],
+  admin: ['home', 'people', 'crm', 'finance', 'reports', 'wheels', 'hr', 'admin'],
   finance: ['home', 'people', 'finance', 'reports', 'wheels'],
   wheels_manager: ['wheels', 'people'],
   manager: ['cabinet', 'people', 'wheels'],
@@ -43,16 +43,26 @@ describe('getSections', () => {
 
   it('people section depends on the role', () => {
     const people = (r: UserRole) => getSections(r).find(s => s.id === 'people')?.pages
-    expect(people('admin')).toEqual(['participants', 'programs', 'sprints', 'plans', 'lessons', 'calls'])
-    expect(people('finance')).toEqual(['participants', 'programs', 'calls'])
-    expect(people('wheels_manager')).toEqual(['participants', 'sprints', 'plans', 'lessons', 'calls'])
+    expect(people('admin')).toEqual(['participants', 'programs', 'sprints', 'plans', 'lessons'])
+    expect(people('finance')).toEqual(['participants', 'programs'])
+    expect(people('wheels_manager')).toEqual(['participants', 'sprints', 'plans', 'lessons'])
     expect(people('manager')).toEqual(['sprints', 'plans', 'lessons'])
+  })
+
+  it('the CRM section comes with «Доступ к CRM»: always for admin, never for participants', () => {
+    const crm = (r: UserRole, on: boolean) => getSections(r, on).find(s => s.id === 'crm')?.pages
+    expect(crm('admin', false)).toEqual(['calls', 'funnel'])
+    for (const r of ['finance', 'manager', 'employee', 'wheels_manager'] as UserRole[]) {
+      expect(crm(r, false)).toBeUndefined()
+      expect(crm(r, true)).toEqual(['calls', 'funnel'])
+    }
+    expect(crm('participant', true)).toBeUndefined()
   })
 
   it('cabinet section depends on the role', () => {
     const cabinet = (r: UserRole) => getSections(r).find(s => s.id === 'cabinet')?.pages
-    expect(cabinet('manager')).toEqual(['employee-dashboard', 'manager-dashboard', 'calls'])
-    expect(cabinet('employee')).toEqual(['employee-dashboard', 'calls'])
+    expect(cabinet('manager')).toEqual(['employee-dashboard', 'manager-dashboard'])
+    expect(cabinet('employee')).toEqual(['employee-dashboard'])
     expect(cabinet('participant')).toEqual(['my-today', 'my-sprint', 'my-plan', ...(PARTICIPANT_PAYMENTS_VISIBLE ? ['my-payments'] : []), 'my-profile'])
   })
 })
@@ -77,7 +87,7 @@ describe('getAllowedPages', () => {
   })
 
   it('every page is reachable by at least one role', () => {
-    const all = new Set(ROLES.flatMap(getAllowedPages))
+    const all = new Set(ROLES.flatMap(r => getAllowedPages(r)))
     // «Мои оплаты» is parked behind the flag
     for (const id of Object.keys(PAGES)) expect(all.has(id as PageType) || (id === 'my-payments' && !PARTICIPANT_PAYMENTS_VISIBLE)).toBe(true)
   })

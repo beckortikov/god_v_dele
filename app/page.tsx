@@ -18,7 +18,8 @@ const Dashboard = dynamic(() => import('@/components/dashboard').then(m => m.Das
 const ParticipantsPage = dynamic(() => import('@/components/participants-page').then(m => m.ParticipantsPage), { loading: PageSpinner })
 const IncomeExpensesPage = dynamic(() => import('@/components/income-expenses-page').then(m => m.IncomeExpensesPage), { loading: PageSpinner })
 const PlanFactPage = dynamic(() => import('@/components/plan-fact-page').then(m => m.PlanFactPage), { loading: PageSpinner })
-const CallsPage = dynamic(() => import('@/components/calls/calls-page').then(m => m.CallsPage), { loading: PageSpinner })
+const CallsPage = dynamic(() => import('@/components/crm/calls-page').then(m => m.CallsPage), { loading: PageSpinner })
+const FunnelPage = dynamic(() => import('@/components/crm/funnel-page').then(m => m.FunnelPage), { loading: PageSpinner })
 const OfflineEventsPage = dynamic(() => import('@/components/offline-events-page').then(m => m.OfflineEventsPage), { loading: PageSpinner })
 const BalanceForecastPage = dynamic(() => import('@/components/balance-forecast-page').then(m => m.BalanceForecastPage), { loading: PageSpinner })
 const ProgramsPage = dynamic(() => import('@/components/programs-page').then(m => m.ProgramsPage), { loading: PageSpinner })
@@ -110,15 +111,50 @@ export default function Home() {
   return <AuthedApp session={session} onLogout={handleLogout} />
 }
 
+const CRM_KEY = 'crmAccess'
+
+/** «Доступ к CRM» for the menu: remembered from the last visit, then checked with the server. null while unknown. */
+function useCrmAccess(role: UserRole): boolean | null {
+  const [crm, setCrm] = useState<boolean | null>(() => {
+    if (role === 'admin') return true
+    if (role === 'participant') return false
+    try {
+      const v = localStorage.getItem(CRM_KEY)
+      return v === null ? null : v === 'true'
+    } catch {
+      return null
+    }
+  })
+  useEffect(() => {
+    if (role === 'admin' || role === 'participant') return
+    fetch('/api/crm/access')
+      .then(r => r.json())
+      .then(b => {
+        setCrm(!!b.access)
+        try {
+          localStorage.setItem(CRM_KEY, String(!!b.access))
+        } catch {}
+      })
+      .catch(() => setCrm(c => c ?? false))
+  }, [role])
+  return crm
+}
+
 function AuthedApp({ session, onLogout }: { session: SessionUser; onLogout: () => void }) {
-  const allowedPages = useMemo(() => getAllowedPages(session.role), [session.role])
+  const crmKnown = useCrmAccess(session.role)
+  const crm = !!crmKnown
+  const allowedPages = useMemo(() => getAllowedPages(session.role, crm), [session.role, crm])
   // iOS app: the splash goes once the cabinet shell is on screen, not before (no blank loader in between)
-  useEffect(() => hideNativeSplash(), [])
+  useEffect(() => {
+    if (crmKnown !== null) hideNativeSplash()
+  }, [crmKnown])
+  // Wait for the first answer so that a link to a CRM page is not thrown back to the start page
+  if (crmKnown === null) return <ScreenSpinner />
   return (
     <NavProvider allowedPages={allowedPages} defaultPage={getDefaultPage(session.role)}>
       <TooltipProvider>
         <ConfirmProvider>
-          <AppShell role={session.role} userName={session.fullName} participantId={session.participantId} onLogout={onLogout}>
+          <AppShell role={session.role} crm={crm} userName={session.fullName} participantId={session.participantId} onLogout={onLogout}>
             <PageBoundary>
               <PageRouter session={session} />
             </PageBoundary>
@@ -153,6 +189,7 @@ function PageRouter({ session }: { session: SessionUser }) {
     case 'plan-fact': return <PlanFactPage />
     case 'offline': return <OfflineEventsPage />
     case 'calls': return <CallsPage />
+    case 'funnel': return <FunnelPage />
     case 'balance': return <BalanceForecastPage />
     case 'life-wheel': return <LifeWheelPage {...selfView} />
     case 'life-balance': return <LifeBalancePage {...selfView} />

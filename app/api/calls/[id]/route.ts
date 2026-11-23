@@ -1,3 +1,4 @@
+import { crmGuard } from '@/lib/crm-access'
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { callerId, guarded, loadFunnel } from '@/lib/event-funnel-server'
@@ -5,6 +6,8 @@ import { callerId, guarded, loadFunnel } from '@/lib/event-funnel-server'
 /** One event for calling: the people, their contacts, stage, callback date and notes. No money. */
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
     const { id } = await params
+    const denied = await crmGuard(req)
+    if (denied) return denied
     return guarded('loading call list', async () => {
         const { data: event, error } = await db.from('offline_events').select('id, name, event_date, location, status').eq('id', id).maybeSingle()
         if (error) throw error

@@ -193,6 +193,20 @@ describe('/api/calls (employees, no money)', () => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
     fake.rows('offline_events').push({ id: EV, name: 'Мастермайнд', event_date: '2026-12-12', status: 'planned' })
     fake.rows('event_attendees').push({ id: ALI, event_id: EV, attendee_type: 'guest', guest_name: 'Гость', guest_phone: '+992900000000', payment_received: 500, payment_notes: 'наличные', funnel_stage: 'new', created_at: '2026-11-01T00:00:00Z' })
+    fake.rows('app_users').push(
+      { id: 'u-Анвар', full_name: 'Анвар', role: 'employee', crm_access: true },
+      { id: 'u-Финансист', full_name: 'Финансист', role: 'finance', crm_access: true },
+      { id: 'u-Без', full_name: 'Без доступа', role: 'employee', crm_access: false }
+    )
+  })
+
+  it('needs «Доступ к CRM»: refused without the tick, admin always passes', async () => {
+    const p = ctx({ id: EV, attendeeId: ALI })
+    expect((await callList(req('GET', '/x', undefined, ['employee', 'Без']), ctx({ id: EV }))).status).toBe(403)
+    expect((await callPatch(req('PATCH', '/x', { funnel_stage: 'going' }, ['employee', 'Без']), p)).status).toBe(403)
+    expect((await callPatch(req('PATCH', '/x', { funnel_stage: 'going' }, ['participant', 'Анвар']), p)).status).toBe(403)
+    expect(fake.rows('event_attendees')[0].funnel_stage).toBe('new')
+    expect((await callList(req('GET', '/x', undefined, ['admin', 'Админ']), ctx({ id: EV }))).status).toBe(200)
   })
 
   it('changes only the stage and the callback date, and records who did it', async () => {
@@ -216,12 +230,14 @@ describe('/api/calls (employees, no money)', () => {
 
   it('sets a hunter from the staff only and records the change', async () => {
     fake.rows('app_users').push(
-      { id: 'u-nasiba', full_name: 'Насиба', role: 'wheels_manager' },
-      { id: 'u-shabo', full_name: 'Шабо', role: 'employee' },
+      { id: 'u-nasiba', full_name: 'Насиба', role: 'wheels_manager', crm_access: true },
+      { id: 'u-shabo', full_name: 'Шабо', role: 'employee', crm_access: true },
       { id: 'u-part', full_name: 'Участник', role: 'participant' }
     )
     const p = ctx({ id: EV, attendeeId: ALI })
     expect((await callPatch(req('PATCH', '/x', { hunter_id: 'u-part' }, ['employee', 'Анвар']), p)).status).toBe(400)
+    // a hunter must have «Доступ к CRM»
+    expect((await callPatch(req('PATCH', '/x', { hunter_id: 'u-Без' }, ['employee', 'Анвар']), p)).status).toBe(400)
     expect((await callPatch(req('PATCH', '/x', { hunter_id: 'u-nasiba' }, ['employee', 'Анвар']), p)).status).toBe(200)
     await callPatch(req('PATCH', '/x', { hunter_id: 'u-shabo' }, ['employee', 'Анвар']), p)
     await callPatch(req('PATCH', '/x', { hunter_id: null }, ['employee', 'Анвар']), p)
@@ -235,7 +251,7 @@ describe('/api/calls (employees, no money)', () => {
     await callPatch(req('PATCH', '/x', { hunter_id: 'u-nasiba' }, ['employee', 'Анвар']), p)
     const list = (await json(await callList(req('GET', '/x', undefined, ['employee', 'Анвар']), ctx({ id: EV })))).body
     expect(list.data[0]).toMatchObject({ hunter_id: 'u-nasiba', hunter_name: 'Насиба' })
-    expect(list.staff.map((s: { name: string }) => s.name)).toEqual(['Насиба', 'Шабо'])
+    expect(list.staff.map((s: { name: string }) => s.name)).toEqual(['Анвар', 'Насиба', 'Финансист', 'Шабо'])
     expect(list.me).toBe('u-Анвар')
   })
 })

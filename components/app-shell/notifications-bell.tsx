@@ -164,12 +164,12 @@ function useReadState(role: UserRole) {
   return { read, markRead }
 }
 
-export function NotificationsBell({ role }: { role: UserRole }) {
+export function NotificationsBell({ role, crm = false }: { role: UserRole; crm?: boolean }) {
   const { navigate } = useNav()
   const [open, setOpen] = React.useState(false)
   const { items, error, refreshing, reload, refreshIfStale } = useNotifications(role)
   const { read, markRead } = useReadState(role)
-  const allowed = React.useMemo(() => new Set<string>(getAllowedPages(role)), [role])
+  const allowed = React.useMemo(() => new Set<string>(getAllowedPages(role, crm)), [role, crm])
 
   const list = items ?? []
   const unread = list.filter(n => !read.has(n.key))
