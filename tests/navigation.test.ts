@@ -51,10 +51,10 @@ describe('getSections', () => {
 
   it('the CRM section comes with «Доступ к CRM»: always for admin, never for participants', () => {
     const crm = (r: UserRole, on: boolean) => getSections(r, on).find(s => s.id === 'crm')?.pages
-    expect(crm('admin', false)).toEqual(['calls', 'funnel'])
+    expect(crm('admin', false)).toEqual(['instagram', 'calls', 'funnel'])
     for (const r of ['finance', 'manager', 'employee', 'wheels_manager'] as UserRole[]) {
       expect(crm(r, false)).toBeUndefined()
-      expect(crm(r, true)).toEqual(['calls', 'funnel'])
+      expect(crm(r, true)).toEqual(['instagram', 'calls', 'funnel'])
     }
     expect(crm('participant', true)).toBeUndefined()
   })

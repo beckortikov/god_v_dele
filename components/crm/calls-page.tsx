@@ -4,7 +4,7 @@ import * as React from 'react'
 import { toast } from 'sonner'
 import { ArrowLeft, ArrowRight, BarChart3, CalendarDays, Columns3, List, Phone, PhoneCall, SearchX, SendHorizontal, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { formatDate, formatNumber, plural, todayISO } from '@/lib/format'
+import { formatDate, formatNumber, todayISO } from '@/lib/format'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -267,7 +267,6 @@ export function CallsPage() {
     const i = flat.findIndex(a => a.id === current.id)
     setSelectedId(flat[(i + 1) % flat.length].id)
   }
-  const currentEvent = events?.find(e => e.id === eventId)
 
   const loading = events === null || (eventId && rows === null)
   const nothing = !loading && (!events?.length || !all.length)
@@ -278,20 +277,9 @@ export function CallsPage() {
       <div className="flex flex-wrap items-center gap-2 border-b bg-card px-3 py-2.5 sm:px-4">
         {events && events.length > 0 && (
           <Select value={eventId ?? undefined} onValueChange={chooseEvent}>
-            <SelectTrigger className="h-11 min-w-0 max-w-full gap-2.5 rounded-xl px-2.5 sm:min-w-72" aria-label="Мероприятие">
-              <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-primary-soft text-primary-soft-foreground">
-                <CalendarDays className="size-4" />
-              </span>
-              <span className="flex min-w-0 flex-col items-start text-left">
-                <span className="truncate text-sm font-semibold">{currentEvent?.name ?? 'Мероприятие'}</span>
-                {currentEvent && (
-                  <span className="num truncate text-xs text-muted-foreground">
-                    {formatDate(currentEvent.event_date)}
-                    {currentEvent.location ? ` · ${currentEvent.location}` : ''} · {formatNumber(all.length)} {plural(all.length, ['человек', 'человека', 'человек'])}
-                  </span>
-                )}
-              </span>
-              <SelectValue className="sr-only" />
+            <SelectTrigger className="h-10 w-full min-w-0 gap-2 font-semibold sm:w-auto sm:min-w-72 [&>span]:truncate" aria-label="Мероприятие">
+              <CalendarDays className="size-4 text-muted-foreground" />
+              <SelectValue placeholder="Мероприятие" />
             </SelectTrigger>
             <SelectContent align="start">
               {events.map(e => (
@@ -305,7 +293,7 @@ export function CallsPage() {
             </SelectContent>
           </Select>
         )}
-        <SearchInput value={query} onChange={v => { setQuery(v); setSelectedId(null) }} placeholder="Имя, телефон или комментарий" className="min-w-0 flex-1 sm:max-w-80" />
+        <SearchInput value={query} onChange={v => { setQuery(v); setSelectedId(null) }} placeholder="Имя, телефон или комментарий" className="min-w-0 flex-[1_1_12rem] sm:max-w-80" />
         <div className="ml-auto flex items-center gap-2">
           <Segmented
             aria-label="Вид"

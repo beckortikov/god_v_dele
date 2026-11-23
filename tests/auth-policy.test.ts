@@ -286,11 +286,13 @@ describe('/api/calls («Обзвон»)', () => {
 })
 
 describe('/api/crm', () => {
-  it('lets staff read (each route then checks «Доступ к CRM»), not participants; nothing to write yet', () => {
+  it('lets staff in (each route then checks «Доступ к CRM»), not participants', () => {
     for (const role of ['finance', 'manager', 'employee', 'wheels_manager'] as Role[]) {
       expect(allowed(role, 'GET', '/api/crm/funnel')).toBe(true)
-      expect(allowed(role, 'POST', '/api/crm/funnel')).toBe(false)
+      expect(allowed(role, 'POST', '/api/crm/instagram/conversations/c1/messages')).toBe(true)
     }
+    expect(allowed('participant', 'POST', '/api/crm/instagram/conversations/c1/messages')).toBe(false)
+    expect(allowed(null, 'GET', '/api/instagram/callback')).toBe(false)
     expect(allowed('participant', 'GET', '/api/crm/access')).toBe(false)
   })
 })

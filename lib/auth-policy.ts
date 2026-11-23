@@ -18,7 +18,7 @@ export type Decision = { ok: true } | { ok: false; status: 401 | 403; error: str
 type Principal = Pick<Session, 'uid' | 'role' | 'eid' | 'pid'>
 
 /** Reachable without a session. The Telegram webhook checks its own secret header; the Telegram sign-in checks its one-time secret. */
-export const PUBLIC_PATHS = ['/api/auth/login', '/api/auth/logout', '/api/auth/telegram', '/api/telegram/webhook', '/api/instagram/callback']
+export const PUBLIC_PATHS = ['/api/auth/login', '/api/auth/logout', '/api/auth/telegram', '/api/telegram/webhook']
 
 /** Shared «базовый шаблон» of the wheels (same id as TEMPLATE_ID in components/wheels/shared.ts): everyone reads it to start from, only admin and wheels_manager change it. */
 export const WHEEL_TEMPLATE_ID = '00000000-0000-0000-0000-000000000000'
@@ -115,7 +115,7 @@ const RULES: Rule[] = [
   financeOnly('/api/offline-events'),
   // CRM («Обзвон», «Воронка»): open to staff here; each route also needs «Доступ к CRM» (lib/crm-access.ts)
   { prefix: '/api/calls', read: ['finance', 'manager', 'employee', 'wheels_manager'], write: ['finance', 'manager', 'employee', 'wheels_manager'] },
-  { prefix: '/api/crm', read: ['finance', 'manager', 'employee', 'wheels_manager'], write: NONE },
+  { prefix: '/api/crm', read: ['finance', 'manager', 'employee', 'wheels_manager'], write: ['finance', 'manager', 'employee', 'wheels_manager'] },
 
   { prefix: '/api/search', read: ['finance', 'wheels_manager'], write: NONE, scope: { kind: 'own-role' } },
   { prefix: '/api/notifications', read: ALL, write: NONE, scope: { kind: 'own-role' } },

@@ -30,6 +30,7 @@ import {
   ClipboardList,
   PhoneCall,
   Filter,
+  Instagram,
   Headset,
   type LucideIcon,
 } from 'lucide-react'
@@ -40,7 +41,7 @@ export type PageType =
   | 'hr-dashboard' | 'employees' | 'schedule' | 'payroll' | 'vacations' | 'timesheet'
   | 'users' | 'employee-dashboard' | 'manager-dashboard'
   | 'analytics' | 'audit' | 'my-payments'
-  | 'sprints' | 'plans' | 'my-sprint' | 'my-plan' | 'my-today' | 'my-profile' | 'lessons' | 'calls' | 'funnel'
+  | 'sprints' | 'plans' | 'my-sprint' | 'my-plan' | 'my-today' | 'my-profile' | 'lessons' | 'calls' | 'funnel' | 'instagram'
 
 export type UserRole = 'admin' | 'finance' | 'employee' | 'manager' | 'wheels_manager' | 'participant'
 
@@ -90,6 +91,7 @@ export const PAGES: Record<PageType, NavPage> = {
   'my-profile': { id: 'my-profile', label: 'Мой профиль', title: 'Мой профиль', description: 'Личные данные, фото паспорта, бизнес и динамика по годам', icon: UserRound },
   'my-sprint': { id: 'my-sprint', label: 'Мой спринт', title: 'Мой спринт', description: 'Задачи спринта и отчёты куратору', icon: Flag },
   calls: { id: 'calls', label: 'Обзвон', title: 'Обзвон', description: 'Кого пригласить на мероприятие: этапы, комментарии и кто что отметил', icon: PhoneCall },
+  instagram: { id: 'instagram', label: 'Instagram', title: 'Instagram', description: 'Директ и комментарии @god_v_dele: ответы, этапы и «Завести в базу»', icon: Instagram },
   funnel: { id: 'funnel', label: 'Воронка', title: 'Воронка', description: 'Сколько людей дошло до каждого этапа: по мероприятиям и хантерам', icon: Filter },
   'my-plan': { id: 'my-plan', label: 'Мой план', title: 'Операционный план', description: 'Видение, направления, микро-цели и действия со сроками и ценой слова', icon: ClipboardList },
 }
@@ -97,7 +99,7 @@ export const PAGES: Record<PageType, NavPage> = {
 const S = {
   home: { id: 'home', label: 'Главное', icon: LayoutDashboard, pages: ['dashboard'] },
   people: { id: 'people', label: 'Участники', icon: Users, pages: ['participants', 'programs', 'sprints', 'plans', 'lessons'] },
-  crm: { id: 'crm', label: 'CRM', icon: Headset, pages: ['calls', 'funnel'] },
+  crm: { id: 'crm', label: 'CRM', icon: Headset, pages: ['instagram', 'calls', 'funnel'] },
   finance: { id: 'finance', label: 'Финансы', icon: ArrowLeftRight, pages: ['income', 'plan-fact', 'balance', 'offline'] },
   reports: { id: 'reports', label: 'Отчёты', icon: FileSpreadsheet, pages: ['opiu-reports', 'analytics'] },
   wheels: { id: 'wheels', label: 'Колёса баланса', icon: Compass, pages: ['life-wheel', 'life-balance', 'business-wheel'] },
@@ -141,6 +143,9 @@ export function getDefaultPage(role: UserRole): PageType {
       return 'dashboard'
   }
 }
+
+/** CRM pages open full screen with their own side menu instead of the app header. */
+export const CRM_PAGES: PageType[] = ['instagram', 'calls', 'funnel']
 
 export function getAllowedPages(role: UserRole, crm = false): PageType[] {
   return getSections(role, crm).flatMap(s => s.pages)

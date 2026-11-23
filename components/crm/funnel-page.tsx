@@ -118,30 +118,7 @@ function CallsFunnel() {
         ) : top === 0 ? (
           <EmptyState icon={PhoneCall} title="В списках пока никого" description="Людей в мероприятия добавляют на странице «Оффлайн-события»" />
         ) : (
-          <ol className="mt-5 space-y-2.5">
-            {steps.map((s, i) => {
-              const w = share(s.count, top)
-              const fromPrev = i > 0 ? share(s.count, steps[i - 1].count) : null
-              return (
-                <li key={s.id} className="grid grid-cols-[minmax(7.5rem,10rem)_1fr_auto] items-center gap-3">
-                  <span className="min-w-0">
-                    <span className="block truncate text-sm font-medium">{s.label}</span>
-                    <span className="block truncate text-xs text-muted-foreground">{s.hint}</span>
-                  </span>
-                  <span className="relative h-9 rounded-md bg-muted" title={`${s.label}: ${s.count} из ${top} (${pct(w)})`}>
-                    <span className="absolute inset-y-0 left-0 rounded-md bg-primary transition-[width] duration-500" style={{ width: `${Math.max(w * 100, s.count ? 1.5 : 0)}%` }} />
-                    <span className={cn('num absolute inset-y-0 flex items-center px-2.5 text-sm font-semibold', w > 0.2 ? 'left-0 text-primary-foreground' : 'text-foreground')} style={w > 0.2 ? undefined : { left: `${w * 100}%` }}>
-                      {formatNumber(s.count)}
-                    </span>
-                  </span>
-                  <span className="num w-24 text-right text-sm">
-                    <span className="font-semibold">{pct(w)}</span>
-                    {fromPrev !== null && <span className="ml-1.5 text-xs text-muted-foreground">↓{pct(fromPrev)}</span>}
-                  </span>
-                </li>
-              )
-            })}
-          </ol>
+          <FunnelBars steps={steps} top={top} />
         )}
       </Panel>
 
@@ -150,6 +127,36 @@ function CallsFunnel() {
         <GroupTable title="По хантерам" empty="Хантеров пока не назначали" rows={data?.hunters} />
       </div>
     </div>
+  )
+}
+
+/** One bar per step, as wide as its share of the first step; the count inside or just after it. */
+function FunnelBars({ steps, top }: { steps: { label: string; hint: string; count: number }[]; top: number }) {
+  return (
+    <ol className="mt-5 space-y-2.5">
+      {steps.map((s, i) => {
+        const w = share(s.count, top)
+        const fromPrev = i > 0 ? share(s.count, steps[i - 1].count) : null
+        return (
+          <li key={s.label} className="grid grid-cols-[minmax(7.5rem,10rem)_1fr_auto] items-center gap-3">
+            <span className="min-w-0">
+              <span className="block truncate text-sm font-medium">{s.label}</span>
+              <span className="block truncate text-xs text-muted-foreground">{s.hint}</span>
+            </span>
+            <span className="relative h-9 rounded-md bg-muted" title={`${s.label}: ${s.count} из ${top} (${pct(w)})`}>
+              <span className="absolute inset-y-0 left-0 rounded-md bg-primary transition-[width] duration-500" style={{ width: `${Math.max(w * 100, s.count ? 1.5 : 0)}%` }} />
+              <span className={cn('num absolute inset-y-0 flex items-center px-2.5 text-sm font-semibold', w > 0.2 ? 'left-0 text-primary-foreground' : 'text-foreground')} style={w > 0.2 ? undefined : { left: `${w * 100}%` }}>
+                {formatNumber(s.count)}
+              </span>
+            </span>
+            <span className="num w-24 text-right text-sm">
+              <span className="font-semibold">{pct(w)}</span>
+              {fromPrev !== null && <span className="ml-1.5 text-xs text-muted-foreground">↓{pct(fromPrev)}</span>}
+            </span>
+          </li>
+        )
+      })}
+    </ol>
   )
 }
 
@@ -216,26 +223,59 @@ function GroupTable({ title, rows, empty, dated }: { title: string; rows: Group[
   )
 }
 
-const INSTAGRAM_STEPS = ['Новый', 'В диалоге', 'Мастермайнд', 'Оплата', 'Участник']
+interface IgFunnelData {
+  total: number
+  inBase: number
+  steps: { value: string; label: string; hint: string; count: number }[]
+}
 
 function InstagramFunnel() {
+  const [data, setData] = React.useState<IgFunnelData | null>(null)
+  const [error, setError] = React.useState<string | null>(null)
+
+  React.useEffect(() => {
+    let live = true
+    fetch('/api/crm/instagram/funnel')
+      .then(async r => {
+        const b = await r.json().catch(() => ({}))
+        if (!r.ok || b.error) throw new Error(b.error || `Ошибка ${r.status}`)
+        return b as IgFunnelData
+      })
+      .then(b => live && setData(b))
+      .catch(e => live && setError(e.message))
+    return () => {
+      live = false
+    }
+  }, [])
+
+  if (error) {
+    return (
+      <Panel>
+        <EmptyState icon={Instagram} title="Воронка Instagram не загрузилась" description={error} />
+      </Panel>
+    )
+  }
+  const top = data?.total ?? 0
   return (
-    <Panel>
-      <EmptyState
-        icon={Instagram}
-        title="Воронка Instagram появится вместе с перепиской"
-        description="Когда подключим директ и комментарии в CRM, здесь будут клиенты по этапам и переходы между ними"
-        action={
-          <ol className="flex flex-wrap justify-center gap-1.5">
-            {INSTAGRAM_STEPS.map((s, i) => (
-              <li key={s} className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                <span className="rounded-full border px-2.5 py-1">{s}</span>
-                {i < INSTAGRAM_STEPS.length - 1 && <span aria-hidden>→</span>}
-              </li>
+    <div className="space-y-4">
+      <Panel className="p-4 sm:p-6">
+        <h2 className="text-sm font-semibold">Путь клиента из Instagram</h2>
+        <p className="mt-0.5 text-xs text-muted-foreground">
+          Все, кто писал в директ, и комментаторы с карточкой в CRM. Доля — от всех; стрелка — переход с прошлого шага
+          {data ? ` · в базе клиентов: ${formatNumber(data.inBase)}` : ''}
+        </p>
+        {!data ? (
+          <div className="mt-5 space-y-3">
+            {[0, 1, 2, 3, 4].map(i => (
+              <Skeleton key={i} className="h-11 w-full rounded-lg" />
             ))}
-          </ol>
-        }
-      />
-    </Panel>
+          </div>
+        ) : top === 0 ? (
+          <EmptyState icon={Instagram} title="Пока никого" description="Здесь появятся люди из директа и комментариев @god_v_dele" />
+        ) : (
+          <FunnelBars steps={data.steps} top={top} />
+        )}
+      </Panel>
+    </div>
   )
 }
