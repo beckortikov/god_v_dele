@@ -1,14 +1,17 @@
 import { db } from '@/lib/db'
-import { logAudit } from '@/lib/audit'
+import { getActor, logAudit } from '@/lib/audit'
 import { todayISO } from '@/lib/format'
 import { findGuestProgram } from '@/lib/participant-kind'
+import { ProfileInputError, parseProfile } from '@/lib/participant-profile'
 import { callerId, recordHistory } from '@/lib/event-funnel-server'
 import { IgRouteError, contactsFor, igRoute, ok, readText, upsertContact } from '../../../_lib'
 
 /**
- * POST { name, phone?, note?, event_id?, username?, picture?, source? } → «Завести в базу»:
+ * POST { name, phone?, note?, event_id?, username?, picture?, source?,
+ *        profile?: { city?, activity?, business_name?, source?, monthly_turnover?, currency? } } → «Завести в базу»:
  * the person becomes a participant of the «Гостевой» program (once), and, if an event is
  * chosen, a guest of that event on «Не звонили» with the caller as hunter («Обзвон» picks them up).
+ * What was learnt about the business goes to the participant's profile, with the Instagram username.
  */
 export async function POST(req: Request, { params }: { params: Promise<{ igId: string }> }) {
   const { igId } = await params
@@ -19,6 +22,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ igId: s
     const note = readText(body.note) || null
     const eventId = typeof body.event_id === 'string' && body.event_id ? body.event_id : null
     if (!name) throw new IgRouteError('Укажите имя')
+    let profile: ReturnType<typeof parseProfile>
+    try {
+      const given = Object.fromEntries(Object.entries((body.profile ?? {}) as Record<string, unknown>).filter(([, v]) => v !== '' && v != null))
+      profile = parseProfile({ ...given, ...(typeof body.username === 'string' && body.username ? { instagram: body.username } : {}) })
+    } catch (e) {
+      if (e instanceof ProfileInputError) throw new IgRouteError(e.message)
+      throw e
+    }
     const who = { username: body.username, name, picture: body.picture, source: body.source === 'comment' ? ('comment' as const) : ('dm' as const) }
 
     let participantId = (await contactsFor([igId])).get(igId)?.participant_id ?? null
@@ -43,6 +54,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ igId: s
       })
     }
     const card = await upsertContact(igId, who, { participant_id: participantId, ...(note ? { note } : {}) })
+    if (Object.keys(profile).length) {
+      const { error: prErr } = await db
+        .from('participant_profiles')
+        .upsert({ participant_id: participantId, ...profile, updated_by: getActor(req).name, updated_at: new Date().toISOString() }, { onConflict: 'participant_id' })
+      if (prErr) throw prErr
+    }
 
     let attendeeId: string | null = null
     if (eventId) {

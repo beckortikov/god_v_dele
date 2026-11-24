@@ -110,8 +110,11 @@ export async function listConversations(cursor?: string | null): Promise<{ items
 }
 
 export interface IgAttachment {
-  url: string
+  /** Position in the message: the media route fetches a fresh link by it. */
+  index: number
   type: string
+  /** Instagram's own type when Zernio normalised it: story_mention, ig_story, ig_reel, ig_post… */
+  originalType: string | null
 }
 
 export interface IgMessage {
@@ -120,7 +123,12 @@ export interface IgMessage {
   outgoing: boolean
   createdAt: string
   attachments: IgAttachment[]
+  /** Someone mentioned the account in their own story. */
   storyMention: boolean
+  /** A reply or reaction to one of the account's stories; the media link lives about 24 hours. */
+  storyReply: { storyId: string; storyUrl: string | null } | null
+  /** Instagram sent something it does not let apps show (cards, some shares). */
+  unsupported: boolean
 }
 
 export async function listMessages(conversationId: string): Promise<IgMessage[]> {
@@ -133,10 +141,33 @@ export async function listMessages(conversationId: string): Promise<IgMessage[]>
       text: m.message ?? '',
       outgoing: m.direction === 'outgoing',
       createdAt: m.createdAt ?? '',
-      attachments: ((m.attachments ?? []) as any[]).map(x => ({ url: x.url ?? x.payload?.url ?? '', type: x.type ?? 'file' })).filter(x => x.url),
+      attachments: ((m.attachments ?? []) as any[])
+        .map((x, index) => ({ index, url: x.url ?? x.payload?.url ?? '', type: String(x.type ?? 'file'), originalType: x.originalType ?? null }))
+        .filter(x => x.url)
+        .map(({ url: _url, ...a }) => a),
       storyMention: !!m.isStoryMention,
+      storyReply: m.storyReply?.storyId ? { storyId: String(m.storyReply.storyId), storyUrl: m.storyReply.storyUrl ?? null } : null,
+      unsupported: !!m.noRenderableContent,
     }))
     .sort((x, y) => x.createdAt.localeCompare(y.createdAt))
+}
+
+/** A fresh CDN link for an attachment (Instagram links expire); null when there is none any more. */
+export async function attachmentUrl(conversationId: string, messageId: string, index: number): Promise<string | null> {
+  const a = await requireAccount()
+  const q = new URLSearchParams({ accountId: a.id })
+  const res = await fetch(`${BASE}/inbox/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(messageId)}/attachments/${index}?${q}`, {
+    headers: { Authorization: `Bearer ${apiKey()}` },
+    redirect: 'manual',
+    cache: 'no-store',
+  })
+  const location = res.headers.get('location')
+  if (res.status >= 300 && res.status < 400 && location) return location
+  if (res.ok) {
+    const j = await res.json().catch(() => null)
+    return j?.url ?? null
+  }
+  return null
 }
 
 export async function sendMessage(conversationId: string, text: string) {

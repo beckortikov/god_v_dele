@@ -8,6 +8,7 @@ import { cn } from '@/lib/utils'
 import { formatMoney, formatNumber, plural } from '@/lib/format'
 import { formatSize } from '@/lib/report-files'
 import {
+  LEAD_SOURCES,
   MAX_SCANS,
   SCAN_ACCEPT_ATTR,
   completeness,

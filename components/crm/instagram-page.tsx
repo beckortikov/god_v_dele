@@ -29,7 +29,8 @@ import { Segmented } from '@/components/erp/segmented'
 import { EmptyState } from '@/components/erp/empty-state'
 import { Field } from '@/components/erp/field'
 import { useNav } from '@/components/app-shell/nav-context'
-import { IG_NOTE_MAX, IG_STAGE_INFO, igStageOf, stageAfterReply, type IgContact, type IgStage } from '@/lib/crm-instagram'
+import { LEAD_SOURCES } from '@/lib/participant-profile'
+import { IG_NOTE_MAX, IG_STAGE_INFO, igStageOf, phoneFromMessages, splitInstagramName, stageAfterReply, type IgContact, type IgStage } from '@/lib/crm-instagram'
 import { PILL, PersonAvatar, clock, dayLabel, shortTime } from '@/components/crm/parts'
 
 interface Conversation {
@@ -50,8 +51,10 @@ interface Message {
   text: string
   outgoing: boolean
   createdAt: string
-  attachments: { url: string; type: string }[]
+  attachments: { index: number; type: string; originalType: string | null }[]
   storyMention: boolean
+  storyReply: { storyId: string; storyUrl: string | null } | null
+  unsupported: boolean
   pending?: boolean
 }
 
@@ -134,6 +137,8 @@ export function InstagramPage() {
   const [showInfo, setShowInfo] = React.useState(true)
   const [threadOpen, setThreadOpen] = React.useState(false)
   const [baseFor, setBaseFor] = React.useState<Person | null>(null)
+  // Phone numbers people typed in direct, by Instagram user id: «Завести в базу» fills them in
+  const [phones, setPhones] = React.useState<Record<string, string>>({})
   const [reconnecting, setReconnecting] = React.useState(false)
 
   // Direct
@@ -331,7 +336,7 @@ export function InstagramPage() {
                           <span className={cn('num shrink-0 text-xs', on ? 'text-primary-foreground/80' : 'text-muted-foreground')}>{shortTime(c.updatedTime)}</span>
                         </span>
                         <span className="flex items-center gap-2">
-                          <span className={cn('min-w-0 flex-1 truncate text-sm', on ? 'text-primary-foreground/85' : c.unread ? 'font-medium text-foreground' : 'text-muted-foreground')}>{c.lastMessage || 'Вложение'}</span>
+                          <span className={cn('min-w-0 flex-1 truncate text-sm', on ? 'text-primary-foreground/85' : c.unread ? 'font-medium text-foreground' : 'text-muted-foreground')}>{!c.lastMessage || c.lastMessage === '[Attachment]' ? 'Вложение' : c.lastMessage}</span>
                           {c.unread > 0 && !on && <span className="num flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[11px] font-bold text-primary-foreground">{c.unread}</span>}
                         </span>
                         <span className="flex flex-wrap items-center gap-1">
@@ -399,6 +404,7 @@ export function InstagramPage() {
             onToggleInfo={() => setShowInfo(s => !s)}
             onStage={s => saveContact(person, { stage: s })}
             onBase={() => setBaseFor(person)}
+            onPhone={phone => setPhones(p => (p[conv.participantId] === phone ? p : { ...p, [conv.participantId]: phone }))}
             onSent={text => {
               setConvs(list => list?.map(c => (c.id === conv.id ? { ...c, lastMessage: text, updatedTime: new Date().toISOString(), contact: { ...(c.contact ?? { ig_user_id: c.participantId, note: null, participant_id: null }), stage: stageAfterReply(c.contact?.stage) } } : c)) ?? list)
             }}
@@ -438,6 +444,7 @@ export function InstagramPage() {
 
       <BaseDialog
         person={baseFor}
+        phoneHint={baseFor ? phones[baseFor.igId] ?? '' : ''}
         onClose={() => setBaseFor(null)}
         onSaved={(igId, contact) => {
           applyContact(igId, contact)
@@ -445,6 +452,84 @@ export function InstagramPage() {
         }}
       />
     </div>
+  )
+}
+
+/** What a story or a shared post is: a line above the media, so the manager sees what the person reacted to. */
+function contextLabel(m: Message): string | null {
+  const emojiOnly = !!m.text && !/[\p{L}\p{N}]/u.test(m.text) && m.text.length <= 12
+  if (m.storyReply) return emojiOnly ? 'Реакция на вашу сторис' : 'Ответ на вашу сторис'
+  if (m.storyMention) return m.outgoing ? 'Вы упомянули в сторис' : 'Упомянул(а) вас в сторис'
+  const t = m.attachments[0]?.originalType ?? m.attachments[0]?.type
+  if (t === 'story_mention') return m.outgoing ? 'Вы упомянули в своей сторис' : 'Упомянул(а) вас в сторис'
+  if (t === 'ig_story' || t === 'story') return 'Поделился сторис'
+  if (t === 'ig_reel' || t === 'reel') return 'Поделился Reels'
+  if (t === 'ig_post' || t === 'post' || t === 'share') return 'Поделился публикацией'
+  return null
+}
+
+function MessageContext({ m, convId }: { m: Message; convId: string }) {
+  const label = contextLabel(m)
+  const isStory = !!m.storyReply || m.storyMention || m.attachments.some(a => /story/.test(a.originalType ?? a.type))
+  const sources = [
+    ...(m.storyReply?.storyUrl ? [`/api/crm/instagram/media?u=${encodeURIComponent(m.storyReply.storyUrl)}`] : []),
+    ...m.attachments.map(a => `/api/crm/instagram/media?c=${encodeURIComponent(convId)}&m=${encodeURIComponent(m.id)}&i=${a.index}`),
+  ]
+  return (
+    <>
+      {label && <span className={cn('mb-1 block text-xs font-semibold', m.outgoing ? 'text-primary-foreground/85' : 'text-muted-foreground')}>{label}</span>}
+      {sources.map(src => (
+        <MessageMedia key={src} src={src} story={isStory} onDark={m.outgoing} />
+      ))}
+      {isStory && !sources.length && <MediaGone story onDark={m.outgoing} />}
+      {m.unsupported && !sources.length && (
+        <span className={cn('block text-sm italic', m.outgoing ? 'text-primary-foreground/85' : 'text-muted-foreground')}>Карточка или ссылка, которую Instagram не показывает в CRM — откройте переписку в Instagram</span>
+      )}
+    </>
+  )
+}
+
+function MediaGone({ story, onDark }: { story: boolean; onDark: boolean }) {
+  return (
+    <span className={cn('my-1 flex h-20 w-44 items-center justify-center rounded-xl px-3 text-center text-xs', onDark ? 'bg-primary-foreground/15 text-primary-foreground/85' : 'bg-muted text-muted-foreground')}>
+      {story ? 'Сторис больше недоступна: Instagram хранит её 24 часа' : 'Вложение больше недоступно'}
+    </span>
+  )
+}
+
+/** A picture, video or voice message; the type is asked from the server first (HEAD). */
+function MessageMedia({ src, story, onDark }: { src: string; story: boolean; onDark: boolean }) {
+  const [kind, setKind] = React.useState<'loading' | 'image' | 'video' | 'audio' | 'file' | 'gone'>('loading')
+  React.useEffect(() => {
+    let live = true
+    fetch(src, { method: 'HEAD' })
+      .then(r => {
+        if (!live) return
+        if (!r.ok) return setKind('gone')
+        const t = r.headers.get('content-type') ?? ''
+        setKind(t.startsWith('image/') ? 'image' : t.startsWith('video/') ? 'video' : t.startsWith('audio/') ? 'audio' : 'file')
+      })
+      .catch(() => live && setKind('gone'))
+    return () => {
+      live = false
+    }
+  }, [src])
+  if (kind === 'loading') return <Skeleton className={cn('my-1 rounded-xl', story ? 'h-64 w-36' : 'h-40 w-56')} />
+  if (kind === 'gone') return <MediaGone story={story} onDark={onDark} />
+  if (kind === 'image')
+    return (
+      <a href={src} target="_blank" rel="noreferrer" className="my-1 block">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={src} alt={story ? 'Сторис' : 'Фото'} onError={() => setKind('gone')} className={cn('rounded-xl object-cover', story ? 'max-h-80 w-44' : 'max-h-72 max-w-full')} />
+      </a>
+    )
+  if (kind === 'video')
+    return <video src={src} controls playsInline preload="metadata" onError={() => setKind('gone')} className={cn('my-1 rounded-xl bg-black', story ? 'max-h-96 w-48' : 'max-h-80 max-w-full')} />
+  if (kind === 'audio') return <audio src={src} controls preload="metadata" className="my-1 max-w-64" />
+  return (
+    <a href={src} target="_blank" rel="noreferrer" className={cn('my-0.5 flex items-center gap-1.5 text-sm underline underline-offset-2', onDark ? 'text-primary-foreground' : 'text-primary')}>
+      <Paperclip className="size-3.5" /> Открыть вложение
+    </a>
   )
 }
 
@@ -623,6 +708,7 @@ function DmThread({
   onToggleInfo,
   onStage,
   onBase,
+  onPhone,
   onSent,
 }: {
   conv: Conversation
@@ -632,18 +718,25 @@ function DmThread({
   onToggleInfo: () => void
   onStage: (s: IgStage) => void
   onBase: () => void
+  onPhone: (phone: string) => void
   onSent: (text: string) => void
 }) {
   const [messages, setMessages] = React.useState<Message[] | null>(null)
   const [error, setError] = React.useState<string | null>(null)
   const [draft, setDraft] = React.useState('')
   const [sending, setSending] = React.useState(false)
+  const phoneRef = React.useRef(onPhone)
+  React.useEffect(() => {
+    phoneRef.current = onPhone
+  })
 
   const load = React.useCallback(async () => {
     try {
       const r = await api<{ data: Message[] }>(`/api/crm/instagram/conversations/${encodeURIComponent(conv.id)}/messages`)
       setMessages(r.data)
       setError(null)
+      const phone = phoneFromMessages(r.data)
+      if (phone) phoneRef.current(phone)
     } catch (e) {
       setError((e as Error).message)
     }
@@ -657,7 +750,7 @@ function DmThread({
     const text = draft.trim()
     if (!text || sending) return
     setSending(true)
-    const temp: Message = { id: `tmp-${Date.now()}`, text, outgoing: true, createdAt: new Date().toISOString(), attachments: [], storyMention: false, pending: true }
+    const temp: Message = { id: `tmp-${Date.now()}`, text, outgoing: true, createdAt: new Date().toISOString(), attachments: [], storyMention: false, storyReply: null, unsupported: false, pending: true }
     setMessages(m => [...(m ?? []), temp])
     setDraft('')
     try {
@@ -700,19 +793,7 @@ function DmThread({
             m.pending && 'opacity-70'
           )}
         >
-          {m.storyMention && <span className={cn('block text-xs font-semibold', m.outgoing ? 'text-primary-foreground/80' : 'text-muted-foreground')}>Упоминание в сторис</span>}
-          {m.attachments.map((a, k) =>
-            a.type === 'image' ? (
-              <a key={k} href={a.url} target="_blank" rel="noreferrer" className="my-1 block">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={a.url} alt="Фото" referrerPolicy="no-referrer" className="max-h-64 rounded-xl object-cover" />
-              </a>
-            ) : (
-              <a key={k} href={a.url} target="_blank" rel="noreferrer" className={cn('my-0.5 flex items-center gap-1.5 text-sm underline underline-offset-2', m.outgoing ? 'text-primary-foreground' : 'text-primary')}>
-                <Paperclip className="size-3.5" /> {a.type === 'video' ? 'Видео' : a.type === 'audio' ? 'Голосовое' : a.type === 'share' ? 'Публикация' : 'Вложение'}
-              </a>
-            )
-          )}
+          <MessageContext m={m} convId={conv.id} />
           {m.text && <span className="whitespace-pre-wrap">{m.text}</span>}
           <span className={cn('num float-right mt-1.5 ml-2.5 text-[11px]', m.outgoing ? 'text-primary-foreground/80' : 'text-muted-foreground')}>{m.pending ? '…' : clock(m.createdAt)}</span>
         </div>
@@ -1035,21 +1116,31 @@ interface CallEvent {
   event_date: string
 }
 
-/** «Завести в базу»: a guest in the participants list, optionally invited to an event (then in «Обзвон»). */
-function BaseDialog({ person, onClose, onSaved }: { person: Person | null; onClose: () => void; onSaved: (igId: string, contact: IgContact) => void }) {
-  const [name, setName] = React.useState('')
-  const [phone, setPhone] = React.useState('')
-  const [note, setNote] = React.useState('')
+const CURRENCY_OPTIONS = ['TJS', 'USD', 'RUB', 'UZS', 'KZT', 'EUR'] as const
+
+/** «Завести в базу»: a guest in the participants list with what we know about the business, optionally invited to an event. */
+function BaseDialog({ person, phoneHint, onClose, onSaved }: { person: Person | null; phoneHint: string; onClose: () => void; onSaved: (igId: string, contact: IgContact) => void }) {
+  const [f, setF] = React.useState({ name: '', phone: '', city: '', source: '', activity: '', business_name: '', monthly_turnover: '', currency: 'TJS', note: '' })
   const [eventId, setEventId] = React.useState('none')
   const [events, setEvents] = React.useState<CallEvent[]>([])
   const [busy, setBusy] = React.useState(false)
   const inBase = !!person?.contact?.participant_id
+  const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setF(x => ({ ...x, [k]: e.target.value }))
 
   React.useEffect(() => {
     if (!person) return
-    setName(person.contact?.participant_name || person.name)
-    setPhone('')
-    setNote(person.contact?.note ?? '')
+    const split = splitInstagramName(person.name)
+    setF({
+      name: person.contact?.participant_name || split.name,
+      phone: phoneHint,
+      city: '',
+      source: person.source === 'comment' ? 'Instagram — комментарий' : 'Instagram — директ',
+      activity: split.activity,
+      business_name: '',
+      monthly_turnover: '',
+      currency: 'TJS',
+      note: person.contact?.note ?? '',
+    })
     setEventId('none')
     api<{ data: CallEvent[] }>('/api/calls')
       .then(r => {
@@ -1060,17 +1151,28 @@ function BaseDialog({ person, onClose, onSaved }: { person: Person | null; onClo
   }, [person])
 
   const save = async () => {
-    if (!person || !name.trim() || busy) return
+    if (!person || !f.name.trim() || busy) return
     if (inBase && eventId === 'none') return onClose()
     setBusy(true)
     try {
       const r = await api<{ data: { contact: IgContact; participant_id: string } }>(`/api/crm/instagram/contacts/${encodeURIComponent(person.igId)}/base`, {
         method: 'POST',
-        body: JSON.stringify({ name, phone, note, event_id: eventId === 'none' ? null : eventId, username: person.username, picture: person.picture, source: person.source }),
+        body: JSON.stringify({
+          name: f.name,
+          phone: f.phone,
+          note: f.note,
+          event_id: eventId === 'none' ? null : eventId,
+          username: person.username,
+          picture: person.picture,
+          source: person.source,
+          profile: inBase
+            ? undefined
+            : { city: f.city, source: f.source, activity: f.activity, business_name: f.business_name, monthly_turnover: f.monthly_turnover, ...(f.monthly_turnover ? { currency: f.currency } : {}) },
+        }),
       })
       const ev = events.find(e => e.id === eventId)
-      toast.success(inBase ? `${name} приглашён(а) на «${ev?.name}»` : `${name} в базе клиентов`, { description: ev ? 'Человек появился в «Обзвоне», вы — хантер' : undefined })
-      onSaved(person.igId, { ...r.data.contact, participant_name: name })
+      toast.success(inBase ? `${f.name} приглашён(а) на «${ev?.name}»` : `${f.name} в базе клиентов`, { description: ev ? 'Человек появился в «Обзвоне», вы — хантер' : undefined })
+      onSaved(person.igId, { ...r.data.contact, participant_name: f.name })
     } catch (e) {
       toast.error('Не удалось сохранить', { description: (e as Error).message })
     } finally {
@@ -1080,26 +1182,66 @@ function BaseDialog({ person, onClose, onSaved }: { person: Person | null; onClo
 
   return (
     <Dialog open={!!person} onOpenChange={o => !o && !busy && onClose()}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="max-h-[92dvh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>{inBase ? 'Пригласить на мероприятие' : 'Завести в базу клиентов'}</DialogTitle>
           <DialogDescription>
             {person?.username ? `@${person.username} · ` : ''}
-            {inBase ? 'Человек уже в базе' : 'Появится в «Участниках» как гость (программа «Гостевой»)'}
+            {inBase ? 'Человек уже в базе' : 'Появится в «Участниках» как гость; данные о бизнесе — в его профиле'}
           </DialogDescription>
         </DialogHeader>
-        <div className="grid gap-4">
+        <div className="grid gap-4 sm:grid-cols-2">
           {!inBase && (
             <>
-              <Field label="Имя и фамилия" htmlFor="base-name" required>
-                <Input id="base-name" value={name} onChange={e => setName(e.target.value)} autoComplete="off" />
+              <Field label="Имя и фамилия" htmlFor="base-name" required className="sm:col-span-2">
+                <Input id="base-name" value={f.name} onChange={set('name')} autoComplete="off" />
               </Field>
-              <Field label="Телефон" htmlFor="base-phone">
-                <Input id="base-phone" type="tel" inputMode="tel" placeholder="+992" value={phone} onChange={e => setPhone(e.target.value)} autoComplete="off" />
+              <Field label="Телефон" htmlFor="base-phone" hint={phoneHint && f.phone === phoneHint ? 'Взят из переписки' : undefined}>
+                <Input id="base-phone" type="tel" inputMode="tel" placeholder="+992" value={f.phone} onChange={set('phone')} autoComplete="off" />
+              </Field>
+              <Field label="Город" htmlFor="base-city">
+                <Input id="base-city" value={f.city} onChange={set('city')} placeholder="Например: Душанбе" maxLength={100} />
+              </Field>
+              <Field label="Откуда пришёл" htmlFor="base-source" className="sm:col-span-2">
+                <Select value={f.source} onValueChange={v => setF(x => ({ ...x, source: v }))}>
+                  <SelectTrigger id="base-source" className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {LEAD_SOURCES.map(s => (
+                      <SelectItem key={s} value={s}>
+                        {s}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </Field>
+              <Field label="Чем занимается" htmlFor="base-activity" hint={f.activity ? 'Подставлено из имени в Instagram' : undefined}>
+                <Input id="base-activity" value={f.activity} onChange={set('activity')} placeholder="Например: товарный бизнес" maxLength={200} />
+              </Field>
+              <Field label="Название бизнеса" htmlFor="base-business">
+                <Input id="base-business" value={f.business_name} onChange={set('business_name')} placeholder="Необязательно" maxLength={150} />
+              </Field>
+              <Field label="Оборот в месяц, примерно" htmlFor="base-turnover" className="sm:col-span-2">
+                <div className="flex gap-2">
+                  <Input id="base-turnover" type="number" inputMode="decimal" min={0} value={f.monthly_turnover} onChange={set('monthly_turnover')} placeholder="Например: 50000" className="num" />
+                  <Select value={f.currency} onValueChange={v => setF(x => ({ ...x, currency: v }))}>
+                    <SelectTrigger className="w-24" aria-label="Валюта">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {CURRENCY_OPTIONS.map(c => (
+                        <SelectItem key={c} value={c}>
+                          {c}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </Field>
             </>
           )}
-          <Field label="Пригласить на мероприятие" hint="Человек попадёт в «Обзвон» на этап «Не звонили», хантером будете вы">
+          <Field label="Пригласить на мероприятие" hint="Человек попадёт в «Обзвон» на этап «Не звонили», хантером будете вы" className="sm:col-span-2">
             <Select value={eventId} onValueChange={setEventId}>
               <SelectTrigger className="w-full" aria-label="Мероприятие">
                 <SelectValue />
@@ -1116,13 +1258,13 @@ function BaseDialog({ person, onClose, onSaved }: { person: Person | null; onClo
             </Select>
           </Field>
           {!inBase && (
-            <Field label="Заметка" htmlFor="base-note">
-              <Textarea id="base-note" value={note} maxLength={IG_NOTE_MAX} onChange={e => setNote(e.target.value)} placeholder="Что важно знать о клиенте" />
+            <Field label="Заметка" htmlFor="base-note" className="sm:col-span-2">
+              <Textarea id="base-note" value={f.note} maxLength={IG_NOTE_MAX} onChange={set('note')} placeholder="Что важно знать о клиенте" />
             </Field>
           )}
         </div>
         <DialogFooter>
-          <Button type="button" onClick={save} disabled={busy || !name.trim() || (inBase && eventId === 'none')}>
+          <Button type="button" onClick={save} disabled={busy || !f.name.trim() || (inBase && eventId === 'none')}>
             {busy ? 'Сохраняем…' : inBase ? 'Пригласить' : 'Сохранить в базу'}
           </Button>
           <Button type="button" variant="ghost" onClick={onClose} disabled={busy}>

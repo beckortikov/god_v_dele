@@ -16,11 +16,14 @@ vi.mock('@/lib/zernio', async () => {
     sendMessage: vi.fn(async () => ({})),
     replyComment: vi.fn(async () => ({})),
     privateReply: vi.fn(async () => ({})),
+    attachmentUrl: vi.fn(async () => 'https://evil.example.com/x.mp4'),
   }
 })
 process.env.SUPABASE_SERVICE_ROLE_KEY ||= 'service-key-for-tests'
 
-import { igFunnel, stageAfterReply } from '@/lib/crm-instagram'
+import { igFunnel, phoneFromMessages, splitInstagramName, stageAfterReply } from '@/lib/crm-instagram'
+import { GET as media } from '@/app/api/crm/instagram/media/route'
+import { parseProfile } from '@/lib/participant-profile'
 import * as zernio from '@/lib/zernio'
 import { GET as listConvs } from '@/app/api/crm/instagram/conversations/route'
 import { POST as sendDm } from '@/app/api/crm/instagram/conversations/[id]/messages/route'
@@ -53,6 +56,24 @@ describe('instagram funnel helpers', () => {
     expect(f.inBase).toBe(2)
     expect(f.steps.map(s => s.count)).toEqual([5, 3, 2, 1, 1])
     expect(f.current.new).toBe(2)
+  })
+
+  it('splits «Имя | чем занимается» from an Instagram name', () => {
+    expect(splitInstagramName('Фотех Юсуфзода | Товарный бизнес бо инстаграм 🚀')).toEqual({ name: 'Фотех Юсуфзода', activity: 'Товарный бизнес бо инстаграм' })
+    expect(splitInstagramName('shabo.13')).toEqual({ name: 'shabo.13', activity: '' })
+    expect(splitInstagramName('Анна — кондитер')).toEqual({ name: 'Анна', activity: 'кондитер' })
+  })
+
+  it('finds the phone number the person typed, not ours and not short numbers', () => {
+    expect(phoneFromMessages([{ text: 'Алейкум салам', outgoing: false }, { text: '906666683', outgoing: false }, { text: 'Спасибо!', outgoing: true }])).toBe('906666683')
+    expect(phoneFromMessages([{ text: 'мой номер +992 93 010-50-01, звоните', outgoing: false }])).toBe('+992 93 010-50-01')
+    expect(phoneFromMessages([{ text: 'Звоните +992930105001', outgoing: true }, { text: 'мне 35 лет, бизнес 2024', outgoing: false }])).toBe('')
+  })
+
+  it('profile accepts where they came from, Instagram and a rough monthly turnover', () => {
+    expect(parseProfile({ source: ' Реклама ', instagram: '@shabo.13', monthly_turnover: '50 000' })).toEqual({ source: 'Реклама', instagram: 'shabo.13', monthly_turnover: 50000 })
+    expect(parseProfile({ instagram: 'https://instagram.com/god_v_dele/' }).instagram).toBe('god_v_dele')
+    expect(() => parseProfile({ monthly_turnover: '-5' })).toThrow()
   })
 
   it('a first reply moves a new client to «В диалоге», later stages stay', () => {
@@ -125,11 +146,40 @@ describe('/api/crm/instagram', () => {
       expect.objectContaining({ event_id: EV, attendee_type: 'guest', participant_id: participantId, guest_name: 'Алина Каримова', funnel_stage: 'new', hunter_id: 'u-Насиба' }),
     ])
     expect(fake.rows('event_attendee_comments')).toEqual([expect.objectContaining({ kind: 'added', body: 'new', author_name: 'Насиба' })])
+    expect(fake.rows('participant_profiles')).toEqual([expect.objectContaining({ participant_id: participantId, instagram: 'alina' })])
 
     // again: no second participant and no second invitation
     await addToBase(req('POST', { name: 'Алина Каримова', event_id: EV }), p)
     expect(fake.rows('participants')).toHaveLength(1)
     expect(fake.rows('event_attendees')).toHaveLength(1)
+  })
+
+  it('«Завести в базу» puts what is known about the business into the profile, refusing a bad turnover first', async () => {
+    const bad = await addToBase(req('POST', { name: 'Фотех', profile: { monthly_turnover: 'много' } }), ctx({ igId: 'ig-foteh' }))
+    expect(bad.status).toBe(400)
+    expect(fake.rows('participants')).toHaveLength(0)
+    await addToBase(
+      req('POST', { name: 'Фотех Юсуфзода', username: 'fotehlife', profile: { city: 'Душанбе', source: 'Instagram — директ', activity: 'Товарный бизнес', business_name: '', monthly_turnover: '120000', currency: 'TJS' } }),
+      ctx({ igId: 'ig-foteh' })
+    )
+    expect(fake.rows('participant_profiles')[0]).toMatchObject({
+      city: 'Душанбе',
+      source: 'Instagram — директ',
+      activity: 'Товарный бизнес',
+      instagram: 'fotehlife',
+      monthly_turnover: 120000,
+      currency: 'TJS',
+      updated_by: 'Насиба',
+    })
+    expect(fake.rows('participant_profiles')[0]).not.toHaveProperty('business_name')
+  })
+
+  it('media is fetched only from Instagram and Meta servers', async () => {
+    const r = await media(new Request('http://test/x?c=c1&m=m1&i=0', { headers: { cookie: who('employee', 'Насиба') } }))
+    expect(r.status).toBe(404)
+    const r2 = await media(new Request(`http://test/x?u=${encodeURIComponent('http://169.254.169.254/latest')}`, { headers: { cookie: who('employee', 'Насиба') } }))
+    expect(r2.status).toBe(404)
+    expect((await media(new Request('http://test/x', { headers: { cookie: who('employee', 'Насиба') } }))).status).toBe(400)
   })
 
   it('«Завести в базу» needs a name and the «Гостевой» program', async () => {

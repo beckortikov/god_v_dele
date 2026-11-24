@@ -18,6 +18,12 @@ export interface ParticipantProfile {
   employees_count: number | null
   /** Site or social networks of the business. */
   website: string | null
+  /** Where the person came from: «Instagram — директ», «Рекомендация»… (migration 030). */
+  source?: string | null
+  /** Instagram username, without @ (migration 030). */
+  instagram?: string | null
+  /** Rough monthly turnover in the profile's currency, as the person said (migration 030). */
+  monthly_turnover?: number | null
   currency: Currency
   updated_at?: string
 }
@@ -38,9 +44,11 @@ const TEXT_LIMITS = {
   activity: 200,
   business_name: 150,
   website: 200,
+  source: 100,
+  instagram: 100,
 } as const
 
-export type ProfileInput = Partial<Pick<ParticipantProfile, 'birth_date' | 'currency' | 'employees_count'>> & Partial<Record<keyof typeof TEXT_LIMITS, string | null>>
+export type ProfileInput = Partial<Pick<ParticipantProfile, 'birth_date' | 'currency' | 'employees_count' | 'monthly_turnover'>> & Partial<Record<keyof typeof TEXT_LIMITS, string | null>>
 
 export class ProfileInputError extends Error {}
 
@@ -52,15 +60,21 @@ const clean = (v: unknown, max: number, label: string): string | null => {
   return t || null
 }
 
-export const FIELD_LABELS: Record<keyof typeof TEXT_LIMITS | 'birth_date' | 'currency' | 'employees_count', string> = {
+export const FIELD_LABELS: Record<keyof typeof TEXT_LIMITS | 'birth_date' | 'currency' | 'employees_count' | 'monthly_turnover', string> = {
   birth_date: 'Дата рождения',
   city: 'Город',
   activity: 'Род деятельности',
   business_name: 'Название бизнеса',
   website: 'Сайт или соцсети',
   employees_count: 'Число сотрудников',
+  source: 'Откуда пришёл',
+  instagram: 'Instagram',
+  monthly_turnover: 'Оборот в месяц (примерно)',
   currency: 'Валюта',
 }
+
+/** Where people come from; the profile also accepts any other text. */
+export const LEAD_SOURCES = ['Instagram — директ', 'Instagram — комментарий', 'Instagram — сторис', 'Реклама', 'Рекомендация', 'Мероприятие', 'Другое'] as const
 
 /** Takes what the client sent and returns only known, trimmed, valid fields (a missing key stays missing). */
 export function parseProfile(body: unknown, today = new Date().toISOString().slice(0, 10)): ProfileInput {
@@ -86,6 +100,16 @@ export function parseProfile(body: unknown, today = new Date().toISOString().sli
       out.employees_count = n
     }
   }
+  if ('monthly_turnover' in src) {
+    const v = src.monthly_turnover
+    if (v == null || v === '') out.monthly_turnover = null
+    else {
+      const n = typeof v === 'number' ? v : Number(String(v).replace(/\s/g, '').replace(',', '.'))
+      if (!Number.isFinite(n) || n < 0 || n >= 1e13) throw new ProfileInputError('Оборот в месяц: положительное число')
+      out.monthly_turnover = Math.round(n * 100) / 100
+    }
+  }
+  if ('instagram' in out && out.instagram) out.instagram = out.instagram.replace(/^@/, '').replace(/^https?:\/\/(www\.)?instagram\.com\//i, '').replace(/\/$/, '') || null
   if ('currency' in src) {
     if (!isCurrency(src.currency)) throw new ProfileInputError('Выберите валюту из списка')
     out.currency = src.currency
