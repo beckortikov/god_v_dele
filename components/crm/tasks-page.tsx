@@ -13,8 +13,8 @@ import { EmptyState } from '@/components/erp/empty-state'
 import { Combobox } from '@/components/erp/combobox'
 import { useConfirm } from '@/components/erp/confirm'
 import {
-  DeadlinePicker,
-  GENERIC_TASK_TYPE,
+  DeadlineSelect,
+  TaskTypeSelect,
   ageTone,
   deadlineLabel,
   timeSince,
@@ -36,12 +36,6 @@ import { PersonAvatar } from '@/components/crm/parts'
 
 type View = 'active' | 'done' | 'all'
 
-const QUICK_TYPES = [
-  { value: 'call', label: 'Звонок' },
-  { value: 'meeting', label: 'Встреча' },
-  { value: 'payment_reminder', label: 'Оплата' },
-  { value: GENERIC_TASK_TYPE, label: 'Задача' },
-]
 
 const TASK_STATUS_LABEL: Record<TaskStatus, string> = { todo: 'К выполнению', in_progress: 'В работе', completed: 'Выполнено', cancelled: 'Отменено' }
 const VIEW_KEY = 'tasks-layout'
@@ -411,25 +405,9 @@ function QuickAdd({
       }}
     >
       <div className="flex flex-wrap items-center gap-1.5">
-        <div role="radiogroup" aria-label="Тип задачи" className="flex gap-1">
-          {QUICK_TYPES.map(t => (
-            <button
-              key={t.value}
-              type="button"
-              role="radio"
-              aria-checked={type === t.value}
-              onClick={() => setType(t.value)}
-              className={cn(
-                'h-8 rounded-full px-3 text-xs font-medium outline-none transition-colors focus-visible:ring-[3px] focus-visible:ring-ring/30',
-                type === t.value ? 'bg-foreground text-background' : 'border bg-card text-foreground/80 hover:bg-muted'
-              )}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
-        <DeadlinePicker value={due} onChange={setDue} compact />
-        <Combobox size="sm" value={client} onChange={setClient} options={clientOptions} searchPlaceholder="Имя или телефон клиента…" className="w-full sm:w-56" />
+        <TaskTypeSelect value={type} onChange={setType} />
+        <DeadlineSelect value={due} onChange={setDue} />
+        <Combobox size="sm" value={client} onChange={setClient} options={clientOptions} searchPlaceholder="Имя или телефон клиента…" className="w-full sm:w-56" contentClassName="sm:min-w-80" stacked />
         {employees && onAssignee && (
           <Combobox
             size="sm"
@@ -438,7 +416,8 @@ function QuickAdd({
             placeholder="Кому"
             options={employees.map(e => ({ value: e.id, label: employeeName(e), hint: e.position || undefined }))}
             searchPlaceholder="Имя сотрудника…"
-            className="w-full sm:w-52"
+            className="w-full sm:w-64"
+            contentClassName="sm:min-w-80" stacked
           />
         )}
       </div>

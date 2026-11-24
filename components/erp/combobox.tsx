@@ -25,6 +25,8 @@ export function Combobox({
   className,
   size = 'default',
   invalid,
+  contentClassName,
+  stacked,
 }: {
   id?: string
   value: string
@@ -36,6 +38,10 @@ export function Combobox({
   className?: string
   size?: 'sm' | 'default'
   invalid?: boolean
+  /** Extra classes for the open list, e.g. a wider one than the field. */
+  contentClassName?: string
+  /** Hint under the label instead of beside it, so long names stay whole. */
+  stacked?: boolean
 }) {
   const [open, setOpen] = React.useState(false)
   const selected = options.find(o => o.value === value)
@@ -72,7 +78,7 @@ export function Combobox({
           <ChevronsUpDown className="size-4 shrink-0 text-muted-foreground" />
         </button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-(--radix-popover-trigger-width) min-w-64 p-0">
+      <PopoverContent align="start" className={cn('w-(--radix-popover-trigger-width) min-w-64 p-0', contentClassName)}>
         <Command>
           <CommandInput placeholder={searchPlaceholder} />
           <CommandList className="max-h-72">
@@ -89,8 +95,17 @@ export function Combobox({
                     }}
                   >
                     <Check className={cn('size-4 !text-primary', o.value === value ? 'opacity-100' : 'opacity-0')} />
-                    <span className="min-w-0 flex-1 truncate">{o.label}</span>
-                    {o.hint && <span className="shrink-0 text-xs text-muted-foreground">{o.hint}</span>}
+                    {stacked ? (
+                      <span className="flex min-w-0 flex-1 flex-col">
+                        <span className="truncate">{o.label}</span>
+                        {o.hint && <span className="truncate text-xs text-muted-foreground">{o.hint}</span>}
+                      </span>
+                    ) : (
+                      <>
+                        <span className="min-w-0 flex-1 truncate" title={o.label}>{o.label}</span>
+                        {o.hint && <span className="max-w-[45%] shrink truncate text-xs text-muted-foreground" title={o.hint}>{o.hint}</span>}
+                      </>
+                    )}
                   </CommandItem>
                 ))}
               </CommandGroup>

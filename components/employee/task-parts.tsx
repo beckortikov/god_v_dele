@@ -2,7 +2,7 @@
 
 import * as React from 'react'
 import { toast } from 'sonner'
-import { CalendarClock, ListTodo, Phone, Users, Wallet, type LucideIcon } from 'lucide-react'
+import { CalendarClock, Check, ChevronsUpDown, ListTodo, Phone, Users, Wallet, type LucideIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatDate, todayISO } from '@/lib/format'
 import { Badge } from '@/components/ui/badge'
@@ -13,6 +13,8 @@ import { Sheet, SheetBody, SheetContent, SheetDescription, SheetFooter, SheetHea
 import { Field, FieldGroup } from '@/components/erp/field'
 import { Combobox, type ComboOption } from '@/components/erp/combobox'
 import { Segmented } from '@/components/erp/segmented'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 
 // ---------------------------------------------------------------------------
 // Types and dictionaries
@@ -197,6 +199,78 @@ export function DeadlinePicker({ value, onChange, compact }: { value: string; on
         <input type="date" min={today} value={value} onChange={e => e.target.value && onChange(e.target.value)} className="absolute inset-0 cursor-pointer opacity-0" aria-label="Своя дата срока" />
       </label>
     </div>
+  )
+}
+
+/** One button «Срок: завтра» that opens quick picks and a calendar. */
+export function DeadlineSelect({ value, onChange }: { value: string; onChange: (iso: string) => void }) {
+  const [open, setOpen] = React.useState(false)
+  const today = todayISO()
+  const pick = (iso: string) => {
+    onChange(iso)
+    setOpen(false)
+  }
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          aria-label={`Срок: ${deadlineLabel(value)}`}
+          className="flex h-8 items-center gap-1.5 rounded-md border border-input bg-card px-2.5 text-sm shadow-xs outline-none hover:border-ring/40 focus-visible:ring-[3px] focus-visible:ring-ring/25"
+        >
+          <CalendarClock className="size-4 text-muted-foreground" />
+          <span className="text-muted-foreground">Срок:</span>
+          <span className="font-medium">{deadlineLabel(value)}</span>
+          <ChevronsUpDown className="size-3.5 text-muted-foreground" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-64 p-1.5">
+        <div role="listbox" aria-label="Срок" className="flex flex-col">
+          {DEADLINES.map(d => {
+            const iso = addDays(today, d.days)
+            const on = iso === value
+            return (
+              <button
+                key={d.days}
+                type="button"
+                role="option"
+                aria-selected={on}
+                onClick={() => pick(iso)}
+                className={cn('flex h-9 items-center gap-2 rounded-md px-2.5 text-left text-sm outline-none hover:bg-muted focus-visible:bg-muted', on && 'font-semibold')}
+              >
+                <Check className={cn('size-4 text-primary', on ? 'opacity-100' : 'opacity-0')} />
+                <span className="flex-1">{d.label}</span>
+                <span className="text-xs text-muted-foreground">{deadlineLabel(iso)}</span>
+              </button>
+            )
+          })}
+        </div>
+        <label className="mt-1 flex items-center gap-2 border-t px-2.5 pt-2 pb-1 text-sm">
+          <span className="text-muted-foreground">Своя дата</span>
+          <Input type="date" min={today} value={value} onChange={e => e.target.value && pick(e.target.value)} className="h-8 flex-1" />
+        </label>
+      </PopoverContent>
+    </Popover>
+  )
+}
+
+/** The kind of task as a dropdown with icons. */
+export function TaskTypeSelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const current = taskType(value)
+  return (
+    <Select value={value} onValueChange={onChange}>
+      <SelectTrigger size="sm" className="h-8 gap-1.5 bg-card" aria-label="Тип задачи">
+        <current.icon className="size-4 text-muted-foreground" />
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {Object.entries(TASK_TYPES).map(([k, t]) => (
+          <SelectItem key={k} value={k}>
+            {t.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   )
 }
 
