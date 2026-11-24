@@ -39,8 +39,8 @@ const TimesheetPage = dynamic(() => import('@/components/hr/timesheet-page').the
 const PayrollPage = dynamic(() => import('@/components/hr/payroll-page').then(m => m.PayrollPage), { loading: PageSpinner })
 const VacationsPage = dynamic(() => import('@/components/hr/vacations-page').then(m => m.VacationsPage), { loading: PageSpinner })
 const UsersPage = dynamic(() => import('@/components/admin/users-page').then(m => m.UsersPage), { loading: PageSpinner })
-const EmployeeDashboard = dynamic(() => import('@/components/employee/employee-dashboard').then(m => m.EmployeeDashboard), { loading: PageSpinner })
-const ManagerDashboard = dynamic(() => import('@/components/employee/manager-dashboard').then(m => m.ManagerDashboard), { loading: PageSpinner })
+const MyTasksPage = dynamic(() => import('@/components/crm/tasks-page').then(m => m.MyTasksPage), { loading: PageSpinner })
+const TeamTasksPage = dynamic(() => import('@/components/crm/tasks-page').then(m => m.TeamTasksPage), { loading: PageSpinner })
 const AnalyticsPage = dynamic(() => import('@/components/reports/analytics-page').then(m => m.AnalyticsPage), { loading: PageSpinner })
 const AuditPage = dynamic(() => import('@/components/admin/audit-page').then(m => m.AuditPage), { loading: PageSpinner })
 const MyPaymentsPage = dynamic(() => import('@/components/cabinet/my-payments-page').then(m => m.MyPaymentsPage), { loading: PageSpinner })
@@ -226,8 +226,8 @@ function PageRouter({ session }: { session: SessionUser }) {
     case 'payroll': return <PayrollPage />
     case 'vacations': return <VacationsPage />
     case 'users': return <UsersPage />
-    case 'employee-dashboard': return <EmployeeDashboard />
-    case 'manager-dashboard': return <ManagerDashboard />
+    case 'employee-dashboard': return <MyTasksPage />
+    case 'manager-dashboard': return <TeamTasksPage />
     case 'analytics': return <AnalyticsPage />
     case 'audit': return <AuditPage />
     case 'my-payments': return <MyPaymentsPage participantId={session.participantId} participantName={session.fullName} />

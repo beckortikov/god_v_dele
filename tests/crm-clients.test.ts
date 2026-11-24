@@ -5,6 +5,7 @@ process.env.SUPABASE_SERVICE_ROLE_KEY ||= 'service-key-for-tests'
 
 import { GET as listClients, POST as addClient } from '@/app/api/crm/clients/route'
 import { POST as invite } from '@/app/api/crm/clients/[id]/invite/route'
+import { GET as card, PATCH as editClient } from '@/app/api/crm/clients/[id]/route'
 import { SESSION_COOKIE, createSessionToken } from '@/lib/session'
 import { fake } from './helpers/fake-db'
 
@@ -86,5 +87,22 @@ describe('/api/crm/clients', () => {
     expect(fake.rows('event_attendees')).toHaveLength(1)
     expect((await invite(req('POST', {}), ctx({ id: 'p1' }))).status).toBe(400)
     expect((await invite(req('POST', { event_id: EV }), ctx({ id: 'nobody' }))).status).toBe(404)
+  })
+
+  it('shows the card with events and call history, and edits contacts and business in place', async () => {
+    fake.rows('participants').push({ id: 'p1', name: 'Малика', phone: '+992900000001', status: 'active', created_at: '2026-11-20T10:00:00Z', program_id: GUEST })
+    fake.rows('participant_profiles').push({ participant_id: 'p1', city: 'Худжанд', activity: 'Салон', monthly_turnover: '50000', currency: 'TJS' })
+    await invite(req('POST', { event_id: EV, note: 'Ждёт звонка' }), ctx({ id: 'p1' }))
+    const c = (await json(await card(req('GET'), ctx({ id: 'p1' })))).body.data
+    expect(c).toMatchObject({ name: 'Малика', profile: { city: 'Худжанд', monthly_turnover: 50000 } })
+    expect(c.events).toEqual([expect.objectContaining({ name: 'Мастермайнд', stage: 'new', hunter: 'Шабо' })])
+    expect(c.history.map((h: any) => h.body)).toEqual(expect.arrayContaining(['Ждёт звонка']))
+
+    const res = await editClient(req('PATCH', { phone: '+992 90 000 00 09', profile: { city: '', activity: 'Сеть салонов', monthly_turnover: '90000', currency: 'TJS' } }), ctx({ id: 'p1' }))
+    expect(res.status).toBe(200)
+    expect(fake.rows('participants')[0].phone).toBe('+992 90 000 00 09')
+    expect(fake.rows('participant_profiles')[0]).toMatchObject({ city: null, activity: 'Сеть салонов', monthly_turnover: 90000 })
+    expect((await editClient(req('PATCH', { name: ' ' }), ctx({ id: 'p1' }))).status).toBe(400)
+    expect((await card(req('GET', undefined, ['employee', 'Без']), ctx({ id: 'p1' }))).status).toBe(403)
   })
 })
