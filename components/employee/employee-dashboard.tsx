@@ -199,7 +199,7 @@ export function EmployeeDashboard() {
     if (!employeeId) {
         return (
             <PageContainer>
-                <PageHeader title="Мой кабинет" />
+                <PageHeader title="Мои задачи" />
                 <Panel>
                     <EmptyState
                         icon={UserX}
@@ -218,7 +218,7 @@ export function EmployeeDashboard() {
     return (
         <PageContainer>
             <PageHeader
-                title={firstName ? `${greeting()}, ${firstName}` : 'Мой кабинет'}
+                title={firstName ? `${greeting()}, ${firstName}` : 'Мои задачи'}
                 description={
                     <>
                         {position && <>{position} · </>}

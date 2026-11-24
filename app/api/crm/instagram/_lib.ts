@@ -6,6 +6,7 @@ import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { crmGuard } from '@/lib/crm-access'
 import { ZernioError } from '@/lib/zernio'
+import { CrmError } from '@/lib/crm-clients-server'
 import { IG_NOTE_MAX, isIgStage, stageAfterReply, type IgContact, type IgStage } from '@/lib/crm-instagram'
 
 const TABLE = 'crm_instagram_contacts'
@@ -15,14 +16,7 @@ export const MIGRATION_029 = 'Примените миграцию migrations/029
 type Err = { code?: string; message?: string } | null
 export const tableMissing = (e: Err) => !!e && (e.code === '42P01' || /crm_instagram_contacts/.test(e.message ?? ''))
 
-export class IgRouteError extends Error {
-  constructor(
-    message: string,
-    public status = 400
-  ) {
-    super(message)
-  }
-}
+export class IgRouteError extends CrmError {}
 
 /** CRM access check, then the handler; Zernio and input errors become readable answers. */
 export async function igRoute(req: Request, label: string, fn: () => Promise<Response>) {
@@ -31,7 +25,7 @@ export async function igRoute(req: Request, label: string, fn: () => Promise<Res
   try {
     return await fn()
   } catch (e) {
-    if (e instanceof IgRouteError) return NextResponse.json({ error: e.message }, { status: e.status })
+    if (e instanceof CrmError) return NextResponse.json({ error: e.message, ...e.extra }, { status: e.status })
     if (e instanceof ZernioError) {
       const expired = e.code === 'TOKEN_EXPIRED' || /expired|reconnect/i.test(e.message)
       return NextResponse.json(

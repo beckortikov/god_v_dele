@@ -17,8 +17,8 @@ const EXPECTED_SECTIONS: Record<UserRole, string[]> = {
   admin: ['home', 'people', 'crm', 'finance', 'reports', 'wheels', 'hr', 'admin'],
   finance: ['home', 'people', 'finance', 'reports', 'wheels'],
   wheels_manager: ['wheels', 'people'],
-  manager: ['cabinet', 'people', 'wheels'],
-  employee: ['cabinet', 'wheels'],
+  manager: ['crm', 'people'],
+  employee: ['crm'],
   participant: ['cabinet', 'wheels'],
 }
 
@@ -49,20 +49,25 @@ describe('getSections', () => {
     expect(people('manager')).toEqual(['sprints', 'plans', 'lessons'])
   })
 
-  it('the CRM section comes with «Доступ к CRM»: always for admin, never for participants', () => {
+  it('the CRM starts with tasks (no tick needed); its tools come with «Доступ к CRM», always for admin', () => {
     const crm = (r: UserRole, on: boolean) => getSections(r, on).find(s => s.id === 'crm')?.pages
-    expect(crm('admin', false)).toEqual(['instagram', 'calls', 'funnel'])
-    for (const r of ['finance', 'manager', 'employee', 'wheels_manager'] as UserRole[]) {
+    const tools = ['instagram', 'calls', 'clients', 'funnel']
+    expect(crm('admin', false)).toEqual(['manager-dashboard', ...tools])
+    expect(crm('manager', false)).toEqual(['manager-dashboard', 'employee-dashboard'])
+    expect(crm('manager', true)).toEqual(['manager-dashboard', 'employee-dashboard', ...tools])
+    expect(crm('employee', false)).toEqual(['employee-dashboard'])
+    expect(crm('employee', true)).toEqual(['employee-dashboard', ...tools])
+    for (const r of ['finance', 'wheels_manager'] as UserRole[]) {
       expect(crm(r, false)).toBeUndefined()
-      expect(crm(r, true)).toEqual(['instagram', 'calls', 'funnel'])
+      expect(crm(r, true)).toEqual(tools)
     }
     expect(crm('participant', true)).toBeUndefined()
   })
 
   it('cabinet section depends on the role', () => {
     const cabinet = (r: UserRole) => getSections(r).find(s => s.id === 'cabinet')?.pages
-    expect(cabinet('manager')).toEqual(['employee-dashboard', 'manager-dashboard'])
-    expect(cabinet('employee')).toEqual(['employee-dashboard'])
+    expect(cabinet('manager')).toBeUndefined()
+    expect(cabinet('employee')).toBeUndefined()
     expect(cabinet('participant')).toEqual(['my-today', 'my-sprint', 'my-plan', ...(PARTICIPANT_PAYMENTS_VISIBLE ? ['my-payments'] : []), 'my-profile'])
   })
 })
@@ -74,13 +79,14 @@ describe('getAllowedPages', () => {
     for (const p of pages) expect(PAGES[p]).toBeDefined()
   })
 
-  it.each(ROLES)('%s can open the wheels', role => {
-    expect(getAllowedPages(role)).toEqual(expect.arrayContaining(WHEELS))
+  it.each(ROLES)('%s opens the wheels only when they are not staff without wheels of their own', role => {
+    const has = WHEELS.every(p => getAllowedPages(role).includes(p))
+    expect(has).toBe(!['employee', 'manager'].includes(role))
   })
 
   it('admin can reach every page except the personal cabinets', () => {
     const adminPages = new Set(getAllowedPages('admin'))
-    const cabinetPages: PageType[] = ['employee-dashboard', 'manager-dashboard', 'my-payments', 'my-sprint', 'my-plan', 'my-today', 'my-profile']
+    const cabinetPages: PageType[] = ['employee-dashboard', 'my-payments', 'my-sprint', 'my-plan', 'my-today', 'my-profile']
     for (const id of Object.keys(PAGES) as PageType[]) {
       expect(adminPages.has(id)).toBe(!cabinetPages.includes(id))
     }
@@ -146,7 +152,7 @@ describe('getDefaultPage', () => {
     expect(getDefaultPage('admin')).toBe('dashboard')
     expect(getDefaultPage('finance')).toBe('dashboard')
     expect(getDefaultPage('manager')).toBe('manager-dashboard')
-    expect(getDefaultPage('employee')).toBe('life-wheel')
+    expect(getDefaultPage('employee')).toBe('employee-dashboard')
     expect(getDefaultPage('participant')).toBe('my-today')
     expect(getDefaultPage('wheels_manager')).toBe('life-wheel')
   })

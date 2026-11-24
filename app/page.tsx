@@ -21,6 +21,7 @@ const IncomeExpensesPage = dynamic(() => import('@/components/income-expenses-pa
 const PlanFactPage = dynamic(() => import('@/components/plan-fact-page').then(m => m.PlanFactPage), { loading: PageSpinner })
 const CallsPage = dynamic(() => import('@/components/crm/calls-page').then(m => m.CallsPage), { loading: PageSpinner })
 const InstagramPage = dynamic(() => import('@/components/crm/instagram-page').then(m => m.InstagramPage), { loading: PageSpinner })
+const ClientsPage = dynamic(() => import('@/components/crm/clients-page').then(m => m.ClientsPage), { loading: PageSpinner })
 const FunnelPage = dynamic(() => import('@/components/crm/funnel-page').then(m => m.FunnelPage), { loading: PageSpinner })
 const OfflineEventsPage = dynamic(() => import('@/components/offline-events-page').then(m => m.OfflineEventsPage), { loading: PageSpinner })
 const BalanceForecastPage = dynamic(() => import('@/components/balance-forecast-page').then(m => m.BalanceForecastPage), { loading: PageSpinner })
@@ -171,7 +172,16 @@ function AuthedApp({ session, onLogout }: { session: SessionUser; onLogout: () =
 /** CRM pages get their own full-screen shell; everything else the app shell with its header. */
 function Shell({ session, crm, onLogout, children }: { session: SessionUser; crm: boolean; onLogout: () => void; children: ReactNode }) {
   const { page } = useNav()
-  if (CRM_PAGES.includes(page)) return <CrmShell home={getDefaultPage(session.role)}>{children}</CrmShell>
+  if (CRM_PAGES.includes(page)) {
+    const allowed = getAllowedPages(session.role, crm)
+    const pages = CRM_PAGES.filter(p => allowed.includes(p))
+    const home = allowed.find(p => !CRM_PAGES.includes(p)) ?? null
+    return (
+      <CrmShell pages={pages} home={home} role={session.role} crm={crm} userName={session.fullName} onLogout={onLogout}>
+        {children}
+      </CrmShell>
+    )
+  }
   return (
     <AppShell role={session.role} crm={crm} userName={session.fullName} participantId={session.participantId} onLogout={onLogout}>
       {children}
@@ -204,6 +214,7 @@ function PageRouter({ session }: { session: SessionUser }) {
     case 'calls': return <CallsPage />
     case 'funnel': return <FunnelPage />
     case 'instagram': return <InstagramPage />
+    case 'clients': return <ClientsPage />
     case 'balance': return <BalanceForecastPage />
     case 'life-wheel': return <LifeWheelPage {...selfView} />
     case 'life-balance': return <LifeBalancePage {...selfView} />

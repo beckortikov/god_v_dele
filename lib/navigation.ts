@@ -31,6 +31,8 @@ import {
   PhoneCall,
   Filter,
   Instagram,
+  Contact,
+  ListTodo,
   Headset,
   type LucideIcon,
 } from 'lucide-react'
@@ -41,7 +43,7 @@ export type PageType =
   | 'hr-dashboard' | 'employees' | 'schedule' | 'payroll' | 'vacations' | 'timesheet'
   | 'users' | 'employee-dashboard' | 'manager-dashboard'
   | 'analytics' | 'audit' | 'my-payments'
-  | 'sprints' | 'plans' | 'my-sprint' | 'my-plan' | 'my-today' | 'my-profile' | 'lessons' | 'calls' | 'funnel' | 'instagram'
+  | 'sprints' | 'plans' | 'my-sprint' | 'my-plan' | 'my-today' | 'my-profile' | 'lessons' | 'calls' | 'funnel' | 'instagram' | 'clients'
 
 export type UserRole = 'admin' | 'finance' | 'employee' | 'manager' | 'wheels_manager' | 'participant'
 
@@ -79,8 +81,8 @@ export const PAGES: Record<PageType, NavPage> = {
   payroll: { id: 'payroll', label: 'Зарплата', title: 'Зарплата', description: 'Начисления и выплаты', icon: Wallet },
   vacations: { id: 'vacations', label: 'Отпуска', title: 'Отгулы и отпуска', description: 'Заявки и остатки дней', icon: Palmtree },
   users: { id: 'users', label: 'Пользователи', title: 'Пользователи', description: 'Доступы и роли', icon: ShieldCheck },
-  'employee-dashboard': { id: 'employee-dashboard', label: 'Мой кабинет', title: 'Мой кабинет', description: 'Задачи, время и заявки', icon: UserCircle2 },
-  'manager-dashboard': { id: 'manager-dashboard', label: 'Задачи команды', title: 'Задачи сотрудников', description: 'Постановка и контроль задач', icon: ListChecks },
+  'employee-dashboard': { id: 'employee-dashboard', label: 'Мои задачи', title: 'Мои задачи', description: 'Задачи на сегодня, учёт времени и заявки на отгул', icon: ListTodo },
+  'manager-dashboard': { id: 'manager-dashboard', label: 'Задачи', title: 'Задачи сотрудников', description: 'Постановка и контроль задач команды, заявки на отгул', icon: ListChecks },
   analytics: { id: 'analytics', label: 'Аналитика', title: 'Аналитика', description: 'Долги по срокам, удержание и доход на участника', icon: PieChart },
   audit: { id: 'audit', label: 'Журнал изменений', title: 'Журнал изменений', description: 'Кто и что изменил, корзина удалённого', icon: History },
   'my-payments': { id: 'my-payments', label: 'Мои оплаты', title: 'Мои оплаты', description: 'График платежей и задолженность', icon: Receipt },
@@ -92,6 +94,7 @@ export const PAGES: Record<PageType, NavPage> = {
   'my-sprint': { id: 'my-sprint', label: 'Мой спринт', title: 'Мой спринт', description: 'Задачи спринта и отчёты куратору', icon: Flag },
   calls: { id: 'calls', label: 'Обзвон', title: 'Обзвон', description: 'Кого пригласить на мероприятие: этапы, комментарии и кто что отметил', icon: PhoneCall },
   instagram: { id: 'instagram', label: 'Instagram', title: 'Instagram', description: 'Директ и комментарии @god_v_dele: ответы, этапы и «Завести в базу»', icon: Instagram },
+  clients: { id: 'clients', label: 'Клиенты', title: 'Клиенты', description: 'База клиентов: быстро добавить человека с улицы, по звонку или рекомендации', icon: Contact },
   funnel: { id: 'funnel', label: 'Воронка', title: 'Воронка', description: 'Сколько людей дошло до каждого этапа: по мероприятиям и хантерам', icon: Filter },
   'my-plan': { id: 'my-plan', label: 'Мой план', title: 'Операционный план', description: 'Видение, направления, микро-цели и действия со сроками и ценой слова', icon: ClipboardList },
 }
@@ -99,7 +102,7 @@ export const PAGES: Record<PageType, NavPage> = {
 const S = {
   home: { id: 'home', label: 'Главное', icon: LayoutDashboard, pages: ['dashboard'] },
   people: { id: 'people', label: 'Участники', icon: Users, pages: ['participants', 'programs', 'sprints', 'plans', 'lessons'] },
-  crm: { id: 'crm', label: 'CRM', icon: Headset, pages: ['instagram', 'calls', 'funnel'] },
+  crm: { id: 'crm', label: 'CRM', icon: Headset, pages: [] },
   finance: { id: 'finance', label: 'Финансы', icon: ArrowLeftRight, pages: ['income', 'plan-fact', 'balance', 'offline'] },
   reports: { id: 'reports', label: 'Отчёты', icon: FileSpreadsheet, pages: ['opiu-reports', 'analytics'] },
   wheels: { id: 'wheels', label: 'Колёса баланса', icon: Compass, pages: ['life-wheel', 'life-balance', 'business-wheel'] },
@@ -107,24 +110,37 @@ const S = {
   admin: { id: 'admin', label: 'Администрирование', icon: ShieldCheck, pages: ['users', 'audit'] },
 } satisfies Record<string, NavSection>
 
-/** `crm`: the user has «Доступ к CRM» (admin always does). */
+/** Task pages by role: they live in the CRM, first in its menu, and need no «Доступ к CRM». */
+const TASK_PAGES: Record<UserRole, PageType[]> = {
+  admin: ['manager-dashboard'],
+  manager: ['manager-dashboard', 'employee-dashboard'],
+  employee: ['employee-dashboard'],
+  finance: [],
+  wheels_manager: [],
+  participant: [],
+}
+
+/** CRM tools that need «Доступ к CRM» (admin always has it). */
+const CRM_TOOLS: PageType[] = ['instagram', 'calls', 'clients', 'funnel']
+
+function crmSection(role: UserRole, crm: boolean): NavSection[] {
+  const pages = [...TASK_PAGES[role], ...(crm || role === 'admin' ? CRM_TOOLS : [])]
+  return pages.length ? [{ ...S.crm, pages }] : []
+}
+
+/** `crm`: the user has «Доступ к CRM» (admin always does). Employees and managers have no wheels of their own. */
 export function getSections(role: UserRole, crm = false): NavSection[] {
-  const withCrm = (sections: NavSection[]) => (crm || role === 'admin' ? [...sections, S.crm] : sections)
   switch (role) {
     case 'admin':
-      return [S.home, S.people, S.crm, S.finance, S.reports, S.wheels, S.hr, S.admin]
+      return [S.home, S.people, ...crmSection(role, crm), S.finance, S.reports, S.wheels, S.hr, S.admin]
     case 'finance':
-      return withCrm([S.home, { ...S.people, pages: ['participants', 'programs'] }, S.finance, S.reports, S.wheels])
+      return [S.home, { ...S.people, pages: ['participants', 'programs'] }, S.finance, S.reports, S.wheels, ...crmSection(role, crm)]
     case 'wheels_manager':
-      return withCrm([S.wheels, { ...S.people, pages: ['participants', 'sprints', 'plans', 'lessons'] }])
+      return [S.wheels, { ...S.people, pages: ['participants', 'sprints', 'plans', 'lessons'] }, ...crmSection(role, crm)]
     case 'manager':
-      return withCrm([
-        { id: 'cabinet', label: 'Кабинет', icon: UserCircle2, pages: ['employee-dashboard', 'manager-dashboard'] },
-        { ...S.people, pages: ['sprints', 'plans', 'lessons'] },
-        S.wheels,
-      ])
+      return [...crmSection(role, crm), { ...S.people, pages: ['sprints', 'plans', 'lessons'] }]
     case 'employee':
-      return withCrm([{ id: 'cabinet', label: 'Кабинет', icon: UserCircle2, pages: ['employee-dashboard'] }, S.wheels])
+      return crmSection(role, crm)
     case 'participant':
       return [{ id: 'cabinet', label: 'Кабинет', icon: UserCircle2, pages: ['my-today', 'my-sprint', 'my-plan', ...(PARTICIPANT_PAYMENTS_VISIBLE ? (['my-payments'] as PageType[]) : []), 'my-profile'] }, S.wheels]
   }
@@ -134,10 +150,11 @@ export function getDefaultPage(role: UserRole): PageType {
   switch (role) {
     case 'manager':
       return 'manager-dashboard'
+    case 'employee':
+      return 'employee-dashboard'
     case 'participant':
       return 'my-today'
     case 'wheels_manager':
-    case 'employee':
       return 'life-wheel'
     default:
       return 'dashboard'
@@ -145,7 +162,7 @@ export function getDefaultPage(role: UserRole): PageType {
 }
 
 /** CRM pages open full screen with their own side menu instead of the app header. */
-export const CRM_PAGES: PageType[] = ['instagram', 'calls', 'funnel']
+export const CRM_PAGES: PageType[] = ['manager-dashboard', 'employee-dashboard', ...CRM_TOOLS]
 
 export function getAllowedPages(role: UserRole, crm = false): PageType[] {
   return getSections(role, crm).flatMap(s => s.pages)
@@ -157,11 +174,11 @@ export function findSection(sections: NavSection[], page: PageType) {
 
 /** What each role can reach; shown wherever an administrator picks a role. */
 export const ROLE_DESCRIPTIONS: Record<UserRole, string> = {
-  admin: 'Полный доступ: финансы, участники, CRM, персонал и пользователи',
-  manager: 'Свой кабинет, задачи сотрудников, спринты и планы участников, заявки на отгул, колёса баланса',
+  admin: 'Полный доступ: финансы, участники, CRM и задачи, персонал и пользователи',
+  manager: 'Задачи команды и свои, заявки на отгул, спринты и планы участников',
   finance: 'Участники, финансы, отчёты и колёса баланса. Без раздела «Персонал»',
   wheels_manager: 'Колёса баланса, участники, их профили, спринты и планы',
-  employee: 'Свой кабинет: задачи, учёт времени, заявки на отгул; колёса баланса',
+  employee: 'Свои задачи, учёт времени и заявки на отгул',
   participant: 'Свой кабинет: сегодня, спринт, операционный план, оплаты, профиль и колёса баланса',
 }
 

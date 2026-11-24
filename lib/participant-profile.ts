@@ -74,7 +74,7 @@ export const FIELD_LABELS: Record<keyof typeof TEXT_LIMITS | 'birth_date' | 'cur
 }
 
 /** Where people come from; the profile also accepts any other text. */
-export const LEAD_SOURCES = ['Instagram — директ', 'Instagram — комментарий', 'Instagram — сторис', 'Реклама', 'Рекомендация', 'Мероприятие', 'Другое'] as const
+export const LEAD_SOURCES = ['С улицы', 'Звонок', 'Рекомендация', 'Instagram — директ', 'Instagram — комментарий', 'Instagram — сторис', 'Реклама', 'Мероприятие', 'Другое'] as const
 
 /** Takes what the client sent and returns only known, trimmed, valid fields (a missing key stays missing). */
 export function parseProfile(body: unknown, today = new Date().toISOString().slice(0, 10)): ProfileInput {

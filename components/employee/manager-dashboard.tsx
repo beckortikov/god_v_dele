@@ -414,7 +414,7 @@ export function ManagerDashboard() {
                             <EmptyState
                                 icon={ListChecks}
                                 title={employeeFilter === 'all' ? 'Задач пока нет' : 'У сотрудника нет задач'}
-                                description="Поставьте задачу: она появится в кабинете сотрудника на сегодня"
+                                description="Поставьте задачу: она появится у сотрудника в «Моих задачах» на сегодня"
                                 action={<Button size="sm" onClick={() => setNewTaskOpen(true)}><Plus /> Новая задача</Button>}
                             />
                         </Panel>
@@ -474,7 +474,7 @@ export function ManagerDashboard() {
                 participants={participants}
                 employees={employees}
                 defaultAssignee={employeeFilter === 'all' ? (newTaskOpen && empById.has(readLastAssignee()) ? readLastAssignee() : '') : employeeFilter}
-                description="Срок: сегодня. Задача сразу появится в кабинете сотрудника"
+                description="Срок: сегодня. Задача сразу появится у сотрудника в «Моих задачах»"
                 onCreate={handleCreateTask}
             />
             <TaskSheet
@@ -632,7 +632,7 @@ function LeavesPanel({
                 <EmptyState
                     icon={CalendarOff}
                     title={view === 'pending' ? 'Новых заявок нет' : 'Заявок пока нет'}
-                    description="Сотрудники отправляют заявки на отгул, отпуск и больничный из своего кабинета"
+                    description="Сотрудники отправляют заявки на отгул, отпуск и больничный из «Моих задач»"
                 />
             ) : (
                 <Table>
