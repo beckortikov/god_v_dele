@@ -37,6 +37,7 @@ export interface Task {
   task_type?: string | null
   result_comment?: string | null
   created_at?: string
+  updated_at?: string
   target?: TaskTarget | null
 }
 
@@ -121,6 +122,84 @@ export function TaskStatusBadge({ status, className }: { status: TaskStatus; cla
 }
 
 /** Due date line: highlights overdue tasks, hides today's date. */
+/** «только что», «25 мин», «3 ч», «2 дн» since `iso`. */
+export function timeSince(iso: string | null | undefined, now = Date.now()): string {
+  if (!iso) return ''
+  const t = new Date(iso).getTime()
+  if (Number.isNaN(t)) return ''
+  const min = Math.max(0, Math.round((now - t) / 60_000))
+  if (min < 1) return 'только что'
+  if (min < 60) return `${min} мин`
+  const h = Math.floor(min / 60)
+  if (h < 24) return `${h} ч`
+  return `${Math.floor(h / 24)} дн`
+}
+
+/** How long an open task has been waiting: calm for a day, then warning, then red after three. */
+export function ageTone(task: Task, now = Date.now()): 'calm' | 'warn' | 'late' {
+  if (!task.created_at || task.status === 'completed' || task.status === 'cancelled') return 'calm'
+  const h = (now - new Date(task.created_at).getTime()) / 3_600_000
+  return h >= 72 ? 'late' : h >= 24 ? 'warn' : 'calm'
+}
+
+export function addDays(iso: string, days: number) {
+  const d = new Date(`${iso}T00:00:00`)
+  d.setDate(d.getDate() + days)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+/** Quick deadlines for a new task or a changed one. */
+export const DEADLINES = [
+  { label: 'Сегодня', days: 0 },
+  { label: 'Завтра', days: 1 },
+  { label: 'Через 3 дня', days: 3 },
+  { label: 'Через неделю', days: 7 },
+]
+
+/** «сегодня», «завтра», «пт, 28 ноя». */
+export function deadlineLabel(iso: string | null | undefined) {
+  if (!iso) return 'без срока'
+  const today = todayISO()
+  if (iso === today) return 'сегодня'
+  if (iso === addDays(today, 1)) return 'завтра'
+  const d = new Date(`${iso}T00:00:00`)
+  return d.toLocaleDateString('ru-RU', { weekday: 'short', day: 'numeric', month: 'short' }).replace('.', '')
+}
+
+/** Choose a deadline: quick picks plus any date. */
+export function DeadlinePicker({ value, onChange, compact }: { value: string; onChange: (iso: string) => void; compact?: boolean }) {
+  const today = todayISO()
+  return (
+    <div role="radiogroup" aria-label="Срок" className="flex flex-wrap items-center gap-1">
+      {DEADLINES.map(d => {
+        const iso = addDays(today, d.days)
+        const on = value === iso
+        return (
+          <button
+            key={d.days}
+            type="button"
+            role="radio"
+            aria-checked={on}
+            onClick={() => onChange(iso)}
+            className={cn(
+              'rounded-full px-3 text-xs font-medium outline-none transition-colors focus-visible:ring-[3px] focus-visible:ring-ring/30',
+              compact ? 'h-8' : 'h-9',
+              on ? 'bg-primary text-primary-foreground' : 'border bg-card text-foreground/80 hover:bg-muted'
+            )}
+          >
+            {d.label}
+          </button>
+        )
+      })}
+      <label className={cn('relative inline-flex items-center gap-1 rounded-full border bg-card px-3 text-xs font-medium text-foreground/80 hover:bg-muted', compact ? 'h-8' : 'h-9', !DEADLINES.some(d => addDays(today, d.days) === value) && value && 'border-primary bg-primary-soft text-primary-soft-foreground')}>
+        <CalendarClock className="size-3.5" />
+        {!DEADLINES.some(d => addDays(today, d.days) === value) && value ? deadlineLabel(value) : 'Дата'}
+        <input type="date" min={today} value={value} onChange={e => e.target.value && onChange(e.target.value)} className="absolute inset-0 cursor-pointer opacity-0" aria-label="Своя дата срока" />
+      </label>
+    </div>
+  )
+}
+
 export function DueLabel({ task, className }: { task: Task; className?: string }) {
   if (!task.due_date) return null
   if (isOverdue(task)) {
@@ -378,12 +457,14 @@ export function TaskSheet({
 }) {
   const [status, setStatus] = React.useState<TaskStatus>('todo')
   const [comment, setComment] = React.useState('')
+  const [due, setDue] = React.useState('')
   const [saving, setSaving] = React.useState(false)
 
   React.useEffect(() => {
     if (open && task) {
       setStatus(task.status)
       setComment(task.result_comment || '')
+      setDue(task.due_date || '')
     }
   }, [open, task])
 
@@ -394,12 +475,12 @@ export function TaskSheet({
       const res = await fetch('/api/employee/tasks', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: task.id, status, result_comment: comment }),
+        body: JSON.stringify({ id: task.id, status, result_comment: comment, ...(due !== (task.due_date || '') ? { due_date: due || null } : {}) }),
       })
       const result = await res.json().catch(() => ({}))
       if (!res.ok || result.error) throw new Error(result.error || 'Сервер не ответил')
       toast.success('Задача обновлена', { description: TASK_STATUS[status].label })
-      onSaved({ ...task, status, result_comment: comment })
+      onSaved({ ...task, status, result_comment: comment, due_date: due || null })
       onOpenChange(false)
     } catch (err: any) {
       toast.error('Не удалось сохранить задачу', { description: err.message })
@@ -471,6 +552,17 @@ export function TaskSheet({
                     )}
                   </div>
                 )}
+
+                {task.created_at && (
+                  <p className="text-xs text-muted-foreground">
+                    Поставлена {formatDate(task.created_at, 'long')} в{' '}
+                    {new Date(task.created_at).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })} · прошло {timeSince(task.created_at)}
+                  </p>
+                )}
+
+                <Field label="Срок">
+                  <DeadlinePicker value={due} onChange={setDue} />
+                </Field>
 
                 <Field label="Статус">
                   <div className="grid grid-cols-2 gap-1.5" role="radiogroup" aria-label="Статус">

@@ -2,9 +2,9 @@
 
 import * as React from 'react'
 import { toast } from 'sonner'
-import { ArrowLeft, CalendarOff, Check, CheckCheck, ListChecks, ListTodo, Phone, Plus, SendHorizontal, SlidersHorizontal, Users, X } from 'lucide-react'
+import { ArrowLeft, CalendarClock, CalendarOff, Check, CheckCheck, Clock, Columns3, List, ListChecks, ListTodo, Phone, Plus, SendHorizontal, SlidersHorizontal, Users, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { plural, todayISO } from '@/lib/format'
+import { formatDate, plural, todayISO } from '@/lib/format'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { SearchInput } from '@/components/erp/search-input'
@@ -13,8 +13,11 @@ import { EmptyState } from '@/components/erp/empty-state'
 import { Combobox } from '@/components/erp/combobox'
 import { useConfirm } from '@/components/erp/confirm'
 import {
-  DueLabel,
+  DeadlinePicker,
   GENERIC_TASK_TYPE,
+  ageTone,
+  deadlineLabel,
+  timeSince,
   NewTaskSheet,
   TaskSheet,
   employeeName,
@@ -40,6 +43,134 @@ const QUICK_TYPES = [
   { value: GENERIC_TASK_TYPE, label: 'Задача' },
 ]
 
+const TASK_STATUS_LABEL: Record<TaskStatus, string> = { todo: 'К выполнению', in_progress: 'В работе', completed: 'Выполнено', cancelled: 'Отменено' }
+const VIEW_KEY = 'tasks-layout'
+
+/** «Список» or «Доска», remembered per browser. */
+function useLayout(): ['list' | 'board', (v: 'list' | 'board') => void] {
+  const [v, setV] = React.useState<'list' | 'board'>('list')
+  React.useEffect(() => {
+    try {
+      if (localStorage.getItem(VIEW_KEY) === 'board') setV('board')
+    } catch {}
+  }, [])
+  return [
+    v,
+    next => {
+      setV(next)
+      try {
+        localStorage.setItem(VIEW_KEY, next)
+      } catch {}
+    },
+  ]
+}
+
+function LayoutSwitch({ value, onChange }: { value: 'list' | 'board'; onChange: (v: 'list' | 'board') => void }) {
+  return (
+    <Segmented
+      size="sm"
+      aria-label="Вид"
+      value={value}
+      onChange={onChange}
+      options={[
+        { value: 'list', label: (<><List className="size-3.5" />Список</>) },
+        { value: 'board', label: (<><Columns3 className="size-3.5" />Доска</>) },
+      ]}
+    />
+  )
+}
+
+const COLUMNS: { id: TaskStatus; title: string; statuses: TaskStatus[]; dot: string }[] = [
+  { id: 'todo', title: 'К выполнению', statuses: ['todo'], dot: 'bg-muted-foreground/50' },
+  { id: 'in_progress', title: 'В работе', statuses: ['in_progress'], dot: 'bg-info' },
+  { id: 'completed', title: 'Выполнено', statuses: ['completed', 'cancelled'], dot: 'bg-success' },
+]
+const DONE_ON_BOARD = 30
+
+/** Three columns; drag a card to another column to change its status, click to open it. */
+function TaskBoard({ tasks, names, onMove, onOpen }: { tasks: Task[]; names?: Map<string, string>; onMove: (t: Task, s: TaskStatus) => void; onOpen: (t: Task) => void }) {
+  const [over, setOver] = React.useState<TaskStatus | null>(null)
+  const dragged = React.useRef<string | null>(null)
+  const order = (a: Task, b: Task) => Number(isOverdue(b)) - Number(isOverdue(a)) || (a.due_date ?? '').localeCompare(b.due_date ?? '') || (a.created_at ?? '').localeCompare(b.created_at ?? '')
+  return (
+    <div className="min-h-0 flex-1 overflow-auto p-2 sm:p-3">
+      <div className="grid min-h-full auto-cols-[17rem] grid-flow-col items-start gap-2.5 lg:auto-cols-auto lg:grid-flow-row lg:grid-cols-3">
+        {COLUMNS.map(col => {
+          let items = tasks.filter(t => col.statuses.includes(t.status))
+          items = col.id === 'completed' ? items.sort((a, b) => (b.updated_at ?? '').localeCompare(a.updated_at ?? '')).slice(0, DONE_ON_BOARD) : items.sort(order)
+          return (
+            <section
+              key={col.id}
+              aria-label={col.title}
+              onDragOver={e => {
+                e.preventDefault()
+                setOver(col.id)
+              }}
+              onDragLeave={() => setOver(o => (o === col.id ? null : o))}
+              onDrop={e => {
+                e.preventDefault()
+                setOver(null)
+                const t = tasks.find(x => x.id === dragged.current)
+                dragged.current = null
+                if (t && !col.statuses.includes(t.status)) onMove(t, col.id)
+              }}
+              className={cn('flex min-h-48 flex-col rounded-2xl border-2 border-transparent bg-muted p-2 transition-colors', over === col.id && 'border-primary bg-primary-soft/60')}
+            >
+              <header className="mb-2 flex items-center gap-2 px-1.5 pt-1 text-sm font-semibold">
+                <span className={cn('size-2.5 rounded-full', col.dot)} />
+                {col.title}
+                <span className="num ml-auto font-medium text-muted-foreground">{items.length}</span>
+              </header>
+              <div className="flex flex-col gap-1.5">
+                {items.map(t => {
+                  const type = taskType(t.task_type)
+                  const who = names?.get(t.assignee_id)
+                  return (
+                    <button
+                      key={t.id}
+                      type="button"
+                      draggable
+                      onDragStart={e => {
+                        dragged.current = t.id
+                        e.dataTransfer.effectAllowed = 'move'
+                        e.dataTransfer.setData('text/plain', t.id)
+                      }}
+                      onClick={() => onOpen(t)}
+                      className={cn(
+                        'flex w-full cursor-grab flex-col gap-1.5 rounded-xl border bg-card p-3 text-left shadow-xs outline-none transition-shadow hover:shadow-md focus-visible:ring-[3px] focus-visible:ring-ring/30 active:cursor-grabbing',
+                        isOverdue(t) && 'border-destructive/40'
+                      )}
+                    >
+                      <span className="flex items-start gap-1.5">
+                        <type.icon className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-label={type.label} />
+                        <span className={cn('min-w-0 flex-1 text-sm leading-snug font-medium', t.status === 'completed' && 'text-muted-foreground line-through')}>{t.title}</span>
+                      </span>
+                      {t.target && <span className="self-start rounded-md bg-primary-soft px-1.5 py-0.5 text-[11px] font-medium text-primary-soft-foreground">{t.target.name}</span>}
+                      <span className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[11px]">
+                        <TaskTiming task={t} />
+                      </span>
+                      {who && (
+                        <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                          <PersonAvatar name={who} seed={t.assignee_id} size="sm" className="size-5! text-[9px]!" />
+                          {who}
+                        </span>
+                      )}
+                    </button>
+                  )
+                })}
+                {items.length === 0 && <p className="rounded-xl border border-dashed px-2 py-6 text-center text-xs text-muted-foreground">Перетащите сюда</p>}
+                {col.id === 'completed' && tasks.filter(t => col.statuses.includes(t.status)).length > DONE_ON_BOARD && (
+                  <p className="px-1 text-center text-[11px] text-muted-foreground">Показаны последние {DONE_ON_BOARD}; остальные — в списке</p>
+                )}
+              </div>
+            </section>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 const isActive = (t: Task) => t.status === 'todo' || t.status === 'in_progress'
 
 function readUser(): { id: string | null; employeeId: string | null; name: string | null } {
@@ -58,19 +189,51 @@ async function send(method: string, body: unknown, url = '/api/employee/tasks') 
   return result
 }
 
-/** Overdue first, then today's work (in progress before to do), then what is done. */
+const isLater = (t: Task) => !!t.due_date && t.due_date > todayISO()
+
+/** Overdue first, then today's work (in progress before to do), then later deadlines, then what is done. */
 function groupTasks(tasks: Task[], view: View) {
   const active = tasks.filter(isActive)
   const overdue = active.filter(isOverdue)
-  const today = active.filter(t => !isOverdue(t)).sort((a, b) => Number(b.status === 'in_progress') - Number(a.status === 'in_progress'))
-  const done = tasks.filter(t => !isActive(t))
+  const today = active.filter(t => !isOverdue(t) && !isLater(t)).sort((a, b) => Number(b.status === 'in_progress') - Number(a.status === 'in_progress'))
+  const later = active.filter(isLater).sort((a, b) => (a.due_date ?? '').localeCompare(b.due_date ?? ''))
+  const done = tasks.filter(t => !isActive(t)).sort((a, b) => (b.updated_at ?? '').localeCompare(a.updated_at ?? ''))
   const groups: { id: string; title: string; tone?: 'danger'; items: Task[] }[] = []
   if (view !== 'done') {
     if (overdue.length) groups.push({ id: 'overdue', title: 'Просрочено', tone: 'danger', items: overdue })
     if (today.length) groups.push({ id: 'today', title: 'На сегодня', items: today })
+    if (later.length) groups.push({ id: 'later', title: 'Позже', items: later })
   }
   if (view !== 'active' && done.length) groups.push({ id: 'done', title: 'Выполнено', items: done })
   return groups
+}
+
+/** The deadline and how long ago the task was set (or how long it took). */
+function TaskTiming({ task }: { task: Task }) {
+  const done = task.status === 'completed'
+  const tone = ageTone(task)
+  return (
+    <>
+      {task.due_date && !done && (isOverdue(task) || isLater(task)) && (
+        <span className={cn('num inline-flex items-center gap-1', isOverdue(task) ? 'font-semibold text-destructive' : 'text-muted-foreground')}>
+          <CalendarClock className="size-3.5" />
+          {isOverdue(task) ? `просрочено · срок ${formatDate(task.due_date).slice(0, 5)}` : `до ${deadlineLabel(task.due_date)}`}
+        </span>
+      )}
+      {task.created_at && (
+        <span
+          className={cn(
+            'num inline-flex items-center gap-1',
+            tone === 'late' ? 'font-semibold text-destructive' : tone === 'warn' ? 'font-medium text-[color-mix(in_oklch,var(--warning)_75%,var(--foreground))]' : 'text-muted-foreground'
+          )}
+          title={`Поставлена ${new Date(task.created_at).toLocaleString('ru-RU')}`}
+        >
+          <Clock className="size-3.5" />
+          {done && task.updated_at ? `сделано за ${timeSince(task.created_at, new Date(task.updated_at).getTime())}` : `${timeSince(task.created_at)} назад`}
+        </span>
+      )}
+    </>
+  )
 }
 
 /** One task: a round tick on the left (done ↔ back to work), the task in the middle, details on click. */
@@ -119,7 +282,7 @@ function TaskRow({
           {task.status === 'in_progress' && <span className="rounded-md bg-info-soft px-1.5 py-0.5 font-semibold text-info">В работе</span>}
           {cancelled && <span className="rounded-md bg-muted px-1.5 py-0.5 font-semibold text-muted-foreground">Отменено</span>}
           {task.target && <span className="rounded-md bg-primary-soft px-1.5 py-0.5 font-medium text-primary-soft-foreground">{task.target.name}</span>}
-          <DueLabel task={task} />
+          <TaskTiming task={task} />
           {assignee && (
             <span className="inline-flex items-center gap-1 text-muted-foreground">
               <PersonAvatar name={assignee} seed={task.assignee_id} className="size-5! text-[9px]!" size="sm" />
@@ -209,10 +372,11 @@ function QuickAdd({
   assignee?: string
   onAssignee?: (id: string) => void
   placeholder: string
-  onCreate: (v: NewTaskValues) => Promise<boolean>
+  onCreate: (v: NewTaskValues, due: string) => Promise<boolean>
   onMore: () => void
 }) {
   const [title, setTitle] = React.useState('')
+  const [due, setDue] = React.useState(todayISO())
   const [type, setType] = React.useState('call')
   const [client, setClient] = React.useState('none')
   const [busy, setBusy] = React.useState(false)
@@ -229,11 +393,12 @@ function QuickAdd({
       target_type: client === 'none' ? 'none' : 'participant',
       target_participant_id: client,
       guest_name: '',
-    })
+    }, due)
     setBusy(false)
     if (ok) {
       setTitle('')
       setClient('none')
+      setDue(todayISO())
     }
   }
 
@@ -263,6 +428,7 @@ function QuickAdd({
             </button>
           ))}
         </div>
+        <DeadlinePicker value={due} onChange={setDue} compact />
         <Combobox size="sm" value={client} onChange={setClient} options={clientOptions} searchPlaceholder="Имя или телефон клиента…" className="w-full sm:w-56" />
         {employees && onAssignee && (
           <Combobox
@@ -338,11 +504,12 @@ function useTasks(url: string | null) {
     load,
     busyId,
     toggle: (t: Task) => setStatus(t, t.status === 'completed' ? 'todo' : 'completed', t.status === 'completed' ? undefined : 'Выполнено'),
+    move: (t: Task, status: TaskStatus) => t.status !== status && setStatus(t, status, TASK_STATUS_LABEL[status]),
     start: (t: Task) => setStatus(t, 'in_progress', 'В работе'),
   }
 }
 
-async function createTask(v: NewTaskValues, creatorId: string | null): Promise<boolean> {
+async function createTask(v: NewTaskValues, creatorId: string | null, due = todayISO()): Promise<boolean> {
   let title = v.title
   if (v.target_type === 'guest' && v.guest_name.trim()) title = `${v.title} (Гость: ${v.guest_name.trim()})`
   try {
@@ -352,7 +519,7 @@ async function createTask(v: NewTaskValues, creatorId: string | null): Promise<b
       title,
       description: v.description,
       task_type: v.task_type,
-      due_date: todayISO(),
+      due_date: due,
       target_participant_id: v.target_type === 'participant' && v.target_participant_id !== 'none' ? v.target_participant_id : null,
     })
     return true
@@ -412,7 +579,8 @@ export function TeamTasksPage() {
   const [pane, setPane] = React.useState<'list' | 'tasks'>('list')
   const [selected, setSelected] = React.useState<Task | null>(null)
   const [moreOpen, setMoreOpen] = React.useState(false)
-  const { tasks, setTasks, load, busyId, toggle, start } = useTasks(`/api/employee/tasks?date=${todayISO()}`)
+  const { tasks, setTasks, load, busyId, toggle, start, move } = useTasks(`/api/employee/tasks?date=${todayISO()}&open=1`)
+  const [layout, setLayout] = useLayout()
 
   React.useEffect(() => {
     setMe(readUser().id)
@@ -444,13 +612,13 @@ export function TeamTasksPage() {
     if (id !== 'all') setAssignee(id)
   }
 
-  const create = async (v: NewTaskValues) => {
+  const create = async (v: NewTaskValues, due?: string) => {
     const target = v.assignee_id || assignee
     if (!target) {
       toast.error('Выберите, кому задача')
       return false
     }
-    const ok = await createTask({ ...v, assignee_id: target }, me)
+    const ok = await createTask({ ...v, assignee_id: target }, me, due)
     if (ok) {
       toast.success('Задача поставлена', { description: `${v.title} · ${names.get(target) ?? ''}` })
       load()
@@ -566,6 +734,7 @@ export function TeamTasksPage() {
                 <p className="truncate text-xs text-muted-foreground">{current?.position || 'Поручения на сегодня и всё, что не закрыто раньше'}</p>
               </div>
               <Progress tasks={scoped} />
+              <LayoutSwitch value={layout} onChange={setLayout} />
             </>
           ) : (
             <div className="min-w-0 flex-1">
@@ -578,19 +747,24 @@ export function TeamTasksPage() {
         {tab === 'tasks' ? (
           <>
             <div className="flex flex-wrap items-center gap-2 border-b bg-card px-3 py-2 sm:px-4">
-              <Segmented
-                size="sm"
-                aria-label="Показать"
-                value={view}
-                onChange={setView}
-                options={[
-                  { value: 'active', label: 'Активные', count: scoped.filter(isActive).length },
-                  { value: 'done', label: 'Выполненные', count: scoped.filter(t => !isActive(t)).length },
-                  { value: 'all', label: 'Все' },
-                ]}
-              />
+              {layout === 'list' && (
+                <Segmented
+                  size="sm"
+                  aria-label="Показать"
+                  value={view}
+                  onChange={setView}
+                  options={[
+                    { value: 'active', label: 'Активные', count: scoped.filter(isActive).length },
+                    { value: 'done', label: 'Выполненные', count: scoped.filter(t => !isActive(t)).length },
+                    { value: 'all', label: 'Все' },
+                  ]}
+                />
+              )}
               <SearchInput value={query} onChange={setQuery} placeholder="Задача, клиент или сотрудник" className="min-w-0 flex-[1_1_12rem] sm:max-w-72" />
             </div>
+            {layout === 'board' && tasks !== null ? (
+              <TaskBoard tasks={visible} names={who === 'all' ? names : undefined} onMove={move} onOpen={setSelected} />
+            ) : (
             <div className="min-h-0 flex-1 overflow-y-auto p-2 sm:p-3">
               {tasks === null ? (
                 <TaskSkeleton />
@@ -613,6 +787,7 @@ export function TeamTasksPage() {
                 />
               )}
             </div>
+            )}
             <QuickAdd
               participants={participants}
               employees={who === 'all' ? employees : undefined}
@@ -773,7 +948,8 @@ export function MyTasksPage() {
   const [leaveOpen, setLeaveOpen] = React.useState(false)
   React.useEffect(() => setUser(readUser()), [])
   const eid = user?.employeeId ?? null
-  const { tasks, setTasks, load, busyId, toggle, start } = useTasks(eid ? `/api/employee/tasks?assignee_id=${eid}&date=${todayISO()}` : null)
+  const { tasks, setTasks, load, busyId, toggle, start, move } = useTasks(eid ? `/api/employee/tasks?assignee_id=${eid}&date=${todayISO()}&open=1` : null)
+  const [layout, setLayout] = useLayout()
 
   const loadLeaves = React.useCallback(() => {
     if (!eid) return
@@ -798,8 +974,8 @@ export function MyTasksPage() {
 
   const all = tasks ?? []
   const firstName = (user.name || '').split(' ')[0]
-  const create = async (v: NewTaskValues) => {
-    const ok = await createTask({ ...v, assignee_id: eid }, user.id)
+  const create = async (v: NewTaskValues, due?: string) => {
+    const ok = await createTask({ ...v, assignee_id: eid }, user.id, due)
     if (ok) {
       toast.success('Задача добавлена', { description: v.title })
       load()
@@ -816,8 +992,9 @@ export function MyTasksPage() {
             <p className="text-xs text-muted-foreground">{new Date().toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
           </div>
           <Progress tasks={all} />
+          <LayoutSwitch value={layout} onChange={setLayout} />
         </header>
-        <div className="border-b bg-card px-3 py-2 sm:px-4">
+        <div className={cn('border-b bg-card px-3 py-2 sm:px-4', layout === 'board' && 'hidden')}>
           <Segmented
             size="sm"
             aria-label="Показать"
@@ -830,6 +1007,9 @@ export function MyTasksPage() {
             ]}
           />
         </div>
+        {layout === 'board' && tasks !== null ? (
+          <TaskBoard tasks={all} onMove={move} onOpen={setSelected} />
+        ) : (
         <div className="min-h-0 flex-1 overflow-y-auto p-2 sm:p-3">
           {/* Phones: the timer above the list */}
           <div className="mb-3 xl:hidden">
@@ -858,6 +1038,7 @@ export function MyTasksPage() {
             <LeavesBlock leaves={leaves} onNew={() => setLeaveOpen(true)} />
           </div>
         </div>
+        )}
         <QuickAdd participants={participants} placeholder="Добавить себе задачу… Enter" onCreate={create} onMore={() => setMoreOpen(true)} />
       </section>
 

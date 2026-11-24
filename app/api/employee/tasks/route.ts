@@ -4,6 +4,7 @@ import { db } from '@/lib/db';
 import { fetchRow, logAudit } from '@/lib/audit';
 import { changeSuffix } from '@/lib/audit-labels';
 import { employeeName } from '@/app/api/audit/_server';
+import { parseContactDate } from '@/lib/event-funnel';
 
 async function taskSummary(row: any) {
     const name = await employeeName(row?.assignee_id);
@@ -15,28 +16,31 @@ export async function GET(request: Request) {
         const { searchParams } = new URL(request.url);
         const assigneeId = searchParams.get('assignee_id');
         const date = searchParams.get('date');
+        // open=1: also the open tasks with a later deadline (the board and «Позже» show them)
+        const withUpcoming = searchParams.get('open') === '1';
 
-        let query = db
-            .from('tasks')
-            .select('*, target:participants(*)')
-            .order('due_date', { ascending: true })
-            .order('created_at', { ascending: false });
+        const base = () => {
+            let q = db
+                .from('tasks')
+                .select('*, target:participants(*)')
+                .order('due_date', { ascending: true })
+                .order('created_at', { ascending: false });
+            if (assigneeId) q = q.eq('assignee_id', assigneeId);
+            return q;
+        };
 
-        if (assigneeId) {
-            query = query.eq('assignee_id', assigneeId);
-        }
-
-        if (date) {
-            query = query.lte('due_date', date);
-        }
-
-        const { data, error } = await query;
-
+        const { data, error } = date ? await base().lte('due_date', date) : await base();
         if (error) {
             return NextResponse.json({ error: error.message }, { status: 500 });
         }
+        let rows = (data ?? []) as any[];
+        if (date && withUpcoming) {
+            const later = await base().gt('due_date', date).in('status', ['todo', 'in_progress']);
+            if (later.error) return NextResponse.json({ error: later.error.message }, { status: 500 });
+            rows = [...rows, ...((later.data ?? []) as any[])];
+        }
 
-        return NextResponse.json(data);
+        return NextResponse.json(rows);
     } catch (error: any) {
         return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
     }
@@ -81,6 +85,10 @@ export async function PUT(request: Request) {
     try {
         const body = await request.json();
         const { id, status, result_comment } = body;
+        const due = 'due_date' in body ? parseContactDate(body.due_date) : undefined;
+        if ('due_date' in body && due === undefined) {
+            return NextResponse.json({ error: 'Срок в формате ГГГГ-ММ-ДД' }, { status: 400 });
+        }
 
         if (!id) {
             return NextResponse.json({ error: 'Task ID is required' }, { status: 400 });
@@ -89,6 +97,7 @@ export async function PUT(request: Request) {
         let updateData: any = { updated_at: new Date().toISOString() };
         if (status) updateData.status = status;
         if (result_comment !== undefined) updateData.result_comment = result_comment;
+        if ('due_date' in body) updateData.due_date = due;
 
         const before = await fetchRow('tasks', id);
         if (before && !mayUseEmployee(request, before.assignee_id)) return forbidden();

@@ -96,6 +96,8 @@ function from(table: string) {
     order: (col: string, opts?: { ascending?: boolean }) => ((q.order = { col, asc: opts?.ascending !== false }), b),
     gte: (c: string, v: unknown) => (q.filters.push(r => String(r[c]) >= String(v)), b),
     lt: (c: string, v: unknown) => (q.filters.push(r => String(r[c]) < String(v)), b),
+    lte: (c: string, v: unknown) => (q.filters.push(r => r[c] != null && String(r[c]) <= String(v)), b),
+    gt: (c: string, v: unknown) => (q.filters.push(r => r[c] != null && String(r[c]) > String(v)), b),
     limit: (n: number) => ((q.limit = n), b),
     single: () => ((q.single = true), b),
     maybeSingle: () => ((q.single = true), b),
