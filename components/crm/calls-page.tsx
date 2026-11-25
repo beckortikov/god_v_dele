@@ -2,7 +2,7 @@
 
 import * as React from 'react'
 import { toast } from 'sonner'
-import { ArrowLeft, ArrowRight, BarChart3, CalendarDays, Columns3, List, Pencil, Phone, PhoneCall, SearchX, SendHorizontal, Trash2 } from 'lucide-react'
+import { ArrowLeft, ArrowRight, BarChart3, CalendarDays, Columns3, List, Pencil, Phone, PhoneCall, SearchX, SendHorizontal, Trash2, Users } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatDate, formatNumber, todayISO } from '@/lib/format'
 import { Button } from '@/components/ui/button'
@@ -298,6 +298,23 @@ export function CallsPage() {
             </SelectContent>
           </Select>
         )}
+        {!loading && !nothing && (
+          <Select value={hunterFilter} onValueChange={v => { setHunter(v); setSelectedId(null) }}>
+            <SelectTrigger className="h-10 min-w-0 flex-1 gap-2 sm:w-auto sm:min-w-44 sm:flex-none justify-start [&_[data-slot=select-value]]:flex-1" aria-label="Чьи люди">
+              <Users className="size-4 text-muted-foreground" />
+              <span className="text-muted-foreground">Чьи:</span>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent align="start">
+              {hunterOptions.map(o => (
+                <SelectItem key={o.value} value={o.value}>
+                  <span>{o.label}</span>
+                  <span className="num ml-1 text-xs text-muted-foreground">{o.count}</span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
         {view === 'board' && (
           <SearchInput value={query} onChange={v => { setQuery(v); setSelectedId(null) }} placeholder="Имя, телефон или комментарий" className="min-w-0 flex-[1_1_12rem] sm:max-w-80" />
         )}
@@ -307,8 +324,8 @@ export function CallsPage() {
             value={view}
             onChange={setView}
             options={[
-              { value: 'list', label: (<><List className="size-3.5" />Список</>) },
-              { value: 'board', label: (<><Columns3 className="size-3.5" />Доска</>) },
+              { value: 'list', label: (<><List className="size-3.5" /><span className="max-sm:sr-only">Список</span></>) },
+              { value: 'board', label: (<><Columns3 className="size-3.5" /><span className="max-sm:sr-only">Доска</span></>) },
             ]}
           />
           <Button type="button" variant={showStats ? 'soft' : 'outline'} size="sm" className="hidden xl:inline-flex" aria-pressed={showStats} onClick={() => setShowStats(!showStats)}>
@@ -316,42 +333,6 @@ export function CallsPage() {
           </Button>
         </div>
       </div>
-
-      {/* Whose and which stage */}
-      {!loading && !nothing && (
-        <div className="flex flex-col gap-2 border-b bg-card px-3 py-2 sm:px-4">
-          <div className="flex items-center gap-2 overflow-x-auto scrollbar-none">
-            <span className="w-10 shrink-0 text-xs text-muted-foreground">Чьи</span>
-            <Segmented size="sm" aria-label="Хантер" value={hunterFilter} onChange={v => { setHunter(v); setSelectedId(null) }} options={hunterOptions} />
-          </div>
-          <div role="radiogroup" aria-label="Этап" className="flex items-center gap-1.5 overflow-x-auto scrollbar-none">
-            <span className="w-10 shrink-0 text-xs text-muted-foreground">Этап</span>
-            {stageChips.map(c => {
-              const on = stageFilter === c.value
-              return (
-                <button
-                  key={c.value}
-                  type="button"
-                  role="radio"
-                  aria-checked={on}
-                  onClick={() => {
-                    setStageFilter(on && c.value !== 'all' ? 'all' : c.value)
-                    setSelectedId(null)
-                  }}
-                  className={cn(
-                    'inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border px-3 text-xs font-medium whitespace-nowrap transition-colors outline-none focus-visible:ring-[3px] focus-visible:ring-ring/30',
-                    on ? 'border-foreground bg-foreground text-background' : 'bg-card text-foreground/80 hover:bg-muted'
-                  )}
-                >
-                  <span className={cn('size-2 rounded-full', on && c.value === 'all' ? 'bg-background' : c.dot)} />
-                  {c.label}
-                  <span className={cn('num', on ? 'opacity-80' : 'text-muted-foreground')}>{c.count}</span>
-                </button>
-              )
-            })}
-          </div>
-        </div>
-      )}
 
       <div className="flex min-h-0 flex-1">
         {loading ? (
@@ -386,8 +367,33 @@ export function CallsPage() {
           <>
             <Queue
               search={
-                <div className="space-y-1.5">
+                <div className="space-y-2">
                   <CrmSearch value={query} onChange={v => { setQuery(v); setSelectedId(null) }} placeholder="Поиск: имя, телефон, комментарий" />
+                  <div role="radiogroup" aria-label="Этап" className="-mx-2.5 flex gap-1.5 overflow-x-auto px-2.5 pb-0.5 scrollbar-none">
+                    {stageChips.map(c => {
+                      const on = stageFilter === c.value
+                      return (
+                        <button
+                          key={c.value}
+                          type="button"
+                          role="radio"
+                          aria-checked={on}
+                          onClick={() => {
+                            setStageFilter(on && c.value !== 'all' ? 'all' : c.value)
+                            setSelectedId(null)
+                          }}
+                          className={cn(
+                            'inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-xs font-medium whitespace-nowrap transition-colors outline-none focus-visible:ring-[3px] focus-visible:ring-ring/30',
+                            on ? 'bg-foreground text-background' : 'bg-muted text-foreground/80 hover:bg-muted/70'
+                          )}
+                        >
+                          <span className={cn('size-1.5 rounded-full', on && c.value === 'all' ? 'bg-background' : c.dot)} />
+                          {c.label}
+                          <span className={cn('num', on ? 'opacity-80' : 'text-muted-foreground')}>{c.count}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
                   {query.trim() && (
                     <p className="num px-1 text-xs text-muted-foreground">
                       {flat.length ? `Найдено: ${flat.length}` : 'Никого не нашлось'}
