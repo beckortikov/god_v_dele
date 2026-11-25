@@ -22,7 +22,7 @@ import {
  */
 
 const HISTORY = 'event_attendee_comments'
-const HISTORY_COLS = 'id, attendee_id, kind, body, author_id, author_name, created_at'
+const HISTORY_COLS = 'id, attendee_id, kind, body, author_id, author_name, created_at, edited_at'
 
 export const FUNNEL_MIGRATION = {
   error: 'funnel_migration_required',
@@ -239,6 +239,31 @@ export async function addNote(req: Request, eventId: string, attendeeId: string)
   if (error) throw error
   const { author_id: _author, ...made } = data as Row
   return json({ data: { ...made, kind: 'note', can_delete: true } }, 201)
+}
+
+/** A note can be corrected by its author or an admin; actions stay as they were. */
+export async function editNote(req: Request, eventId: string, attendeeId: string, commentId: string) {
+  const body = parseCommentBody((await req.json().catch(() => ({})))?.body)
+  if (!body) return json({ error: 'Напишите комментарий' }, 400)
+  if (!(await belongs(eventId, attendeeId))) return notFound()
+  const { data: note, error } = await db.from(HISTORY).select('id, kind, author_id').eq('id', commentId).eq('attendee_id', attendeeId).maybeSingle()
+  if (error) throw error
+  if (!note) return json({ error: 'Комментарий не найден' }, 404)
+  const n = note as Row
+  if ((n.kind || 'note') !== 'note') return json({ error: 'Отметки об этапах и оплатах не меняются' }, 403)
+  const actor = getActor(req)
+  let admin = false
+  try {
+    admin = getSession(req)?.role === 'admin'
+  } catch {
+    /* treated as not admin */
+  }
+  if (!admin && (!actor.id || n.author_id !== actor.id)) return json({ error: 'Изменить можно только свой комментарий' }, 403)
+  const { data, error: uErr } = await db.from(HISTORY).update({ body, edited_at: new Date().toISOString() }).eq('id', commentId).eq('attendee_id', attendeeId).select(HISTORY_COLS).single()
+  if (funnelMissing(uErr)) return json(FUNNEL_MIGRATION, 503)
+  if (uErr) throw uErr
+  const { author_id: _author, ...made } = data as Row
+  return json({ data: { ...made, kind: 'note', can_delete: true } })
 }
 
 /** Only notes can be removed, by their author or an admin; actions stay as the record. */

@@ -74,3 +74,22 @@ export function PersonAvatar({ name, picture, seed, size = 'md', className }: { 
     </span>
   )
 }
+
+const coarse = () => typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches
+
+/** Phones and tablets: Enter makes a new line there, sending is the button. */
+export function useTouchKeyboard() {
+  const [touch, setTouch] = React.useState(false)
+  React.useEffect(() => setTouch(!!coarse()), [])
+  return touch
+}
+
+/**
+ * Whether this Enter should send the message. Never while the keyboard is still composing a word
+ * (Android, predictive input), otherwise the last word or letters are lost; never on touch screens.
+ */
+export function enterSends(e: React.KeyboardEvent): boolean {
+  if (e.key !== 'Enter' || e.shiftKey) return false
+  if (e.nativeEvent.isComposing || e.keyCode === 229) return false
+  return !coarse()
+}

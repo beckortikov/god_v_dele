@@ -2,7 +2,7 @@
 
 import * as React from 'react'
 import { toast } from 'sonner'
-import { ArrowLeft, ArrowRight, BarChart3, CalendarDays, Columns3, List, Phone, PhoneCall, SearchX, SendHorizontal, Trash2 } from 'lucide-react'
+import { ArrowLeft, ArrowRight, BarChart3, CalendarDays, Columns3, List, Pencil, Phone, PhoneCall, SearchX, SendHorizontal, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatDate, formatNumber, todayISO } from '@/lib/format'
 import { Button } from '@/components/ui/button'
@@ -12,6 +12,7 @@ import { SearchInput } from '@/components/erp/search-input'
 import { Segmented } from '@/components/erp/segmented'
 import { EmptyState } from '@/components/erp/empty-state'
 import { useConfirm } from '@/components/erp/confirm'
+import { enterSends, useTouchKeyboard } from '@/components/crm/parts'
 import { readPref, writePref } from '@/components/finance/types'
 import { funnelDot, type StageFilter } from '@/components/events/funnel-strip'
 import { commentTime, postComment } from '@/components/events/attendee-comments'
@@ -196,6 +197,8 @@ export function CallsPage() {
   /** Applied at once, saved in the background, rolled back on error. */
   const patch = async (a: Attendee, p: AttendeePatch) => {
     if (!eventId) return
+    // Whoever is being worked on stays on screen even if the change moves them out of the filter
+    setSelectedId(a.id)
     const prev = rows
     const hunterName = 'hunter_id' in p ? (p.hunter_id ? staff.find(s => s.id === p.hunter_id)?.name ?? null : null) : a.hunter_name
     setRows(list => (list ?? []).map(x => (x.id === a.id ? { ...x, ...p, hunter_name: hunterName } : x)))
@@ -248,7 +251,9 @@ export function CallsPage() {
   const visible = searched.filter(a => (stageFilter === 'due' ? isDue(a, today) : stageFilter === 'all' || stageOf(a) === stageFilter))
   const groups = groupQueue(visible, today)
   const flat = groups.flatMap(g => g.items)
-  const current = flat.find(a => a.id === selectedId) ?? flat[0] ?? null
+  // The chosen person stays open even when a stage change takes them out of the list or filter
+  const current = (selectedId ? all.find(a => a.id === selectedId) : null) ?? flat[0] ?? null
+  const outOfList = !!current && !flat.some(a => a.id === current.id)
 
   const counts = Object.fromEntries(FUNNEL_STAGES.map(st => [st, ofHunter.filter(a => stageOf(a) === st).length])) as Record<FunnelStage, number>
   const dueCount = ofHunter.filter(a => isDue(a, today)).length
@@ -263,9 +268,9 @@ export function CallsPage() {
     setPersonOpen(true)
   }
   const next = () => {
-    if (!current || flat.length < 2) return
+    if (!current || !flat.length || (flat.length < 2 && !outOfList)) return
     const i = flat.findIndex(a => a.id === current.id)
-    setSelectedId(flat[(i + 1) % flat.length].id)
+    setSelectedId(flat[i < 0 ? 0 : (i + 1) % flat.length].id)
   }
 
   const loading = events === null || (eventId && rows === null)
@@ -400,7 +405,9 @@ export function CallsPage() {
                 today={today}
                 feedKey={feedKey}
                 hidden={!personOpen}
-                hasNext={flat.length > 1}
+                hasNext={flat.length > 1 || (outOfList && flat.length > 0)}
+                outOfList={outOfList}
+                onPin={() => setSelectedId(current.id)}
                 onBack={() => setPersonOpen(false)}
                 onNext={next}
                 onPatch={patch}
@@ -549,6 +556,8 @@ function PersonPane({
   feedKey,
   hidden,
   hasNext,
+  outOfList,
+  onPin,
   onBack,
   onNext,
   onPatch,
@@ -562,6 +571,8 @@ function PersonPane({
   feedKey: number
   hidden: boolean
   hasNext: boolean
+  outOfList: boolean
+  onPin: () => void
   onBack: () => void
   onNext: () => void
   onPatch: (a: Attendee, p: AttendeePatch) => void
@@ -575,10 +586,14 @@ function PersonPane({
   const [draft, setDraft] = React.useState('')
   const [sending, setSending] = React.useState(false)
   const [reload, setReload] = React.useState(0)
+  const noteRef = React.useRef<HTMLTextAreaElement>(null)
+  const touch = useTouchKeyboard()
 
   const save = async () => {
-    const t = draft.trim()
+    // What is in the field right now, not the last rendered state: a keyboard may still be finishing a word
+    const t = (noteRef.current?.value ?? draft).trim()
     if (!t || sending) return
+    onPin()
     setSending(true)
     try {
       await postComment(base, t)
@@ -637,6 +652,9 @@ function PersonPane({
         </div>
       </header>
 
+      {outOfList && (
+        <p className="border-b bg-info-soft px-4 py-2 text-xs text-info">Человек больше не подходит под фильтр, но остаётся открытым, пока вы не выберете другого</p>
+      )}
       <Feed base={base} myName={myName} reloadKey={reload + feedKey} onChanged={onNoted} />
 
       <div className="flex gap-1.5 overflow-x-auto px-3 pt-2 scrollbar-none sm:px-4">
@@ -663,17 +681,19 @@ function PersonPane({
         </label>
         <textarea
           id="call-note"
+          ref={noteRef}
           rows={1}
           value={draft}
           maxLength={COMMENT_MAX}
+          onFocus={onPin}
           onChange={e => setDraft(e.target.value)}
           onKeyDown={e => {
-            if (e.key === 'Enter' && !e.shiftKey) {
+            if (enterSends(e)) {
               e.preventDefault()
               save()
             }
           }}
-          placeholder="Что сказал… Enter — сохранить"
+          placeholder={touch ? 'Что сказал…' : 'Что сказал… Enter — сохранить'}
           className="field-sizing-content max-h-32 min-h-11 flex-1 resize-none rounded-3xl border bg-card px-4 py-2.5 text-[15px] shadow-xs outline-none focus-visible:ring-[3px] focus-visible:ring-ring/30"
         />
         <Button type="submit" size="icon" disabled={!draft.trim() || sending} aria-label="Сохранить комментарий" className="size-11 shrink-0 rounded-full">
@@ -700,7 +720,28 @@ const clock = (iso: string) => new Date(iso).toLocaleTimeString('ru-RU', { hour:
 function Feed({ base, myName, reloadKey, onChanged }: { base: string; myName: string | null; reloadKey: number; onChanged: () => void }) {
   const [items, setItems] = React.useState<AttendeeComment[] | null>(null)
   const [error, setError] = React.useState<string | null>(null)
+  const [editing, setEditing] = React.useState<{ id: string; text: string } | null>(null)
+  const [savingEdit, setSavingEdit] = React.useState(false)
   const confirm = useConfirm()
+
+  const saveEdit = async () => {
+    if (!editing || savingEdit) return
+    const text = editing.text.trim()
+    if (!text) return
+    setSavingEdit(true)
+    try {
+      const res = await fetch(`${base}/comments/${editing.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ body: text }) })
+      const b = await res.json().catch(() => ({}))
+      if (!res.ok || b.error) throw new Error(b.error || `Ошибка ${res.status}`)
+      setItems(list => (list ?? []).map(x => (x.id === editing.id ? { ...x, body: b.data?.body ?? text, edited_at: b.data?.edited_at ?? new Date().toISOString() } : x)))
+      setEditing(null)
+      onChanged()
+    } catch (err: any) {
+      toast.error('Не удалось изменить', { description: err.message })
+    } finally {
+      setSavingEdit(false)
+    }
+  }
 
   React.useEffect(() => {
     let live = true
@@ -755,28 +796,75 @@ function Feed({ base, myName, reloadKey, onChanged }: { base: string; myName: st
     const mine = !!myName && c.author_name === myName
     const prev = ordered[i - 1]
     const sameAuthor = prev && (prev.kind || 'note') === 'note' && prev.author_name === c.author_name && dayLabel(prev.created_at) === day
+    const isEditing = editing?.id === c.id
+    const actions = c.can_delete && !isEditing && (
+      <span className="flex shrink-0 flex-col gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100 pointer-coarse:opacity-100">
+        <button type="button" onClick={() => setEditing({ id: c.id, text: c.body })} aria-label="Изменить комментарий" className="rounded-md p-1 text-muted-foreground hover:text-foreground">
+          <Pencil className="size-3.5" />
+        </button>
+        <button type="button" onClick={() => remove(c)} aria-label="Удалить комментарий" className="rounded-md p-1 text-muted-foreground hover:text-destructive">
+          <Trash2 className="size-3.5" />
+        </button>
+      </span>
+    )
     lines.push(
       <div key={c.id} className={cn('group flex items-end gap-1.5 py-0.5', mine ? 'justify-end' : 'justify-start')}>
-        {mine && c.can_delete && (
-          <button type="button" onClick={() => remove(c)} aria-label="Удалить комментарий" className="rounded-md p-1 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:text-destructive focus-visible:opacity-100">
-            <Trash2 className="size-3.5" />
-          </button>
+        {mine && actions}
+        {isEditing ? (
+          <form
+            className="flex w-full max-w-[min(36rem,90%)] flex-col gap-2 rounded-2xl border bg-card p-2 shadow-xs"
+            onSubmit={e => {
+              e.preventDefault()
+              saveEdit()
+            }}
+          >
+            <label htmlFor={`edit-${c.id}`} className="sr-only">
+              Изменить комментарий
+            </label>
+            <textarea
+              id={`edit-${c.id}`}
+              autoFocus
+              onFocus={e => {
+                const end = e.currentTarget.value.length
+                e.currentTarget.setSelectionRange(end, end)
+              }}
+              value={editing.text}
+              maxLength={COMMENT_MAX}
+              onChange={e => setEditing({ id: c.id, text: e.target.value })}
+              onKeyDown={e => {
+                if (e.key === 'Escape') setEditing(null)
+                else if (enterSends(e)) {
+                  e.preventDefault()
+                  saveEdit()
+                }
+              }}
+              className="field-sizing-content min-h-16 resize-none rounded-xl bg-muted/50 px-3 py-2 text-[15px] outline-none focus-visible:ring-[3px] focus-visible:ring-ring/30"
+            />
+            <span className="flex justify-end gap-1.5">
+              <Button type="button" size="sm" variant="ghost" onClick={() => setEditing(null)} disabled={savingEdit}>
+                Отмена
+              </Button>
+              <Button type="submit" size="sm" disabled={savingEdit || !editing.text.trim()}>
+                {savingEdit ? 'Сохраняем…' : 'Сохранить'}
+              </Button>
+            </span>
+          </form>
+        ) : (
+          <div
+            className={cn(
+              'max-w-[min(36rem,80%)] px-3 pt-1.5 pb-1 text-[15px] leading-snug shadow-xs',
+              mine ? 'rounded-[18px_18px_6px_18px] bg-primary text-primary-foreground' : 'rounded-[18px_18px_18px_6px] bg-card'
+            )}
+          >
+            {!mine && !sameAuthor && <span className={cn('block text-[13px] font-semibold', c.author_name ? 'text-primary' : 'text-muted-foreground')}>{c.author_name || 'Импорт'}</span>}
+            <span className="whitespace-pre-wrap">{c.body}</span>
+            <span className={cn('num float-right mt-1.5 ml-2.5 text-[11px]', mine ? 'text-primary-foreground/80' : 'text-muted-foreground')}>
+              {c.edited_at && <span title={`Изменено ${new Date(c.edited_at).toLocaleString('ru-RU')}`}>изменено · </span>}
+              {clock(c.created_at)}
+            </span>
+          </div>
         )}
-        <div
-          className={cn(
-            'max-w-[min(36rem,80%)] px-3 pt-1.5 pb-1 text-[15px] leading-snug shadow-xs',
-            mine ? 'rounded-[18px_18px_6px_18px] bg-primary text-primary-foreground' : 'rounded-[18px_18px_18px_6px] bg-card'
-          )}
-        >
-          {!mine && !sameAuthor && <span className={cn('block text-[13px] font-semibold', c.author_name ? 'text-primary' : 'text-muted-foreground')}>{c.author_name || 'Импорт'}</span>}
-          <span className="whitespace-pre-wrap">{c.body}</span>
-          <span className={cn('num float-right mt-1.5 ml-2.5 text-[11px]', mine ? 'text-primary-foreground/80' : 'text-muted-foreground')}>{clock(c.created_at)}</span>
-        </div>
-        {!mine && c.can_delete && (
-          <button type="button" onClick={() => remove(c)} aria-label="Удалить комментарий" className="rounded-md p-1 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:text-destructive focus-visible:opacity-100">
-            <Trash2 className="size-3.5" />
-          </button>
-        )}
+        {!mine && actions}
       </div>
     )
   })

@@ -31,7 +31,7 @@ import { Field } from '@/components/erp/field'
 import { useNav } from '@/components/app-shell/nav-context'
 import { LEAD_SOURCES } from '@/lib/participant-profile'
 import { IG_NOTE_MAX, IG_STAGE_INFO, igStageOf, phoneFromMessages, splitInstagramName, stageAfterReply, type IgContact, type IgStage } from '@/lib/crm-instagram'
-import { PILL, PersonAvatar, clock, dayLabel, shortTime } from '@/components/crm/parts'
+import { PILL, PersonAvatar, clock, dayLabel, enterSends, shortTime } from '@/components/crm/parts'
 
 interface Conversation {
   id: string
@@ -101,6 +101,9 @@ const TEMPLATES = [
   { label: 'Мастермайнд', text: 'Приглашаем на открытый мастермайнд. Подскажите номер телефона — пришлём детали.' },
   { label: 'Ответили в директ', text: 'Спасибо за вопрос! Написали вам в директ.' },
 ]
+
+/** What is in the composer right now (a phone keyboard may still be finishing a word), else the state. */
+const fieldText = (draft: string) => ((typeof document !== 'undefined' ? (document.getElementById('ig-composer') as HTMLTextAreaElement | null)?.value : null) ?? draft).trim()
 
 async function api<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, { ...init, headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) } })
@@ -684,7 +687,7 @@ function Composer({
           maxLength={1000}
           onChange={e => setDraft(e.target.value)}
           onKeyDown={e => {
-            if (e.key === 'Enter' && !e.shiftKey) {
+            if (enterSends(e)) {
               e.preventDefault()
               onSend()
             }
@@ -747,7 +750,7 @@ function DmThread({
   usePoll(load, 8_000)
 
   const send = async () => {
-    const text = draft.trim()
+    const text = fieldText(draft)
     if (!text || sending) return
     setSending(true)
     const temp: Message = { id: `tmp-${Date.now()}`, text, outgoing: true, createdAt: new Date().toISOString(), attachments: [], storyMention: false, storyReply: null, unsupported: false, pending: true }
@@ -887,7 +890,7 @@ function CommentsThread({
   }
 
   const send = async () => {
-    const text = draft.trim()
+    const text = fieldText(draft)
     if (!text || sending || !target) return
     setSending(true)
     try {

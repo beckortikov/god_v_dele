@@ -67,8 +67,10 @@ export interface AttendeeComment {
   author_id?: string | null
   author_name: string | null
   created_at: string
-  /** Set by the server: the caller wrote this note or is an admin. */
+  /** Set by the server: the caller wrote this note or is an admin (may also edit it). */
   can_delete?: boolean
+  /** When the note was last corrected (migration 031). */
+  edited_at?: string | null
 }
 
 type HistoryRow = Pick<AttendeeComment, 'attendee_id' | 'body' | 'author_name' | 'created_at'> & { kind?: HistoryKind | null; author_id?: string | null }
