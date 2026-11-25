@@ -298,7 +298,9 @@ export function CallsPage() {
             </SelectContent>
           </Select>
         )}
-        <SearchInput value={query} onChange={v => { setQuery(v); setSelectedId(null) }} placeholder="Имя, телефон или комментарий" className="min-w-0 flex-[1_1_12rem] sm:max-w-80" />
+        {view === 'board' && (
+          <SearchInput value={query} onChange={v => { setQuery(v); setSelectedId(null) }} placeholder="Имя, телефон или комментарий" className="min-w-0 flex-[1_1_12rem] sm:max-w-80" />
+        )}
         <div className="ml-auto flex items-center gap-2">
           <Segmented
             aria-label="Вид"
@@ -383,6 +385,16 @@ export function CallsPage() {
         ) : (
           <>
             <Queue
+              search={
+                <div className="space-y-1.5">
+                  <SearchInput value={query} onChange={v => { setQuery(v); setSelectedId(null) }} placeholder="Поиск: имя, телефон, комментарий" />
+                  {query.trim() && (
+                    <p className="num px-1 text-xs text-muted-foreground">
+                      {flat.length ? `Найдено: ${flat.length}` : 'Никого не нашлось'}
+                    </p>
+                  )}
+                </div>
+              }
               groups={groups}
               current={current}
               me={me}
@@ -469,7 +481,9 @@ function Queue({
   onPick,
   onReset,
   hidden,
+  search,
 }: {
+  search: React.ReactNode
   groups: ReturnType<typeof groupQueue>
   current: Attendee | null
   me: string | null
@@ -479,71 +493,74 @@ function Queue({
   hidden: boolean
 }) {
   return (
-    <nav aria-label="Очередь звонков" className={cn('min-h-0 w-full shrink-0 overflow-y-auto border-r bg-card p-1.5 lg:block lg:w-[22.5rem]', hidden && 'hidden')}>
-      {groups.length === 0 && (
-        <EmptyState
-          icon={PhoneCall}
-          title="Никого не найдено"
-          description="Измените поиск, этап или хантера"
-          action={
-            <Button size="sm" variant="outline" onClick={onReset}>
-              Сбросить фильтры
-            </Button>
-          }
-        />
-      )}
-      {groups.map(g => (
-        <section key={g.id} aria-label={g.title}>
-          <h2 className={cn('flex items-center px-2.5 pt-3 pb-1.5 text-xs font-semibold', g.urgent ? 'text-destructive' : 'text-muted-foreground')}>
-            {g.title}
-            <span className="num ml-auto font-medium">{g.items.length}</span>
-          </h2>
-          {g.items.map(a => {
-            const on = current?.id === a.id
-            const stage = funnelOf(a.funnel_stage)
-            const sub = a.last_comment?.body || attendeeContact(a) || 'нет телефона'
-            return (
-              <button
-                key={a.id}
-                type="button"
-                onClick={() => onPick(a)}
-                aria-current={on || undefined}
-                className={cn(
-                  'flex w-full items-center gap-3 rounded-xl px-2.5 py-2 text-left transition-colors outline-none focus-visible:ring-[3px] focus-visible:ring-ring/30',
-                  on ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
-                )}
-              >
-                <Avatar a={a} />
-                <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                  <span className="flex items-center gap-1.5">
-                    <span className="min-w-0 flex-1 truncate text-[15px] font-semibold">{attendeeName(a)}</span>
-                    {a.hunter_name && (
-                      <span
-                        title={`Хантер: ${a.hunter_name}`}
-                        className={cn(
-                          'flex size-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold',
-                          on ? 'bg-primary-foreground/25 text-primary-foreground' : a.hunter_id === me ? 'bg-primary-soft text-primary-soft-foreground' : 'bg-muted text-muted-foreground'
-                        )}
-                      >
-                        {initials(a.hunter_name)}
-                      </span>
-                    )}
+    <aside className={cn('flex min-h-0 w-full shrink-0 flex-col border-r bg-card lg:flex lg:w-[22.5rem]', hidden && 'hidden')}>
+      <div className="border-b p-2.5">{search}</div>
+      <nav aria-label="Очередь звонков" className="min-h-0 flex-1 overflow-y-auto p-1.5">
+        {groups.length === 0 && (
+          <EmptyState
+            icon={PhoneCall}
+            title="Никого не найдено"
+            description="Измените поиск, этап или хантера"
+            action={
+              <Button size="sm" variant="outline" onClick={onReset}>
+                Сбросить фильтры
+              </Button>
+            }
+          />
+        )}
+        {groups.map(g => (
+          <section key={g.id} aria-label={g.title}>
+            <h2 className={cn('flex items-center px-2.5 pt-3 pb-1.5 text-xs font-semibold', g.urgent ? 'text-destructive' : 'text-muted-foreground')}>
+              {g.title}
+              <span className="num ml-auto font-medium">{g.items.length}</span>
+            </h2>
+            {g.items.map(a => {
+              const on = current?.id === a.id
+              const stage = funnelOf(a.funnel_stage)
+              const sub = a.last_comment?.body || attendeeContact(a) || 'нет телефона'
+              return (
+                <button
+                  key={a.id}
+                  type="button"
+                  onClick={() => onPick(a)}
+                  aria-current={on || undefined}
+                  className={cn(
+                    'flex w-full items-center gap-3 rounded-xl px-2.5 py-2 text-left transition-colors outline-none focus-visible:ring-[3px] focus-visible:ring-ring/30',
+                    on ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
+                  )}
+                >
+                  <Avatar a={a} />
+                  <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                    <span className="flex items-center gap-1.5">
+                      <span className="min-w-0 flex-1 truncate text-[15px] font-semibold">{attendeeName(a)}</span>
+                      {a.hunter_name && (
+                        <span
+                          title={`Хантер: ${a.hunter_name}`}
+                          className={cn(
+                            'flex size-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold',
+                            on ? 'bg-primary-foreground/25 text-primary-foreground' : a.hunter_id === me ? 'bg-primary-soft text-primary-soft-foreground' : 'bg-muted text-muted-foreground'
+                          )}
+                        >
+                          {initials(a.hunter_name)}
+                        </span>
+                      )}
+                    </span>
+                    <span className={cn('truncate text-[13px]', on ? 'text-primary-foreground/85' : 'text-muted-foreground')}>{sub}</span>
+                    <span className="flex flex-wrap items-center gap-1">
+                      <span className={cn('rounded-md px-1.5 py-0.5 text-[11px] font-semibold', on ? 'bg-primary-foreground/20 text-primary-foreground' : PILL[stage.variant])}>{stage.label}</span>
+                      <DueTag a={a} today={today} onDark={on} />
+                      {a.attendee_type === 'guest' && (
+                        <span className={cn('rounded-md border px-1.5 text-[11px]', on ? 'border-primary-foreground/40' : 'text-muted-foreground')}>гость</span>
+                      )}
+                    </span>
                   </span>
-                  <span className={cn('truncate text-[13px]', on ? 'text-primary-foreground/85' : 'text-muted-foreground')}>{sub}</span>
-                  <span className="flex flex-wrap items-center gap-1">
-                    <span className={cn('rounded-md px-1.5 py-0.5 text-[11px] font-semibold', on ? 'bg-primary-foreground/20 text-primary-foreground' : PILL[stage.variant])}>{stage.label}</span>
-                    <DueTag a={a} today={today} onDark={on} />
-                    {a.attendee_type === 'guest' && (
-                      <span className={cn('rounded-md border px-1.5 text-[11px]', on ? 'border-primary-foreground/40' : 'text-muted-foreground')}>гость</span>
-                    )}
-                  </span>
-                </span>
-              </button>
-            )
-          })}
-        </section>
-      ))}
-    </nav>
+                </button>
+              )
+            })}
+          </section>
+        ))}
+      </nav>
+    </aside>
   )
 }
 
