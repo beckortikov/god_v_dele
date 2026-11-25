@@ -11,12 +11,11 @@ import { Textarea } from '@/components/ui/textarea'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { SearchInput } from '@/components/erp/search-input'
 import { Segmented } from '@/components/erp/segmented'
 import { EmptyState } from '@/components/erp/empty-state'
 import { Field } from '@/components/erp/field'
 import { CURRENCIES, LEAD_SOURCES } from '@/lib/participant-profile'
-import { PersonAvatar } from '@/components/crm/parts'
+import { CrmSearch, PersonAvatar } from '@/components/crm/parts'
 import { useNav } from '@/components/app-shell/nav-context'
 import { describeMark, funnelOf, type FunnelStage, type HistoryKind } from '@/lib/event-funnel'
 
@@ -147,7 +146,7 @@ export function ClientsPage() {
           </Button>
         </div>
         <div className="space-y-2 px-3 pb-2">
-          <SearchInput value={query} onChange={setQuery} placeholder="Имя, телефон, город или бизнес" />
+          <CrmSearch value={query} onChange={setQuery} placeholder="Имя, телефон, город или бизнес" />
           <Segmented
             size="sm"
             aria-label="Кто"

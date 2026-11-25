@@ -12,7 +12,7 @@ import { SearchInput } from '@/components/erp/search-input'
 import { Segmented } from '@/components/erp/segmented'
 import { EmptyState } from '@/components/erp/empty-state'
 import { useConfirm } from '@/components/erp/confirm'
-import { enterSends, useTouchKeyboard } from '@/components/crm/parts'
+import { CrmSearch, enterSends, useTouchKeyboard } from '@/components/crm/parts'
 import { readPref, writePref } from '@/components/finance/types'
 import { funnelDot, type StageFilter } from '@/components/events/funnel-strip'
 import { commentTime, postComment } from '@/components/events/attendee-comments'
@@ -387,7 +387,7 @@ export function CallsPage() {
             <Queue
               search={
                 <div className="space-y-1.5">
-                  <SearchInput value={query} onChange={v => { setQuery(v); setSelectedId(null) }} placeholder="Поиск: имя, телефон, комментарий" />
+                  <CrmSearch value={query} onChange={v => { setQuery(v); setSelectedId(null) }} placeholder="Поиск: имя, телефон, комментарий" />
                   {query.trim() && (
                     <p className="num px-1 text-xs text-muted-foreground">
                       {flat.length ? `Найдено: ${flat.length}` : 'Никого не нашлось'}

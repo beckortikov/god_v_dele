@@ -24,14 +24,13 @@ import { Textarea } from '@/components/ui/textarea'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { SearchInput } from '@/components/erp/search-input'
 import { Segmented } from '@/components/erp/segmented'
 import { EmptyState } from '@/components/erp/empty-state'
 import { Field } from '@/components/erp/field'
 import { useNav } from '@/components/app-shell/nav-context'
 import { LEAD_SOURCES } from '@/lib/participant-profile'
 import { IG_NOTE_MAX, IG_STAGE_INFO, igStageOf, phoneFromMessages, splitInstagramName, stageAfterReply, type IgContact, type IgStage } from '@/lib/crm-instagram'
-import { PILL, PersonAvatar, clock, dayLabel, enterSends, shortTime } from '@/components/crm/parts'
+import { CrmSearch, PILL, PersonAvatar, clock, dayLabel, enterSends, shortTime } from '@/components/crm/parts'
 
 interface Conversation {
   id: string
@@ -300,7 +299,7 @@ export function InstagramPage() {
         {mode === 'dm' ? (
           <>
             <div className="space-y-2 px-3 pb-2">
-              <SearchInput value={query} onChange={setQuery} placeholder="Поиск по имени или нику" />
+              <CrmSearch value={query} onChange={setQuery} placeholder="Поиск по имени или нику" />
               <Segmented
                 size="sm"
                 aria-label="Фильтр"

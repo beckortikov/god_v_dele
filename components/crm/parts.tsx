@@ -1,6 +1,7 @@
 'use client'
 
 import * as React from 'react'
+import { Search, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 /** Soft pill colours by badge variant, shared by «Обзвон» and Instagram. */
@@ -92,4 +93,37 @@ export function enterSends(e: React.KeyboardEvent): boolean {
   if (e.key !== 'Enter' || e.shiftKey) return false
   if (e.nativeEvent.isComposing || e.keyCode === 229) return false
   return !coarse()
+}
+
+/** Instagram-style search: a full-width grey pill with a magnifier and a clear button; Esc clears. */
+export function CrmSearch({ value, onChange, placeholder, label }: { value: string; onChange: (v: string) => void; placeholder: string; label?: string }) {
+  const id = React.useId()
+  return (
+    <div className="group relative w-full">
+      <label htmlFor={id} className="sr-only">
+        {label ?? placeholder}
+      </label>
+      <Search className="pointer-events-none absolute top-1/2 left-3.5 size-[18px] -translate-y-1/2 text-muted-foreground transition-colors group-focus-within:text-foreground" />
+      <input
+        id={id}
+        type="search"
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        onKeyDown={e => e.key === 'Escape' && onChange('')}
+        placeholder={placeholder}
+        autoComplete="off"
+        className="h-10 w-full rounded-full border border-transparent bg-muted pr-10 pl-10 text-[15px] outline-none transition-[background-color,border-color,box-shadow] placeholder:text-muted-foreground hover:bg-muted/80 focus:border-ring/40 focus:bg-card focus:shadow-xs focus-visible:ring-[3px] focus-visible:ring-ring/20 [&::-webkit-search-cancel-button]:hidden"
+      />
+      {value && (
+        <button
+          type="button"
+          onClick={() => onChange('')}
+          aria-label="Очистить поиск"
+          className="absolute top-1/2 right-2 flex size-6 -translate-y-1/2 items-center justify-center rounded-full bg-muted-foreground/20 text-foreground/70 outline-none hover:bg-muted-foreground/30 focus-visible:ring-2 focus-visible:ring-ring/40"
+        >
+          <X className="size-3.5" />
+        </button>
+      )}
+    </div>
+  )
 }
