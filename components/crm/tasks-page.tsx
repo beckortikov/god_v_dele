@@ -276,7 +276,7 @@ function TaskRow({
       <button type="button" onClick={onOpen} className="min-w-0 flex-1 text-left outline-none focus-visible:rounded-md focus-visible:ring-[3px] focus-visible:ring-ring/30">
         <span className="flex items-center gap-1.5">
           <type.icon className="size-4 shrink-0 text-muted-foreground" aria-label={type.label} />
-          {!done && !cancelled && <PriorityBadge task={task} />}
+          <PriorityBadge task={task} className={cn((done || cancelled) && 'opacity-60')} />
           <span className={cn('min-w-0 truncate text-[15px] font-medium', (done || cancelled) && 'text-muted-foreground line-through')}>{task.title}</span>
         </span>
         {task.description && <span className="mt-0.5 line-clamp-1 block text-sm text-muted-foreground">{task.description}</span>}

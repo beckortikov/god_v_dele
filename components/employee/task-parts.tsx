@@ -81,7 +81,7 @@ const TASK_TYPES: Record<string, { label: string; icon: LucideIcon }> = {
   other: { label: 'Задача', icon: ListTodo },
 }
 
-/** P1–P4. «Обычно» (P3) is the default and shows no badge in lists. */
+/** P1–P4; «Обычно» (P3) is the default. */
 export const PRIORITIES = [
   { value: 1, code: 'P1', label: 'Срочно', badge: 'bg-destructive text-white', flag: 'text-destructive' },
   { value: 2, code: 'P2', label: 'Важно', badge: 'bg-warning-soft text-[color-mix(in_oklch,var(--warning)_70%,var(--foreground))] ring-1 ring-warning/40', flag: 'text-warning' },
@@ -95,10 +95,9 @@ export function priorityOf(task: Pick<Task, 'priority'> | number | null | undefi
   return PRIORITIES.find(p => p.value === v) ?? PRIORITIES[2]
 }
 
-/** «P1 Срочно» as a small pill; nothing for the default P3 unless `always`. */
-export function PriorityBadge({ task, always, className }: { task: Pick<Task, 'priority'>; always?: boolean; className?: string }) {
+/** «P1 Срочно» as a small pill, on every task. */
+export function PriorityBadge({ task, className }: { task: Pick<Task, 'priority'>; className?: string }) {
   const p = priorityOf(task)
-  if (p.value === DEFAULT_PRIORITY && !always) return null
   return (
     <span className={cn('inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] leading-none font-semibold', p.badge, className)} title={`Приоритет: ${p.label}`}>
       <span className="num">{p.code}</span>
