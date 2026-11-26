@@ -2,7 +2,7 @@
 
 import * as React from 'react'
 import { toast } from 'sonner'
-import { CalendarClock, Check, ChevronsUpDown, ListTodo, Phone, Users, Wallet, type LucideIcon } from 'lucide-react'
+import { CalendarClock, Check, ChevronsUpDown, Flag, ListTodo, Phone, Users, Wallet, type LucideIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatDate, todayISO } from '@/lib/format'
 import { Badge } from '@/components/ui/badge'
@@ -37,6 +37,8 @@ export interface Task {
   due_date?: string | null
   status: TaskStatus
   task_type?: string | null
+  /** 1 «Срочно» … 4 «Не срочно»; 3 when not set */
+  priority?: number | null
   result_comment?: string | null
   created_at?: string
   updated_at?: string
@@ -78,6 +80,55 @@ const TASK_TYPES: Record<string, { label: string; icon: LucideIcon }> = {
   payment_reminder: { label: 'Напоминание об оплате', icon: Wallet },
   other: { label: 'Задача', icon: ListTodo },
 }
+
+/** P1–P4. «Обычно» (P3) is the default and shows no badge in lists. */
+export const PRIORITIES = [
+  { value: 1, code: 'P1', label: 'Срочно', badge: 'bg-destructive text-white', flag: 'text-destructive' },
+  { value: 2, code: 'P2', label: 'Важно', badge: 'bg-warning-soft text-[color-mix(in_oklch,var(--warning)_70%,var(--foreground))] ring-1 ring-warning/40', flag: 'text-warning' },
+  { value: 3, code: 'P3', label: 'Обычно', badge: 'bg-muted text-muted-foreground', flag: 'text-muted-foreground' },
+  { value: 4, code: 'P4', label: 'Не срочно', badge: 'bg-muted text-muted-foreground/80', flag: 'text-muted-foreground/60' },
+] as const
+export const DEFAULT_PRIORITY = 3
+
+export function priorityOf(task: Pick<Task, 'priority'> | number | null | undefined) {
+  const v = typeof task === 'number' ? task : task?.priority
+  return PRIORITIES.find(p => p.value === v) ?? PRIORITIES[2]
+}
+
+/** «P1 Срочно» as a small pill; nothing for the default P3 unless `always`. */
+export function PriorityBadge({ task, always, className }: { task: Pick<Task, 'priority'>; always?: boolean; className?: string }) {
+  const p = priorityOf(task)
+  if (p.value === DEFAULT_PRIORITY && !always) return null
+  return (
+    <span className={cn('inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] leading-none font-semibold', p.badge, className)} title={`Приоритет: ${p.label}`}>
+      <span className="num">{p.code}</span>
+      <span className="font-medium">{p.label}</span>
+    </span>
+  )
+}
+
+/** Priority as a dropdown with flags. */
+export function PrioritySelect({ value, onChange, className }: { value: number; onChange: (v: number) => void; className?: string }) {
+  const current = priorityOf(value)
+  return (
+    <Select value={String(value)} onValueChange={v => onChange(Number(v))}>
+      <SelectTrigger size="sm" className={cn('h-8 gap-1.5 bg-card', className)} aria-label="Приоритет">
+        <Flag className={cn('size-4', current.flag)} />
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {PRIORITIES.map(p => (
+          <SelectItem key={p.value} value={String(p.value)}>
+            <span className="num font-semibold">{p.code}</span> {p.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  )
+}
+
+/** Urgent first; the same priority keeps its order. */
+export const byPriority = (a: Pick<Task, 'priority'>, b: Pick<Task, 'priority'>) => (a.priority ?? DEFAULT_PRIORITY) - (b.priority ?? DEFAULT_PRIORITY)
 
 export function taskType(type?: string | null) {
   return TASK_TYPES[type || ''] ?? TASK_TYPES.other
@@ -297,6 +348,9 @@ export interface NewTaskValues {
   title: string
   description: string
   task_type: string
+  priority?: number
+  /** «Всем»: one copy per person */
+  assignee_ids?: string[]
   target_type: TargetType
   target_participant_id: string // 'none' when nobody is picked
   guest_name: string
@@ -308,10 +362,49 @@ function emptyTask(assignee = ''): NewTaskValues {
     title: '',
     description: '',
     task_type: 'call',
+    priority: DEFAULT_PRIORITY,
     target_type: 'participant',
     target_participant_id: 'none',
     guest_name: '',
   }
+}
+
+/** «Кому» value meaning every active employee. */
+export const ALL_ASSIGNEES = '__all__'
+
+/** «Кому» options: «Всем сотрудникам» first, then each person. */
+export function assigneeOptions(employees: EmployeeLite[], withAll = true): ComboOption[] {
+  const people = employees.map(e => ({ value: e.id, label: employeeName(e), hint: e.position || undefined }))
+  return withAll && employees.length > 1
+    ? [{ value: ALL_ASSIGNEES, label: 'Всем сотрудникам', hint: `${employees.length} человек — каждому своя задача` }, ...people]
+    : people
+}
+
+/** Four priority buttons, for forms. */
+export function PriorityPicker({ value, onChange }: { value: number; onChange: (v: number) => void }) {
+  return (
+    <div className="grid grid-cols-4 gap-1.5" role="radiogroup" aria-label="Приоритет">
+      {PRIORITIES.map(p => {
+        const active = value === p.value
+        return (
+          <button
+            key={p.value}
+            type="button"
+            role="radio"
+            aria-checked={active}
+            onClick={() => onChange(p.value)}
+            className={cn(
+              'flex h-12 flex-col items-center justify-center rounded-md border text-xs leading-tight transition-colors outline-none focus-visible:ring-[3px] focus-visible:ring-ring/30',
+              active ? 'border-primary bg-primary-soft text-primary-soft-foreground' : 'border-input bg-card text-foreground/80 hover:border-ring/40'
+            )}
+          >
+            <span className="num flex items-center gap-1 font-semibold"><Flag className={cn('size-3.5', p.flag)} />{p.code}</span>
+            <span>{p.label}</span>
+          </button>
+        )
+      })}
+    </div>
+  )
 }
 
 export function participantOptions(participants: ParticipantLite[]): ComboOption[] {
@@ -362,10 +455,7 @@ export function NewTaskSheet({
     () => [{ value: 'none', label: 'Не выбран' }, ...participantOptions(participants)],
     [participants]
   )
-  const eOptions = React.useMemo(
-    () => (employees ?? []).map(e => ({ value: e.id, label: employeeName(e), hint: e.position || undefined })),
-    [employees]
-  )
+  const eOptions = React.useMemo(() => assigneeOptions(employees ?? []), [employees])
 
   const submit = async (addAnother: boolean) => {
     const errs: Record<string, string> = {}
@@ -380,7 +470,7 @@ export function NewTaskSheet({
     setSaving(false)
     if (!ok) return
     if (addAnother) {
-      setForm(f => ({ ...emptyTask(f.assignee_id), task_type: f.task_type, target_type: f.target_type }))
+      setForm(f => ({ ...emptyTask(f.assignee_id), task_type: f.task_type, priority: f.priority, target_type: f.target_type }))
     } else {
       onOpenChange(false)
     }
@@ -419,9 +509,14 @@ export function NewTaskSheet({
                     placeholder="Выберите сотрудника"
                     searchPlaceholder="Имя или должность…"
                     invalid={!!errors.assignee_id}
+                    stacked
                   />
                 </Field>
               )}
+
+              <Field label="Приоритет">
+                <PriorityPicker value={form.priority ?? DEFAULT_PRIORITY} onChange={v => set({ priority: v })} />
+              </Field>
 
               <Field label="Тип">
                 <Segmented
@@ -519,6 +614,7 @@ export function TaskSheet({
   open,
   onOpenChange,
   assigneeName,
+  employees,
   onSaved,
   onDelete,
 }: {
@@ -526,10 +622,14 @@ export function TaskSheet({
   open: boolean
   onOpenChange: (o: boolean) => void
   assigneeName?: string
+  /** When given, the task can be handed to someone else. */
+  employees?: EmployeeLite[]
   onSaved: (updated: Task) => void
   onDelete?: (task: Task) => void
 }) {
   const [status, setStatus] = React.useState<TaskStatus>('todo')
+  const [priority, setPriority] = React.useState(DEFAULT_PRIORITY)
+  const [assignee, setAssignee] = React.useState('')
   const [comment, setComment] = React.useState('')
   const [due, setDue] = React.useState('')
   const [saving, setSaving] = React.useState(false)
@@ -539,6 +639,8 @@ export function TaskSheet({
       setStatus(task.status)
       setComment(task.result_comment || '')
       setDue(task.due_date || '')
+      setPriority(task.priority ?? DEFAULT_PRIORITY)
+      setAssignee(task.assignee_id)
     }
   }, [open, task])
 
@@ -549,12 +651,19 @@ export function TaskSheet({
       const res = await fetch('/api/employee/tasks', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: task.id, status, result_comment: comment, ...(due !== (task.due_date || '') ? { due_date: due || null } : {}) }),
+        body: JSON.stringify({
+          id: task.id,
+          status,
+          result_comment: comment,
+          ...(due !== (task.due_date || '') ? { due_date: due || null } : {}),
+          ...(priority !== (task.priority ?? DEFAULT_PRIORITY) ? { priority } : {}),
+          ...(assignee && assignee !== task.assignee_id ? { assignee_id: assignee } : {}),
+        }),
       })
       const result = await res.json().catch(() => ({}))
       if (!res.ok || result.error) throw new Error(result.error || 'Сервер не ответил')
       toast.success('Задача обновлена', { description: TASK_STATUS[status].label })
-      onSaved({ ...task, status, result_comment: comment, due_date: due || null })
+      onSaved({ ...task, status, result_comment: comment, due_date: due || null, priority, assignee_id: assignee || task.assignee_id })
       onOpenChange(false)
     } catch (err: any) {
       toast.error('Не удалось сохранить задачу', { description: err.message })
@@ -594,7 +703,10 @@ export function TaskSheet({
                   </>
                 )}
               </SheetDescription>
-              <SheetTitle className="leading-snug">{task.title}</SheetTitle>
+              <SheetTitle className="leading-snug">
+                <PriorityBadge task={{ priority }} className="mr-1.5 align-middle" />
+                {task.title}
+              </SheetTitle>
             </SheetHeader>
             <SheetBody>
               <FieldGroup>
@@ -634,9 +746,19 @@ export function TaskSheet({
                   </p>
                 )}
 
+                <Field label="Приоритет">
+                  <PriorityPicker value={priority} onChange={setPriority} />
+                </Field>
+
                 <Field label="Срок">
                   <DeadlinePicker value={due} onChange={setDue} />
                 </Field>
+
+                {employees && employees.length > 0 && (
+                  <Field label="Исполнитель" hint={assignee !== task.assignee_id ? 'Задача перейдёт к этому сотруднику' : undefined}>
+                    <Combobox value={assignee} onChange={setAssignee} options={assigneeOptions(employees, false)} searchPlaceholder="Имя сотрудника…" stacked />
+                  </Field>
+                )}
 
                 <Field label="Статус">
                   <div className="grid grid-cols-2 gap-1.5" role="radiogroup" aria-label="Статус">

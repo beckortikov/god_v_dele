@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 vi.mock('@/lib/db', async () => ({ db: (await import('./helpers/fake-db')).fakeAdmin }))
 process.env.SUPABASE_SERVICE_ROLE_KEY ||= 'service-key-for-tests'
 
-import { GET, PUT } from '@/app/api/employee/tasks/route'
+import { GET, POST, PUT } from '@/app/api/employee/tasks/route'
 import { ageTone, deadlineLabel, timeSince, type Task } from '@/components/employee/task-parts'
 import { SESSION_COOKIE, createSessionToken } from '@/lib/session'
 import { fake } from './helpers/fake-db'
@@ -55,5 +55,42 @@ describe('task timing labels', () => {
   })
   it('names deadlines in words', () => {
     expect(deadlineLabel(null)).toBe('без срока')
+  })
+})
+
+describe('/api/employee/tasks: anyone can assign, priorities', () => {
+  const asEmployee = (eid: string, uid = `u-${eid}`) =>
+    `${SESSION_COOKIE}=${createSessionToken({ id: uid, role: 'employee', employee_id: eid, full_name: 'Сотрудник' } as never)}`
+  const call = (method: 'POST' | 'PUT', body: unknown, cookie = admin) =>
+    (method === 'POST' ? POST : PUT)(new Request('http://test/x', { method, headers: { 'Content-Type': 'application/json', cookie }, body: JSON.stringify(body) }))
+
+  beforeEach(() => {
+    fake.reset()
+    fake.rows('employees').push(
+      { id: 'e1', first_name: 'Аня', last_name: 'А', status: 'active' },
+      { id: 'e2', first_name: 'Боря', last_name: 'Б', status: 'active' },
+      { id: 'e3', first_name: 'Вера', last_name: 'В', status: 'terminated' }
+    )
+  })
+
+  it('an employee gives a task to a colleague, with a priority; the creator is the session', async () => {
+    const res = await call('POST', { assignee_id: 'e2', title: 'Позвонить', priority: 1, creator_id: 'someone-else' }, asEmployee('e1'))
+    expect(res.status).toBe(200)
+    expect(fake.rows('tasks')).toMatchObject([{ assignee_id: 'e2', priority: 1, creator_id: 'u-e1' }])
+  })
+
+  it('«Всем»: one copy per person; refuses a dismissed employee and a bad priority', async () => {
+    expect((await call('POST', { assignee_ids: ['e1', 'e2'], title: 'Планёрка' })).status).toBe(200)
+    expect(fake.rows('tasks').map(t => t.assignee_id).sort()).toEqual(['e1', 'e2'])
+    expect(fake.rows('tasks')[0].priority).toBe(3)
+    expect((await call('POST', { assignee_id: 'e3', title: 'x' })).status).toBe(400)
+    expect((await call('POST', { assignee_id: 'e1', title: 'x', priority: 7 })).status).toBe(400)
+  })
+
+  it('the creator may change and hand over a task; a stranger may not', async () => {
+    fake.rows('tasks').push({ id: 't1', assignee_id: 'e2', creator_id: 'u-e1', title: 'Отчёт', status: 'todo', priority: 3 })
+    expect((await call('PUT', { id: 't1', priority: 2, assignee_id: 'e1' }, asEmployee('e1'))).status).toBe(200)
+    expect(fake.rows('tasks')[0]).toMatchObject({ priority: 2, assignee_id: 'e1' })
+    expect((await call('PUT', { id: 't1', priority: 1 }, asEmployee('e2', 'u-other'))).status).toBe(403)
   })
 })

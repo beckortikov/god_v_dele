@@ -13,8 +13,14 @@ import { EmptyState } from '@/components/erp/empty-state'
 import { Combobox } from '@/components/erp/combobox'
 import { useConfirm } from '@/components/erp/confirm'
 import {
+  ALL_ASSIGNEES,
   DeadlineSelect,
+  PriorityBadge,
+  PrioritySelect,
   TaskTypeSelect,
+  assigneeOptions,
+  byPriority,
+  DEFAULT_PRIORITY,
   ageTone,
   deadlineLabel,
   timeSince,
@@ -85,7 +91,7 @@ const DONE_ON_BOARD = 30
 function TaskBoard({ tasks, names, onMove, onOpen }: { tasks: Task[]; names?: Map<string, string>; onMove: (t: Task, s: TaskStatus) => void; onOpen: (t: Task) => void }) {
   const [over, setOver] = React.useState<TaskStatus | null>(null)
   const dragged = React.useRef<string | null>(null)
-  const order = (a: Task, b: Task) => Number(isOverdue(b)) - Number(isOverdue(a)) || (a.due_date ?? '').localeCompare(b.due_date ?? '') || (a.created_at ?? '').localeCompare(b.created_at ?? '')
+  const order = (a: Task, b: Task) => byPriority(a, b) || Number(isOverdue(b)) - Number(isOverdue(a)) || (a.due_date ?? '').localeCompare(b.due_date ?? '') || (a.created_at ?? '').localeCompare(b.created_at ?? '')
   return (
     <div className="min-h-0 flex-1 overflow-auto p-2 sm:p-3">
       <div className="grid min-h-full auto-cols-[17rem] grid-flow-col items-start gap-2.5 lg:auto-cols-auto lg:grid-flow-row lg:grid-cols-3">
@@ -132,13 +138,15 @@ function TaskBoard({ tasks, names, onMove, onOpen }: { tasks: Task[]; names?: Ma
                       onClick={() => onOpen(t)}
                       className={cn(
                         'flex w-full cursor-grab flex-col gap-1.5 rounded-xl border bg-card p-3 text-left shadow-xs outline-none transition-shadow hover:shadow-md focus-visible:ring-[3px] focus-visible:ring-ring/30 active:cursor-grabbing',
-                        isOverdue(t) && 'border-destructive/40'
+                        isOverdue(t) && 'border-destructive/40',
+                        t.priority === 1 && t.status !== 'completed' && 'border-l-4 border-l-destructive'
                       )}
                     >
                       <span className="flex items-start gap-1.5">
                         <type.icon className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-label={type.label} />
                         <span className={cn('min-w-0 flex-1 text-sm leading-snug font-medium', t.status === 'completed' && 'text-muted-foreground line-through')}>{t.title}</span>
                       </span>
+                      <PriorityBadge task={t} className="self-start" />
                       {t.target && <span className="self-start rounded-md bg-primary-soft px-1.5 py-0.5 text-[11px] font-medium text-primary-soft-foreground">{t.target.name}</span>}
                       <span className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[11px]">
                         <TaskTiming task={t} />
@@ -188,9 +196,9 @@ const isLater = (t: Task) => !!t.due_date && t.due_date > todayISO()
 /** Overdue first, then today's work (in progress before to do), then later deadlines, then what is done. */
 function groupTasks(tasks: Task[], view: View) {
   const active = tasks.filter(isActive)
-  const overdue = active.filter(isOverdue)
-  const today = active.filter(t => !isOverdue(t) && !isLater(t)).sort((a, b) => Number(b.status === 'in_progress') - Number(a.status === 'in_progress'))
-  const later = active.filter(isLater).sort((a, b) => (a.due_date ?? '').localeCompare(b.due_date ?? ''))
+  const overdue = active.filter(isOverdue).sort(byPriority)
+  const today = active.filter(t => !isOverdue(t) && !isLater(t)).sort((a, b) => byPriority(a, b) || Number(b.status === 'in_progress') - Number(a.status === 'in_progress'))
+  const later = active.filter(isLater).sort((a, b) => (a.due_date ?? '').localeCompare(b.due_date ?? '') || byPriority(a, b))
   const done = tasks.filter(t => !isActive(t)).sort((a, b) => (b.updated_at ?? '').localeCompare(a.updated_at ?? ''))
   const groups: { id: string; title: string; tone?: 'danger'; items: Task[] }[] = []
   if (view !== 'done') {
@@ -268,6 +276,7 @@ function TaskRow({
       <button type="button" onClick={onOpen} className="min-w-0 flex-1 text-left outline-none focus-visible:rounded-md focus-visible:ring-[3px] focus-visible:ring-ring/30">
         <span className="flex items-center gap-1.5">
           <type.icon className="size-4 shrink-0 text-muted-foreground" aria-label={type.label} />
+          {!done && !cancelled && <PriorityBadge task={task} />}
           <span className={cn('min-w-0 truncate text-[15px] font-medium', (done || cancelled) && 'text-muted-foreground line-through')}>{task.title}</span>
         </span>
         {task.description && <span className="mt-0.5 line-clamp-1 block text-sm text-muted-foreground">{task.description}</span>}
@@ -372,6 +381,7 @@ function QuickAdd({
   const [title, setTitle] = React.useState('')
   const [due, setDue] = React.useState(todayISO())
   const [type, setType] = React.useState('call')
+  const [priority, setPriority] = React.useState(DEFAULT_PRIORITY)
   const [client, setClient] = React.useState('none')
   const [busy, setBusy] = React.useState(false)
   const clientOptions = React.useMemo(() => [{ value: 'none', label: 'Без клиента' }, ...participantOptions(participants)], [participants])
@@ -384,6 +394,7 @@ function QuickAdd({
       title: title.trim(),
       description: '',
       task_type: type,
+      priority,
       target_type: client === 'none' ? 'none' : 'participant',
       target_participant_id: client,
       guest_name: '',
@@ -393,6 +404,7 @@ function QuickAdd({
       setTitle('')
       setClient('none')
       setDue(todayISO())
+      setPriority(DEFAULT_PRIORITY)
     }
   }
 
@@ -406,6 +418,7 @@ function QuickAdd({
     >
       <div className="flex flex-wrap items-center gap-1.5">
         <TaskTypeSelect value={type} onChange={setType} />
+        <PrioritySelect value={priority} onChange={setPriority} />
         <DeadlineSelect value={due} onChange={setDue} />
         <Combobox size="sm" value={client} onChange={setClient} options={clientOptions} searchPlaceholder="Имя или телефон клиента…" className="w-full sm:w-56" contentClassName="sm:min-w-80" stacked />
         {employees && onAssignee && (
@@ -414,7 +427,7 @@ function QuickAdd({
             value={assignee ?? ''}
             onChange={onAssignee}
             placeholder="Кому"
-            options={employees.map(e => ({ value: e.id, label: employeeName(e), hint: e.position || undefined }))}
+            options={assigneeOptions(employees)}
             searchPlaceholder="Имя сотрудника…"
             className="w-full sm:w-64"
             contentClassName="sm:min-w-80" stacked
@@ -488,13 +501,15 @@ function useTasks(url: string | null) {
   }
 }
 
-async function createTask(v: NewTaskValues, creatorId: string | null, due = todayISO()): Promise<boolean> {
+/** Creates the task; «Всем сотрудникам» gives each of `team` their own copy. */
+async function createTask(v: NewTaskValues, creatorId: string | null, due = todayISO(), team: EmployeeLite[] = []): Promise<boolean> {
   let title = v.title
   if (v.target_type === 'guest' && v.guest_name.trim()) title = `${v.title} (Гость: ${v.guest_name.trim()})`
   try {
     await send('POST', {
-      assignee_id: v.assignee_id,
+      ...(v.assignee_id === ALL_ASSIGNEES ? { assignee_ids: team.map(e => e.id) } : { assignee_id: v.assignee_id }),
       creator_id: creatorId,
+      priority: v.priority ?? DEFAULT_PRIORITY,
       title,
       description: v.description,
       task_type: v.task_type,
@@ -597,9 +612,9 @@ export function TeamTasksPage() {
       toast.error('Выберите, кому задача')
       return false
     }
-    const ok = await createTask({ ...v, assignee_id: target }, me, due)
+    const ok = await createTask({ ...v, assignee_id: target }, me, due, employees)
     if (ok) {
-      toast.success('Задача поставлена', { description: `${v.title} · ${names.get(target) ?? ''}` })
+      toast.success('Задача поставлена', { description: `${v.title} · ${target === ALL_ASSIGNEES ? 'всем сотрудникам' : names.get(target) ?? ''}` })
       load()
     }
     return ok
@@ -799,6 +814,7 @@ export function TeamTasksPage() {
         open={!!selected}
         onOpenChange={o => !o && setSelected(null)}
         assigneeName={selected ? names.get(selected.assignee_id) : undefined}
+        employees={employees}
         onSaved={updated => {
           setTasks(ts => ts?.map(t => (t.id === updated.id ? { ...t, ...updated } : t)) ?? ts)
           setSelected(null)
@@ -920,6 +936,8 @@ function greeting() {
 export function MyTasksPage() {
   const [user, setUser] = React.useState<ReturnType<typeof readUser> | null>(null)
   const [participants, setParticipants] = React.useState<ParticipantLite[]>([])
+  const [team, setTeam] = React.useState<EmployeeLite[]>([])
+  const [assignee, setAssignee] = React.useState('')
   const [leaves, setLeaves] = React.useState<LeaveRequest[] | null>(null)
   const [view, setView] = React.useState<View>('active')
   const [selected, setSelected] = React.useState<Task | null>(null)
@@ -944,6 +962,11 @@ export function MyTasksPage() {
       .then(r => r.json())
       .then(d => setParticipants(Array.isArray(d) ? d : d?.data || []))
       .catch(() => {})
+    fetch('/api/employee/team')
+      .then(r => r.json())
+      .then(d => setTeam(Array.isArray(d) ? d : []))
+      .catch(() => {})
+    setAssignee(eid)
   }, [eid, loadLeaves])
 
   if (!user) return null
@@ -953,14 +976,24 @@ export function MyTasksPage() {
 
   const all = tasks ?? []
   const firstName = (user.name || '').split(' ')[0]
+  const teamName = (id: string) => {
+    const e = team.find(x => x.id === id)
+    return e ? employeeName(e) : ''
+  }
   const create = async (v: NewTaskValues, due?: string) => {
-    const ok = await createTask({ ...v, assignee_id: eid }, user.id, due)
+    const target = v.assignee_id || assignee || eid
+    const ok = await createTask({ ...v, assignee_id: target }, user.id, due, team)
     if (ok) {
-      toast.success('Задача добавлена', { description: v.title })
+      const whom = target === eid ? '' : target === ALL_ASSIGNEES ? ' · всем сотрудникам' : ` · ${teamName(target)}`
+      toast.success(target === eid ? 'Задача добавлена' : 'Задача поставлена', { description: `${v.title}${whom}` })
       load()
     }
     return ok
   }
+  // «Кому» lists me first as «Себе»
+  const teamForPick: EmployeeLite[] = team.length
+    ? [...team.filter(e => e.id === eid).map(e => ({ ...e, first_name: 'Себе', last_name: '', position: employeeName(e) })), ...team.filter(e => e.id !== eid)]
+    : []
 
   return (
     <div className="flex h-full min-h-0">
@@ -1018,7 +1051,15 @@ export function MyTasksPage() {
           </div>
         </div>
         )}
-        <QuickAdd participants={participants} placeholder="Добавить себе задачу… Enter" onCreate={create} onMore={() => setMoreOpen(true)} />
+        <QuickAdd
+          participants={participants}
+          employees={teamForPick.length > 1 ? teamForPick : undefined}
+          assignee={assignee}
+          onAssignee={setAssignee}
+          placeholder={assignee && assignee !== eid ? (assignee === ALL_ASSIGNEES ? 'Задача всем сотрудникам… Enter' : `Задача для ${teamName(assignee).split(' ')[0]}… Enter`) : 'Добавить себе задачу… Enter'}
+          onCreate={create}
+          onMore={() => setMoreOpen(true)}
+        />
       </section>
 
       <aside aria-label="Рабочий день и отгулы" className="hidden w-80 shrink-0 space-y-4 overflow-y-auto border-l bg-card p-4 xl:block">
@@ -1026,13 +1067,22 @@ export function MyTasksPage() {
         <LeavesBlock leaves={leaves} onNew={() => setLeaveOpen(true)} />
       </aside>
 
-      <NewTaskSheet open={moreOpen} onOpenChange={setMoreOpen} participants={participants} onCreate={create} />
+      <NewTaskSheet
+        open={moreOpen}
+        onOpenChange={setMoreOpen}
+        participants={participants}
+        employees={teamForPick.length > 1 ? teamForPick : undefined}
+        defaultAssignee={assignee || eid}
+        onCreate={create}
+      />
       <TaskSheet
         task={selected}
         open={!!selected}
         onOpenChange={o => !o && setSelected(null)}
+        employees={team.length > 1 ? team : undefined}
         onSaved={updated => {
-          setTasks(ts => ts?.map(t => (t.id === updated.id ? { ...t, ...updated } : t)) ?? ts)
+          // Handed to a colleague: it leaves my list
+          setTasks(ts => (updated.assignee_id !== eid ? ts?.filter(t => t.id !== updated.id) : ts?.map(t => (t.id === updated.id ? { ...t, ...updated } : t))) ?? ts)
           setSelected(null)
         }}
       />

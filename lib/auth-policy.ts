@@ -127,6 +127,8 @@ const RULES: Rule[] = [
   wheel('/api/life-balance'),
   wheel('/api/business-wheel'),
 
+  // Whom a task can go to: every employee and manager sees the list of colleagues
+  { prefix: '/api/employee/team', read: ['employee', 'manager'], write: NONE },
   { prefix: '/api/employee', read: ['employee', 'manager'], write: ['employee', 'manager'], scope: { kind: 'employee', params: ['employee_id', 'assignee_id'] } },
 ]
 
