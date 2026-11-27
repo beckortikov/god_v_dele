@@ -127,8 +127,23 @@ export interface IgMessage {
   storyMention: boolean
   /** A reply or reaction to one of the account's stories; the media link lives about 24 hours. */
   storyReply: { storyId: string; storyUrl: string | null } | null
-  /** Instagram sent something it does not let apps show (cards, some shares). */
+  /** A card (generic template) with a real title: shown as a small card. */
+  card: { title: string; subtitle: string | null; url: string | null } | null
+  /** Nothing Instagram lets apps show: no text, no media, no story, no card (shares, polls, notes…). */
   unsupported: boolean
+}
+
+/** Instagram's own stand-in for things it does not hand to apps. */
+const PLACEHOLDER_CARD = /^use the latest app$/i
+
+function cardOf(attachments: any[]): IgMessage['card'] {
+  for (const a of attachments) {
+    if (a?.type !== 'template') continue
+    const els = (a.payload?.elements ?? a.payload?.generic?.elements ?? []) as any[]
+    const el = els.find(e => typeof e?.title === 'string' && e.title.trim() && !PLACEHOLDER_CARD.test(e.title.trim()))
+    if (el) return { title: el.title.trim(), subtitle: el.subtitle?.trim() || null, url: el.default_action?.url ?? el.buttons?.find((b: any) => b?.url)?.url ?? null }
+  }
+  return null
 }
 
 export async function listMessages(conversationId: string): Promise<IgMessage[]> {
@@ -136,19 +151,28 @@ export async function listMessages(conversationId: string): Promise<IgMessage[]>
   const q = new URLSearchParams({ accountId: a.id, limit: '100', sortOrder: 'asc' })
   const r = await call<{ messages: any[] }>('GET', `/inbox/conversations/${encodeURIComponent(conversationId)}/messages?${q}`)
   return (r.messages ?? [])
-    .map(m => ({
-      id: String(m.id),
-      text: m.message ?? '',
-      outgoing: m.direction === 'outgoing',
-      createdAt: m.createdAt ?? '',
-      attachments: ((m.attachments ?? []) as any[])
+    .map(m => {
+      const raw = (m.attachments ?? []) as any[]
+      const attachments = raw
         .map((x, index) => ({ index, url: x.url ?? x.payload?.url ?? '', type: String(x.type ?? 'file'), originalType: x.originalType ?? null }))
         .filter(x => x.url)
-        .map(({ url: _url, ...a }) => a),
-      storyMention: !!m.isStoryMention,
-      storyReply: m.storyReply?.storyId ? { storyId: String(m.storyReply.storyId), storyUrl: m.storyReply.storyUrl ?? null } : null,
-      unsupported: !!m.noRenderableContent,
-    }))
+        .map(({ url: _url, ...a }) => a)
+      const text: string = m.message ?? ''
+      const storyMention = !!m.isStoryMention
+      const storyReply = m.storyReply?.storyId ? { storyId: String(m.storyReply.storyId), storyUrl: m.storyReply.storyUrl ?? null } : null
+      const card = cardOf(raw)
+      return {
+        id: String(m.id),
+        text,
+        outgoing: m.direction === 'outgoing',
+        createdAt: m.createdAt ?? '',
+        attachments,
+        storyMention,
+        storyReply,
+        card,
+        unsupported: !text.trim() && !attachments.length && !storyMention && !storyReply && !card,
+      }
+    })
     .sort((x, y) => x.createdAt.localeCompare(y.createdAt))
 }
 

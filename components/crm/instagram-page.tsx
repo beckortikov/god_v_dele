@@ -5,6 +5,7 @@ import { toast } from 'sonner'
 import {
   ArrowLeft,
   ExternalLink,
+  EyeOff,
   Heart,
   Instagram,
   MessageCircle,
@@ -53,6 +54,7 @@ interface Message {
   attachments: { index: number; type: string; originalType: string | null }[]
   storyMention: boolean
   storyReply: { storyId: string; storyUrl: string | null } | null
+  card: { title: string; subtitle: string | null; url: string | null } | null
   unsupported: boolean
   pending?: boolean
 }
@@ -470,7 +472,7 @@ function contextLabel(m: Message): string | null {
   return null
 }
 
-function MessageContext({ m, convId }: { m: Message; convId: string }) {
+function MessageContext({ m, convId, threadUrl }: { m: Message; convId: string; threadUrl: string | null }) {
   const label = contextLabel(m)
   const isStory = !!m.storyReply || m.storyMention || m.attachments.some(a => /story/.test(a.originalType ?? a.type))
   const sources = [
@@ -484,10 +486,40 @@ function MessageContext({ m, convId }: { m: Message; convId: string }) {
         <MessageMedia key={src} src={src} story={isStory} onDark={m.outgoing} />
       ))}
       {isStory && !sources.length && <MediaGone story onDark={m.outgoing} />}
+      {m.card && (
+        <CardLink href={m.card.url} onDark={m.outgoing}>
+          <span className="block font-semibold">{m.card.title}</span>
+          {m.card.subtitle && <span className="block text-xs opacity-80">{m.card.subtitle}</span>}
+        </CardLink>
+      )}
       {m.unsupported && !sources.length && (
-        <span className={cn('block text-sm italic', m.outgoing ? 'text-primary-foreground/85' : 'text-muted-foreground')}>Карточка или ссылка, которую Instagram не показывает в CRM — откройте переписку в Instagram</span>
+        <span className={cn('my-0.5 flex items-center gap-2 text-sm', m.outgoing ? 'text-primary-foreground/85' : 'text-muted-foreground')}>
+          <EyeOff className="size-4 shrink-0" />
+          <span>Instagram не передал это сообщение</span>
+          {threadUrl && (
+            <a
+              href={threadUrl}
+              target="_blank"
+              rel="noreferrer"
+              className={cn('inline-flex shrink-0 items-center gap-0.5 font-medium underline-offset-2 hover:underline', m.outgoing ? 'text-primary-foreground' : 'text-primary')}
+            >
+              Открыть <ExternalLink className="size-3.5" />
+            </a>
+          )}
+        </span>
       )}
     </>
+  )
+}
+
+function CardLink({ href, onDark, children }: { href: string | null; onDark: boolean; children: React.ReactNode }) {
+  const cls = cn('my-1 block rounded-xl px-3 py-2 text-sm', onDark ? 'bg-primary-foreground/15' : 'bg-muted', href && 'hover:opacity-90')
+  return href ? (
+    <a href={href} target="_blank" rel="noreferrer" className={cls}>
+      {children}
+    </a>
+  ) : (
+    <span className={cls}>{children}</span>
   )
 }
 
@@ -752,7 +784,7 @@ function DmThread({
     const text = fieldText(draft)
     if (!text || sending) return
     setSending(true)
-    const temp: Message = { id: `tmp-${Date.now()}`, text, outgoing: true, createdAt: new Date().toISOString(), attachments: [], storyMention: false, storyReply: null, unsupported: false, pending: true }
+    const temp: Message = { id: `tmp-${Date.now()}`, text, outgoing: true, createdAt: new Date().toISOString(), attachments: [], storyMention: false, storyReply: null, card: null, unsupported: false, pending: true }
     setMessages(m => [...(m ?? []), temp])
     setDraft('')
     try {
@@ -795,7 +827,7 @@ function DmThread({
             m.pending && 'opacity-70'
           )}
         >
-          <MessageContext m={m} convId={conv.id} />
+          <MessageContext m={m} convId={conv.id} threadUrl={conv.url ?? null} />
           {m.text && <span className="whitespace-pre-wrap">{m.text}</span>}
           <span className={cn('num float-right mt-1.5 ml-2.5 text-[11px]', m.outgoing ? 'text-primary-foreground/80' : 'text-muted-foreground')}>{m.pending ? '…' : clock(m.createdAt)}</span>
         </div>
