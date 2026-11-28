@@ -431,12 +431,13 @@ export function EventDetailPage({ eventId, onBack }: EventDetailPageProps) {
       <StatStrip
         stats={[
           {
-            label: 'Доход',
+            label: 'Доход (факт)',
             dot: 'var(--chart-income)',
             value: formatMoney(totalIncome),
-            sub:
-              summary && (summary.income_breakdown.guest_payments > 0 || summary.income_breakdown.other_income > 0)
-                ? `гости ${formatMoney(summary.income_breakdown.guest_payments)} · участники ${formatMoney(summary.income_breakdown.other_income)}`
+            sub: summary?.plan
+              ? `оплатили ${formatNumber(summary.plan.paid_count)}${summary.plan.planned > 0 ? ` · план ${formatMoney(summary.plan.planned)}` : ''}`
+              : totalIncome > 0
+                ? 'получено'
                 : 'оплат пока нет',
             onClick: () => setTab('finance'),
           },
@@ -659,6 +660,7 @@ function AttendeesPanel({
     // «Перезвонить» shows the longest-waiting first
     .sort((x, y) => (stageFilter === 'due' ? (x.next_contact_on || '').localeCompare(y.next_contact_on || '') : 0))
   const paid = visible.reduce((s, a) => s + num(a.payment_received), 0)
+  const planned = visible.filter(a => a.funnel_stage !== 'declined').reduce((s, a) => s + num(a.price), 0)
   const participantsCount = attendees.filter(a => a.attendee_type === 'participant').length
 
   // ----- Selection and bulk attendance -----
@@ -780,7 +782,7 @@ function AttendeesPanel({
                   <TableHead>Этап</TableHead>
                   <TableHead className="max-md:hidden">Перезвонить</TableHead>
                   <TableHead className="max-lg:hidden">Присутствие</TableHead>
-                  <TableHead className="text-right">Оплата</TableHead>
+                  <TableHead className="text-right">Оплачено</TableHead>
                   <TableHead className="w-20" />
                 </TableRow>
               </TableHeader>
@@ -826,7 +828,14 @@ function AttendeesPanel({
                       </TableCell>
                       <TableCell className="text-right">
                         {amount > 0 ? (
-                          <Money usd={amount} currency={a.currency} original={a.original_amount} className="font-medium text-success" />
+                          <>
+                            <Money usd={amount} currency={a.currency} original={a.original_amount} className="font-medium text-success" />
+                            {num(a.price) > amount + 0.005 && <div className="num text-xs text-muted-foreground">из {formatMoney(num(a.price))}</div>}
+                          </>
+                        ) : num(a.price) > 0 ? (
+                          <span className="num text-xs text-muted-foreground" title="Цена участия (план), денег ещё нет">
+                            план {formatMoney(num(a.price))}
+                          </span>
                         ) : (
                           <span className="text-muted-foreground/70">—</span>
                         )}
@@ -847,8 +856,8 @@ function AttendeesPanel({
               </TableBody>
             </Table>
             <TotalsBar
-              label={`${formatNumber(visible.length)} ${plural(visible.length, ['человек', 'человека', 'человек'])}`}
-              value={formatMoney(paid, 'USD', { sign: true })}
+              label={`${formatNumber(visible.length)} ${plural(visible.length, ['человек', 'человека', 'человек'])}${planned > 0 ? ` · план ${formatMoney(planned)}` : ''}`}
+              value={`оплачено ${formatMoney(paid)}`}
               tone={paid > 0 ? 'success' : undefined}
             />
           </>
@@ -1066,9 +1075,20 @@ function FinancePanel({
     <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
       <Panel className="px-4 py-3.5">
         <h3 className="mb-1 text-sm font-semibold">Итоги события</h3>
-        {line('Доход', income, { strong: true })}
+        {line('Доход (факт): оплатили', income, { strong: true })}
         {line('от участников программ', other, { muted: true, pctOf: income })}
         {line('от гостей', guest, { muted: true, pctOf: income })}
+        {summary?.plan && summary.plan.planned > 0 && (
+          <>
+            {line(`План: цена участия у ${formatNumber(summary.plan.priced)} ${plural(summary.plan.priced, ['человека', 'человек', 'человек'])}`, summary.plan.planned, { muted: true })}
+            {line('ещё ожидаем по плану', summary.plan.expected_left, { muted: true })}
+          </>
+        )}
+        {!!summary?.plan?.paid_without_amount && (
+          <p className="border-b py-2 pl-3 text-xs text-[color-mix(in_oklch,var(--warning)_75%,var(--foreground))]">
+            {formatNumber(summary.plan.paid_without_amount)} {plural(summary.plan.paid_without_amount, ['человек отмечен', 'человека отмечены', 'человек отмечены'])} «Оплатил», но сумма оплаты не внесена
+          </p>
+        )}
         {line('Расходы', spent, { strong: true })}
         {breakdown.length === 0 && unexplained <= 0.005 ? (
           <p className="border-b py-2 pl-3 text-sm text-muted-foreground">Расходов нет</p>

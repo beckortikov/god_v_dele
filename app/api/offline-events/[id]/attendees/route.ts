@@ -6,6 +6,15 @@ import { eventName, participantNames } from '@/app/api/audit/_server'
 import { isFunnelStage, parseContactDate, stageAfterPayment, type FunnelStage } from '@/lib/event-funnel'
 import { guarded, loadFunnel, recordHistory } from '@/lib/event-funnel-server'
 
+/** Planned price of participation (migration 034), not money received. */
+function priceFields(a: any) {
+    const currency = a.price_currency === 'TJS' ? 'TJS' : 'USD'
+    const original = Math.max(0, Number(a.price_original ?? a.price) || 0)
+    const rate = currency === 'TJS' ? Number(a.exchange_rate) || 0 : 1
+    const usd = currency === 'TJS' ? (rate > 0 ? original / rate : 0) : original
+    return { price: Math.round(usd * 100) / 100, price_currency: currency, price_original: Math.round(original * 100) / 100 }
+}
+
 /** Stage for a new row: the one sent, or «Оплатил» when it comes with a payment. */
 function initialStage(a: any): FunnelStage {
     return stageAfterPayment(isFunnelStage(a.funnel_stage) ? a.funnel_stage : 'new', Number(a.payment_received) || 0)
@@ -47,6 +56,7 @@ export async function POST(
                 exchange_rate: attendee.exchange_rate || 1,
                 attendance_status: attendee.attendance_status || 'registered',
                 payment_notes: attendee.payment_notes || null,
+                ...('price' in attendee || 'price_original' in attendee ? priceFields(attendee) : {}),
                 funnel_stage: initialStage(attendee),
             }))
 
@@ -72,6 +82,7 @@ export async function POST(
                 exchange_rate: body.exchange_rate || 1,
                 attendance_status: body.attendance_status || 'registered',
                 payment_notes: body.payment_notes || null,
+                ...('price' in body || 'price_original' in body ? priceFields(body) : {}),
                 funnel_stage: initialStage(body),
                 ...(parseContactDate(body.next_contact_on) ? { next_contact_on: parseContactDate(body.next_contact_on) } : {}),
             }

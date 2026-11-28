@@ -26,7 +26,9 @@ export function exportEventToExcel(event: OfflineEvent, attendees: Attendee[], e
     [`Статус: ${EVENT_STATUS[event.status]?.label ?? event.status}`],
     [],
     ['Показатель', 'Значение, USD'],
-    ['Доход', num(summary?.total_income ?? event.total_income)],
+    ['Доход (факт)', num(summary?.total_income ?? event.total_income)],
+    ['План (цена участия, кроме «Не поедет»)', num(summary?.plan?.planned)],
+    ['Ещё ожидаем по плану', num(summary?.plan?.expected_left)],
     ['  от гостей', num(summary?.income_breakdown?.guest_payments)],
     ['  от участников программ', num(summary?.income_breakdown?.other_income)],
     ['Расходы', num(summary?.total_expenses ?? event.total_expenses)],
@@ -37,7 +39,7 @@ export function exportEventToExcel(event: OfflineEvent, attendees: Attendee[], e
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(summaryRows), 'Итоги')
 
   const attendeeRows: (string | number)[][] = [
-    ['Имя', 'Тип', 'Контакт', 'Этап', 'Перезвонить', 'Последний комментарий', 'Присутствие', 'Оплата, USD', 'Оплата в валюте', 'Валюта', 'Комментарий к платежу'],
+    ['Имя', 'Тип', 'Контакт', 'Этап', 'Перезвонить', 'Последний комментарий', 'Присутствие', 'Цена (план), USD', 'Оплачено (факт), USD', 'Оплачено в валюте', 'Валюта', 'Комментарий к платежу'],
     ...attendees.map(a => [
       attendeeName(a),
       a.attendee_type === 'guest' ? 'Гость' : 'Участник',
@@ -46,6 +48,7 @@ export function exportEventToExcel(event: OfflineEvent, attendees: Attendee[], e
       a.next_contact_on ? formatDate(a.next_contact_on) : '',
       a.last_comment ? `${formatDate(a.last_comment.created_at)}: ${a.last_comment.body}` : '',
       attendanceOf(a.attendance_status).label,
+      Math.round(num(a.price) * 100) / 100,
       Math.round(num(a.payment_received) * 100) / 100,
       num(a.original_amount),
       a.currency || 'USD',

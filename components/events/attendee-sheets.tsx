@@ -166,9 +166,9 @@ export function AddAttendeesSheet({
       const attendeesToInsert = selected.map(participantId => ({
         attendee_type: 'participant',
         participant_id: participantId,
-        payment_received: money.finalAmountUSD,
-        original_amount: money.originalAmount,
-        currency,
+        // the price is a plan; payments are entered when people actually pay
+        price_original: money.originalAmount,
+        price_currency: currency,
         exchange_rate: money.rate,
         attendance_status: status || 'registered',
         payment_notes: notes || '',
@@ -203,14 +203,13 @@ export function AddAttendeesSheet({
         guest_phone: guestContact,
         attendance_status: status,
         payment_notes: notes,
-        payment_received: money.finalAmountUSD,
-        original_amount: money.originalAmount,
-        currency,
+        price_original: money.originalAmount,
+        price_currency: currency,
         exchange_rate: money.rate,
       })
       if (currency === 'TJS') writePref(LAST_RATE, rate)
       toast.success('Гость добавлен', {
-        description: money.originalAmount ? `${guestName.trim()} · ${formatMoney(money.originalAmount, currency)}` : guestName.trim(),
+        description: money.originalAmount ? `${guestName.trim()} · цена ${formatMoney(money.originalAmount, currency)}` : guestName.trim(),
       })
       onSaved()
       if (addAnother) {
@@ -232,9 +231,15 @@ export function AddAttendeesSheet({
   const paymentFields = (
     <>
       <Field
-        label={mode === 'participant' ? 'Оплата с каждого' : 'Оплата'}
+        label={mode === 'participant' ? 'Цена участия с каждого (план)' : 'Цена участия (план)'}
         htmlFor="att-amount"
-        hint={errors.amount ? <span className="text-destructive">{errors.amount}</span> : mode === 'participant' ? 'Оставьте пустым, если участие бесплатное' : undefined}
+        hint={
+          errors.amount ? (
+            <span className="text-destructive">{errors.amount}</span>
+          ) : (
+            'Сколько должен заплатить. Это ещё не доход: оплату внесите в карточке человека, когда он заплатит'
+          )
+        }
       >
         <MoneyInput
           id="att-amount"
@@ -251,7 +256,7 @@ export function AddAttendeesSheet({
       <Field label="Статус">
         <ChipGroup aria-label="Статус присутствия" value={status} onChange={setStatus} options={statusOptions} />
       </Field>
-      <Field label="Комментарий к платежу" htmlFor="att-notes">
+      <Field label="Комментарий" htmlFor="att-notes">
         <Input id="att-notes" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Например: наличные, перевод" />
       </Field>
     </>
@@ -433,6 +438,9 @@ export function EditAttendeeSheet({
   const [amount, setAmount] = React.useState('')
   const [currency, setCurrency] = React.useState<Currency>('TJS')
   const [rate, setRate] = React.useState(EVENT_DEFAULT_RATE)
+  const [price, setPrice] = React.useState('')
+  const [priceCurrency, setPriceCurrency] = React.useState<Currency>('USD')
+  const [priceRate, setPriceRate] = React.useState(EVENT_DEFAULT_RATE)
   const [status, setStatus] = React.useState('registered')
   const [notes, setNotes] = React.useState('')
   const [guestName, setGuestName] = React.useState('')
@@ -454,6 +462,11 @@ export function EditAttendeeSheet({
     setCurrency(cur)
     setAmount(value ? String(Math.round(value * 100) / 100) : '')
     setRate(String(num(attendee.exchange_rate) > 1 ? attendee.exchange_rate : readPref(LAST_RATE) || EVENT_DEFAULT_RATE))
+    const pCur: Currency = attendee.price_currency === 'TJS' ? 'TJS' : 'USD'
+    const pVal = pCur === 'TJS' ? num(attendee.price_original) : num(attendee.price)
+    setPriceCurrency(pCur)
+    setPrice(pVal ? String(Math.round(pVal * 100) / 100) : '')
+    setPriceRate(String(pCur === 'TJS' && num(attendee.price) > 0 ? Math.round((num(attendee.price_original) / num(attendee.price)) * 10000) / 10000 : readPref(LAST_RATE) || EVENT_DEFAULT_RATE))
     setStatus(attendee.attendance_status || 'registered')
     setNotes(attendee.payment_notes || '')
     setGuestName(attendee.guest_name || '')
@@ -470,8 +483,10 @@ export function EditAttendeeSheet({
     if (isGuest && !guestName.trim()) errs.guestName = 'Укажите имя гостя'
     const money = convert(amount, currency, rate)
     if (!money) errs.amount = 'Введите корректный курс обмена'
+    const plan = convert(price, priceCurrency, priceRate)
+    if (!plan) errs.price = 'Введите корректный курс обмена'
     setErrors(errs)
-    if (Object.keys(errs).length || !money) return
+    if (Object.keys(errs).length || !money || !plan) return
 
     setSaving(true)
     try {
@@ -486,6 +501,9 @@ export function EditAttendeeSheet({
         exchange_rate: money.rate,
         attendance_status: status,
         payment_notes: notes || null,
+        price: Math.round(plan.finalAmountUSD * 100) / 100,
+        price_currency: priceCurrency,
+        price_original: plan.originalAmount,
       }
       if (isGuest) {
         body.guest_name = guestName.trim()
@@ -594,7 +612,24 @@ export function EditAttendeeSheet({
                 </>
               )}
               <Field
-                label="Оплата"
+                label="Цена участия (план)"
+                htmlFor="edit-att-price"
+                hint={errors.price ? <span className="text-destructive">{errors.price}</span> : 'Сколько должен заплатить. В доход не входит'}
+              >
+                <MoneyInput
+                  id="edit-att-price"
+                  amount={price}
+                  onAmountChange={setPrice}
+                  currency={priceCurrency}
+                  onCurrencyChange={setPriceCurrency}
+                  rate={priceRate}
+                  onRateChange={setPriceRate}
+                  rateDate={todayISO()}
+                  rateLocked={attendee?.price_currency === 'TJS' && num(attendee?.price) > 0}
+                />
+              </Field>
+              <Field
+                label="Оплачено (факт)"
                 htmlFor="edit-att-amount"
                 hint={
                   errors.amount ? (

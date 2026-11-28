@@ -29,6 +29,10 @@ export interface Attendee {
   guest_email?: string
   guest_phone?: string
   payment_received: number
+  /** Planned price of participation (migration 034); payment_received is what was actually paid. */
+  price?: number
+  price_currency?: 'USD' | 'TJS'
+  price_original?: number
   attendance_status: string
   notes?: string
   payment_notes?: string
@@ -83,6 +87,8 @@ export interface FinancialSummary {
   income_breakdown: { guest_payments: number; other_income: number }
   expense_breakdown: Record<string, number>
   attendee_stats?: { total_registered: number; total_attended: number; participants: number; guests: number }
+  /** Plan vs fact (migration 034): everyone except «Не поедет». */
+  plan?: { planned: number; expected_left: number; priced: number; paid_count: number; paid_without_amount: number }
 }
 
 export const EVENT_STATUS: Record<EventStatus, { label: string; variant: 'info' | 'success' | 'secondary' }> = {

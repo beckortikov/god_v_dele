@@ -39,10 +39,22 @@ export async function GET(
 
         const { data: attendees, error: attendeesError } = await db
             .from('event_attendees')
-            .select('attendee_type, payment_received')
+            .select('*')
             .eq('event_id', id)
 
         if (attendeesError) throw attendeesError
+
+        // Plan vs fact (migration 034): the planned price of everyone who has not declined,
+        // what they still owe, and who is marked «Оплатил» without an amount entered
+        const live = attendees.filter((a: any) => a.funnel_stage !== 'declined')
+        const money = (v: unknown) => Number(v) || 0
+        const plan = {
+            planned: Math.round(live.reduce((t: number, a: any) => t + money(a.price), 0) * 100) / 100,
+            expected_left: Math.round(live.reduce((t: number, a: any) => t + Math.max(0, money(a.price) - money(a.payment_received)), 0) * 100) / 100,
+            priced: live.filter((a: any) => money(a.price) > 0).length,
+            paid_count: attendees.filter((a: any) => a.funnel_stage === 'paid' || money(a.payment_received) > 0).length,
+            paid_without_amount: attendees.filter((a: any) => a.funnel_stage === 'paid' && money(a.payment_received) <= 0).length,
+        }
 
         let guestPayments = 0
         let participantsCount = 0
@@ -73,6 +85,7 @@ export async function GET(
                 other_income: totalIncome - guestPayments
             },
             expense_breakdown: expenseBreakdown,
+            plan,
             attendee_stats: {
                 total_registered: eventData.attendees_registered,
                 total_attended: eventData.attendees_attended,
