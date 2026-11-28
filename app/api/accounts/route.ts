@@ -3,6 +3,8 @@ import { db } from '@/lib/db'
 import { fetchRow, logAudit } from '@/lib/audit'
 import { isMissingTable } from '@/app/api/account-transfers/shared'
 import { ledgerEnabled, loadTransactions } from '@/lib/payments-ledger'
+import { loanAccountEffects, type LoanRow, type RepaymentRow } from '@/lib/event-money'
+import { moneyMissing } from '@/lib/event-money-server'
 
 export const dynamic = 'force-dynamic';
 
@@ -51,6 +53,16 @@ export async function GET(request: Request) {
         if (!transferError) transfers = transferRows || []
         else if (!isMissingTable(transferError)) console.error('Error fetching transfers for balances:', transferError)
 
+        // Event loans (migration 033): a loan from an account takes money out, its repayments bring it
+        // back; repaying someone else's loan from an account takes money out. Same currency as the account.
+        let loanEffects = new Map<string, { usd: number; original: number }>()
+        const [loansRes, repaymentsRes] = await Promise.all([
+            db.from('event_loans').select('id, source, account_id, amount, original_amount, currency, exchange_rate'),
+            db.from('event_loan_repayments').select('loan_id, account_id, amount, original_amount, currency'),
+        ])
+        if (!loansRes.error && !repaymentsRes.error) loanEffects = loanAccountEffects(loansRes.data as LoanRow[], repaymentsRes.data as RepaymentRow[])
+        else if (!moneyMissing(loansRes.error) && !moneyMissing(repaymentsRes.error)) console.error('Error fetching event loans for balances:', loansRes.error || repaymentsRes.error)
+
         const accountsWithBalances = accounts.map(acc => {
             let balance = Number(acc.initial_balance) || 0;
             
@@ -73,6 +85,9 @@ export async function GET(request: Request) {
                 if (t.from_account_id === acc.id) balance -= Number(t.amount_from) || 0
                 if (t.to_account_id === acc.id) balance += Number(t.amount_to) || 0
             })
+
+            const loan = loanEffects.get(acc.id)
+            if (loan) balance += acc.currency === 'TJS' ? loan.original : loan.usd
             
             return {
                 ...acc,

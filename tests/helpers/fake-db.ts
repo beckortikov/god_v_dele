@@ -88,6 +88,9 @@ function from(table: string) {
     delete: () => ((q.op = 'delete'), b),
     eq: (c: string, v: unknown) => (q.filters.push(r => r[c] === v), b),
     in: (c: string, vs: unknown[]) => (q.filters.push(r => vs.includes(r[c])), b),
+    neq: (c: string, v: unknown) => (q.filters.push(r => r[c] !== v), b),
+    is: (c: string, v: unknown) => (q.filters.push(r => (r[c] ?? null) === v), b),
+    not: (c: string, op: string, v: unknown) => (q.filters.push(r => (op === 'is' ? (r[c] ?? null) !== v : r[c] !== v)), b),
     ilike: (c: string, v: string) => {
       const want = v.replace(/\\([\\%_])/g, '$1').toLowerCase()
       q.filters.push(r => String(r[c] ?? '').toLowerCase() === want)
@@ -99,6 +102,8 @@ function from(table: string) {
     lte: (c: string, v: unknown) => (q.filters.push(r => r[c] != null && String(r[c]) <= String(v)), b),
     gt: (c: string, v: unknown) => (q.filters.push(r => r[c] != null && String(r[c]) > String(v)), b),
     limit: (n: number) => ((q.limit = n), b),
+    // the fake has no paging: one page holds every row
+    range: (from: number, _to: number) => ((q.limit = from > 0 ? 0 : null), b),
     single: () => ((q.single = true), b),
     maybeSingle: () => ((q.single = true), b),
     then: (res: (v: unknown) => unknown, rej?: (e: unknown) => unknown) => Promise.resolve(run()).then(res, rej),

@@ -59,6 +59,10 @@ export interface EventExpense {
   description?: string
   original_amount?: number
   exchange_rate?: number
+  /** Who was paid and where the money came from (migration 033). */
+  supplier_id?: string | null
+  account_id?: string | null
+  loan_id?: string | null
 }
 
 export interface EventParticipant {
@@ -98,6 +102,8 @@ export const attendanceOf = (v: string) => ATTENDANCE.find(a => a.value === v) ?
 
 /** Stored values stay in English; labels are Russian. */
 export const EXPENSE_CATEGORIES: { value: string; label: string }[] = [
+  { value: 'Tour', label: 'Тур-компания' },
+  { value: 'Hotel', label: 'Отель' },
   { value: 'Venue', label: 'Аренда' },
   { value: 'Food', label: 'Еда' },
   { value: 'Marketing', label: 'Маркетинг' },
@@ -129,3 +135,61 @@ export const EVENT_DEFAULT_RATE = '10.5'
 /** «25,4%» */
 export const fmtPct = (v: number) =>
   `${(Number.isFinite(v) ? v : 0).toLocaleString('ru-RU', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`
+
+// ---------- Money: suppliers and loans (migration 033) ----------
+
+export interface AccountLite {
+  id: string
+  name: string
+  currency: string
+  balance?: number
+}
+
+export interface EventSupplier {
+  id: string
+  event_id: string
+  name: string
+  kind: string
+  contract_amount: number
+  contract_currency: 'USD' | 'TJS'
+  contract_original: number
+  contract_rate: number
+  contact?: string | null
+  note?: string | null
+  totals: { currency: 'USD' | 'TJS'; contract: number; paid: number; left: number; overpaid: number; paid_usd: number; left_usd: number; payments: number }
+}
+
+export interface EventRepayment {
+  id: string
+  loan_id: string
+  amount: number
+  currency: 'USD' | 'TJS'
+  original_amount: number
+  exchange_rate: number
+  repaid_on: string
+  account_id?: string | null
+  note?: string | null
+}
+
+export interface EventLoan {
+  id: string
+  event_id: string
+  source: 'account' | 'person'
+  account_id?: string | null
+  lender_name?: string | null
+  amount: number
+  currency: 'USD' | 'TJS'
+  original_amount: number
+  exchange_rate: number
+  received_on: string
+  due_on?: string | null
+  note?: string | null
+  repayments: EventRepayment[]
+  totals: { currency: 'USD' | 'TJS'; taken: number; repaid: number; owed: number; owed_usd: number; spent_usd: number; unspent_usd: number; overdue: boolean; closed: boolean }
+}
+
+export interface EventMoney {
+  suppliers: EventSupplier[]
+  loans: EventLoan[]
+  totals: { contracts_usd: number; suppliers_paid_usd: number; suppliers_left_usd: number; loans_taken_usd: number; loans_owed_usd: number; loans_overdue: number }
+}

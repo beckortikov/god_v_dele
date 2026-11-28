@@ -4,6 +4,10 @@ import { db } from '@/lib/db'
 import { fetchRow, logAudit } from '@/lib/audit'
 import { changeSuffix, rowMoney, roundMoneyFields } from '@/lib/audit-labels'
 import { eventName } from '@/app/api/audit/_server'
+import { MONEY_MIGRATION, moneyMissing, paymentLinks } from '@/lib/event-money-server'
+
+/** Fields the client may change; anything else in the body is ignored. */
+const EDITABLE = ['name', 'amount', 'category', 'expense_date', 'description', 'original_amount', 'currency', 'exchange_rate', 'status'] as const
 
 export async function PUT(
     req: Request,
@@ -11,15 +15,26 @@ export async function PUT(
 ) {
     try {
         const { id, expenseId } = await params
-        const body = roundMoneyFields(await req.json())
+        const raw = await req.json()
         const before = await fetchRow('expenses', expenseId)
+        if (!before || before.event_id !== id) return NextResponse.json({ error: 'Расход не найден в этом мероприятии' }, { status: 404 })
+
+        const body: Record<string, unknown> = {}
+        for (const k of EDITABLE) if (k in raw) body[k] = raw[k]
+        if ('supplier_id' in raw || 'account_id' in raw || 'loan_id' in raw) {
+            const currency = (raw.currency ?? before.currency) === 'TJS' ? 'TJS' : 'USD'
+            const links = await paymentLinks(id, raw, currency)
+            if ('error' in links) return NextResponse.json({ error: links.error }, { status: 400 })
+            Object.assign(body, links.fields)
+        }
 
         const { data, error } = await db
             .from('expenses')
-            .update(body)
+            .update(roundMoneyFields(body))
             .eq('id', expenseId)
             .select()
 
+        if (moneyMissing(error)) return NextResponse.json(MONEY_MIGRATION, { status: 503 })
         if (error) throw error
 
         if (data?.[0]) {

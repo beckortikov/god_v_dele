@@ -4,6 +4,7 @@ import { db } from '@/lib/db'
 import { logAudit } from '@/lib/audit'
 import { rowMoney, roundMoneyFields } from '@/lib/audit-labels'
 import { eventName } from '@/app/api/audit/_server'
+import { MONEY_MIGRATION, moneyMissing, paymentLinks } from '@/lib/event-money-server'
 
 export async function GET(
     req: Request,
@@ -48,11 +49,19 @@ export async function POST(
             description: body.description || null
         }
 
+        // Who is paid and where the money comes from (migration 033); old clients send none of these
+        if ('supplier_id' in body || 'account_id' in body || 'loan_id' in body) {
+            const links = await paymentLinks(id, body, expenseData.currency === 'TJS' ? 'TJS' : 'USD')
+            if ('error' in links) return NextResponse.json({ error: links.error }, { status: 400 })
+            Object.assign(expenseData, links.fields)
+        }
+
         const { data, error } = await db
             .from('expenses')
             .insert([roundMoneyFields(expenseData)])
             .select()
 
+        if (moneyMissing(error)) return NextResponse.json(MONEY_MIGRATION, { status: 503 })
         if (error) throw error
 
         if (data?.[0]) {

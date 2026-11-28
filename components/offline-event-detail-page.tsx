@@ -4,6 +4,9 @@ import * as React from 'react'
 import { toast } from 'sonner'
 import {
   ArrowLeft,
+  Building2,
+  HandCoins,
+  Plus,
   CalendarDays,
   ChevronDown,
   FileSpreadsheet,
@@ -44,6 +47,9 @@ import { BulkBar, SelectCell, SelectHeadCell, requestOk, useBulkRunner, useRowSe
 import { EventSheet } from '@/components/events/event-sheet'
 import { AddAttendeesSheet, EditAttendeeSheet } from '@/components/events/attendee-sheets'
 import { EventExpenseSheet } from '@/components/events/event-expense-sheet'
+import { LoanSheet, RepaymentSheet, SupplierSheet } from '@/components/events/money-sheets'
+import { LoansPanel, ObligationsPanel, SuppliersPanel } from '@/components/events/money-panels'
+import { sourceLabel } from '@/lib/event-money'
 import { exportEventToExcel } from '@/components/events/event-export'
 import { FunnelStrip, type StageFilter } from '@/components/events/funnel-strip'
 import { CallbackCell, PersonCell, StageCell, TeamPanel } from '@/components/events/funnel-parts'
@@ -57,8 +63,13 @@ import {
   categoryLabel,
   fmtPct,
   num,
+  type AccountLite,
   type Attendee,
   type EventExpense,
+  type EventLoan,
+  type EventMoney,
+  type EventRepayment,
+  type EventSupplier,
   type EventParticipant,
   type EventStatus,
   type FinancialSummary,
@@ -70,7 +81,7 @@ interface EventDetailPageProps {
   onBack: () => void
 }
 
-type Tab = 'attendees' | 'expenses' | 'finance'
+type Tab = 'attendees' | 'expenses' | 'suppliers' | 'loans' | 'finance'
 type TypeFilter = 'all' | 'participant' | 'guest'
 
 export function EventDetailPage({ eventId, onBack }: EventDetailPageProps) {
@@ -82,6 +93,9 @@ export function EventDetailPage({ eventId, onBack }: EventDetailPageProps) {
   const [loading, setLoading] = React.useState(true)
   const [participantsList, setParticipantsList] = React.useState<EventParticipant[]>([])
   const [team, setTeam] = React.useState<TeamRow[] | undefined>(undefined)
+  const [money, setMoney] = React.useState<EventMoney | null>(null)
+  const [moneyNote, setMoneyNote] = React.useState<string | null>(null)
+  const [accounts, setAccounts] = React.useState<AccountLite[]>([])
 
   const [tab, setTab] = React.useState<Tab>('attendees')
   const [query, setQuery] = React.useState('')
@@ -94,17 +108,30 @@ export function EventDetailPage({ eventId, onBack }: EventDetailPageProps) {
   const [expenseOpen, setExpenseOpen] = React.useState(false)
   const [editingExpense, setEditingExpense] = React.useState<EventExpense | null>(null)
   const [eventSheetOpen, setEventSheetOpen] = React.useState(false)
+  const [payFor, setPayFor] = React.useState<string | null>(null)
+  const [supplierOpen, setSupplierOpen] = React.useState(false)
+  const [editingSupplier, setEditingSupplier] = React.useState<EventSupplier | null>(null)
+  const [loanOpen, setLoanOpen] = React.useState(false)
+  const [editingLoan, setEditingLoan] = React.useState<EventLoan | null>(null)
+  const [repayOpen, setRepayOpen] = React.useState(false)
+  const [repayLoan, setRepayLoan] = React.useState<EventLoan | null>(null)
 
   // Fetch Data (the skeleton shows only on the first load; refreshes are silent)
   const fetchData = React.useCallback(async () => {
     try {
-      const [eventRes, attendeesRes, expensesRes, summaryRes, participantsRes] = await Promise.all([
+      const [eventRes, attendeesRes, expensesRes, summaryRes, participantsRes, moneyRes, accountsRes] = await Promise.all([
         fetch(`/api/offline-events/${eventId}`).then(r => r.json()),
         fetch(`/api/offline-events/${eventId}/attendees`).then(r => r.json()),
         fetch(`/api/offline-events/${eventId}/expenses`).then(r => r.json()),
         fetch(`/api/offline-events/${eventId}/financial-summary`).then(r => r.json()),
         fetch(`/api/participants`).then(r => r.json()),
+        fetch(`/api/offline-events/${eventId}/money`).then(r => r.json()).catch(() => ({})),
+        fetch(`/api/accounts`).then(r => r.json()).catch(() => []),
       ])
+
+      setMoney(moneyRes.data ?? null)
+      setMoneyNote(moneyRes.data ? null : moneyRes.message || moneyRes.error || null)
+      if (Array.isArray(accountsRes)) setAccounts(accountsRes.map((a: any) => ({ id: a.id, name: a.name, currency: a.currency, balance: num(a.balance) })))
 
       if (eventRes.data) setEvent(eventRes.data)
       if (attendeesRes.data) setAttendees(attendeesRes.data)
@@ -227,10 +254,49 @@ export function EventDetailPage({ eventId, onBack }: EventDetailPageProps) {
     }
   }
 
-  const openExpense = (e: EventExpense | null) => {
+  const openExpense = (e: EventExpense | null, supplierId: string | null = null) => {
     setEditingExpense(e)
+    setPayFor(supplierId)
     setExpenseOpen(true)
   }
+  const openSupplier = (s: EventSupplier | null) => {
+    setEditingSupplier(s)
+    setSupplierOpen(true)
+  }
+  const openLoan = (l: EventLoan | null) => {
+    setEditingLoan(l)
+    setLoanOpen(true)
+  }
+
+  const removeThing = async (url: string, title: string, description: string, done: string) => {
+    const ok = await confirm({ title, description, confirmText: 'Удалить', destructive: true })
+    if (!ok) return
+    try {
+      const res = await fetch(url, { method: 'DELETE' })
+      const result = await res.json().catch(() => ({}))
+      if (!res.ok || result.error) throw new Error(result.error || `Ошибка ${res.status}`)
+      toast.success(done)
+      fetchData()
+    } catch (err: any) {
+      toast.error('Не удалось удалить', { description: err.message })
+    }
+  }
+  const deleteSupplier = (s: EventSupplier) =>
+    removeThing(
+      `/api/offline-events/${eventId}/suppliers/${s.id}`,
+      `Удалить поставщика «${s.name}»?`,
+      s.totals.payments ? 'Его оплаты останутся в расходах мероприятия, только без поставщика.' : 'Действие нельзя отменить.',
+      'Поставщик удалён'
+    )
+  const deleteLoan = (l: EventLoan) =>
+    removeThing(
+      `/api/offline-events/${eventId}/loans/${l.id}`,
+      'Удалить займ?',
+      `${l.repayments.length ? 'Возвраты по нему тоже удалятся. ' : ''}${l.totals.spent_usd > 0 ? 'Оплаты из этого займа останутся в расходах, без источника. ' : ''}${l.source === 'account' ? 'Баланс счёта пересчитается.' : ''}`.trim() || 'Действие нельзя отменить.',
+      'Займ удалён'
+    )
+  const deleteRepayment = (l: EventLoan, r: EventRepayment) =>
+    removeThing(`/api/offline-events/${eventId}/loans/${l.id}/repayments/${r.id}`, 'Удалить возврат?', `${formatMoney(num(r.original_amount), r.currency)} от ${formatDate(r.repaid_on)}`, 'Возврат удалён')
   const openAttendee = (a: Attendee) => {
     setEditAttendee(a)
     setEditAttendeeOpen(true)
@@ -337,9 +403,24 @@ export function EventDetailPage({ eventId, onBack }: EventDetailPageProps) {
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-          <Button size="sm" variant="outline" onClick={() => openExpense(null)}>
-            <Receipt /> Расход
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button size="sm" variant="outline">
+                <Receipt /> Деньги <ChevronDown />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onSelect={() => openExpense(null)}>
+                <Receipt /> Расход или оплата
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => openSupplier(null)} disabled={!money}>
+                <Building2 /> Поставщик
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => openLoan(null)} disabled={!money}>
+                <HandCoins /> Взяли в долг
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Button size="sm" onClick={() => setAddOpen(true)}>
             <UserPlus /> Добавить участников
           </Button>
@@ -389,6 +470,8 @@ export function EventDetailPage({ eventId, onBack }: EventDetailPageProps) {
           options={[
             { value: 'attendees', label: 'Участники', count: attendees.length },
             { value: 'expenses', label: 'Расходы', count: expenses.length },
+            { value: 'suppliers', label: 'Поставщики', count: money?.suppliers.length ?? 0 },
+            { value: 'loans', label: 'Займы', count: money?.loans.length ?? 0 },
             { value: 'finance', label: 'Финансы' },
           ]}
         />
@@ -411,9 +494,52 @@ export function EventDetailPage({ eventId, onBack }: EventDetailPageProps) {
           team={team}
         />
       ) : tab === 'expenses' ? (
-        <ExpensesPanel eventId={eventId} onChanged={fetchData} expenses={expenses} onAdd={() => openExpense(null)} onEdit={openExpense} onDelete={handleDeleteExpense} />
+        <ExpensesPanel
+          eventId={eventId}
+          onChanged={fetchData}
+          expenses={expenses}
+          onAdd={() => openExpense(null)}
+          onEdit={e => openExpense(e)}
+          onDelete={handleDeleteExpense}
+          describe={e =>
+            [money?.suppliers.find(s => s.id === e.supplier_id)?.name, sourceLabel(e, accounts, money?.loans ?? []), e.description].filter(Boolean).join(' · ')
+          }
+        />
+      ) : tab === 'suppliers' || tab === 'loans' ? (
+        !money ? (
+          <Panel>
+            <EmptyState icon={Wallet} title="Поставщики и займы ещё не подключены" description={moneyNote ?? 'Не удалось загрузить'} />
+          </Panel>
+        ) : tab === 'suppliers' ? (
+          <SuppliersPanel money={money} onAdd={() => openSupplier(null)} onEdit={openSupplier} onPay={s => openExpense(null, s.id)} onDelete={deleteSupplier} />
+        ) : (
+          <LoansPanel
+            money={money}
+            accounts={accounts}
+            onAdd={() => openLoan(null)}
+            onEdit={openLoan}
+            onRepay={l => {
+              setRepayLoan(l)
+              setRepayOpen(true)
+            }}
+            onDelete={deleteLoan}
+            onDeleteRepayment={deleteRepayment}
+          />
+        )
       ) : (
-        <FinancePanel summary={summary} attendees={attendees} expenses={expenses} income={totalIncome} spent={totalExpenses} balance={balance} roi={roi} />
+        <>
+          <FinancePanel summary={summary} attendees={attendees} expenses={expenses} income={totalIncome} spent={totalExpenses} balance={balance} roi={roi} />
+          <div className="mt-3">
+            <ObligationsPanel money={money} />
+          </div>
+        </>
+      )}
+      {(tab === 'suppliers' || tab === 'loans') && money && (
+        <div className="mt-3">
+          <Button size="sm" variant="outline" onClick={() => (tab === 'suppliers' ? openSupplier(null) : openLoan(null))}>
+            <Plus /> {tab === 'suppliers' ? 'Поставщик' : 'Займ'}
+          </Button>
+        </div>
       )}
 
       <AddAttendeesSheet
@@ -425,7 +551,20 @@ export function EventDetailPage({ eventId, onBack }: EventDetailPageProps) {
         onSaved={fetchData}
       />
       <EditAttendeeSheet open={editAttendeeOpen} onOpenChange={setEditAttendeeOpen} eventId={eventId} attendee={editAttendee} onSaved={fetchData} />
-      <EventExpenseSheet open={expenseOpen} onOpenChange={setExpenseOpen} eventId={eventId} editing={editingExpense} onSaved={fetchData} />
+      <EventExpenseSheet
+        open={expenseOpen}
+        onOpenChange={setExpenseOpen}
+        eventId={eventId}
+        editing={editingExpense}
+        onSaved={fetchData}
+        suppliers={money?.suppliers}
+        loans={money?.loans}
+        accounts={accounts}
+        presetSupplierId={payFor}
+      />
+      <SupplierSheet open={supplierOpen} onOpenChange={setSupplierOpen} eventId={eventId} editing={editingSupplier} onSaved={fetchData} />
+      <LoanSheet open={loanOpen} onOpenChange={setLoanOpen} eventId={eventId} editing={editingLoan} accounts={accounts} onSaved={fetchData} />
+      <RepaymentSheet open={repayOpen} onOpenChange={setRepayOpen} eventId={eventId} loan={repayLoan} accounts={accounts} onSaved={fetchData} />
       <EventSheet open={eventSheetOpen} onOpenChange={setEventSheetOpen} editing={event} onSaved={() => fetchData()} />
     </PageContainer>
   )
@@ -761,7 +900,9 @@ function ExpensesPanel({
   onAdd,
   onEdit,
   onDelete,
+  describe,
 }: {
+  describe: (e: EventExpense) => string
   eventId: string
   onChanged: () => void
   expenses: EventExpense[]
@@ -842,7 +983,7 @@ function ExpensesPanel({
                     <TableCell className="num text-muted-foreground">{formatDate(e.expense_date)}</TableCell>
                     <TableCell className="max-w-80 whitespace-normal">
                       <div className="truncate font-medium">{e.name}</div>
-                      {e.description && <div className="truncate text-xs text-muted-foreground">{e.description}</div>}
+                      {describe(e) && <div className="truncate text-xs text-muted-foreground">{describe(e)}</div>}
                     </TableCell>
                     <TableCell className="max-sm:hidden">
                       <Badge variant="secondary">{categoryLabel(e.category)}</Badge>
